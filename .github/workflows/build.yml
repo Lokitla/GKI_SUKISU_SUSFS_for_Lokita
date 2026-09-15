@@ -1,0 +1,247 @@
+# =============================================================================
+# GKI 内核构建工作流
+# -----------------------------------------------------------------------------
+# 核心构建逻辑已抽取至 scripts/build_kernel.sh（与 Python CLI build.py 共用），
+# 本文件只保留 GitHub Actions 专属能力：缓存、产物上传、失败日志、Telegram 通知。
+# 修改构建逻辑请改 scripts/build_kernel.sh，不要在本文件里重写 shell。
+# =============================================================================
+name: ${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}-${{ inputs.ksu_variant }}
+'on':
+  workflow_call:
+    inputs:
+      android_version:
+        required: true
+        type: string
+      kernel_version:
+        required: true
+        type: string
+      sub_level:
+        required: true
+        type: string
+      os_patch_level:
+        required: true
+        type: string
+      ksu_variant:
+        required: true
+        type: string
+      ksu_mode:
+        required: false
+        type: string
+        default: 关闭
+      version:
+        required: false
+        type: string
+      revision:
+        required: false
+        type: string
+        default: r1
+      build_time:
+        required: false
+        type: string
+        default: Sun Dec 01 08:10:00 UTC 2024
+      use_zram:
+        required: true
+        type: boolean
+        default: true
+      use_bbg:
+        required: true
+        type: boolean
+        default: true
+      use_kpm:
+        required: true
+        type: string
+        default: disabled (关闭)
+      use_rekernel:
+        required: false
+        type: boolean
+        default: false
+      cve_2026_43499_patch:
+        required: false
+        type: boolean
+        default: false
+      export_susfs_patches:
+        required: false
+        type: boolean
+        default: false
+      enable_susfs:
+        required: true
+        type: boolean
+        default: true
+      supp_op:
+        required: false
+        type: boolean
+        default: false
+      droidspaces:
+        required: false
+        type: string
+        default: 'off'
+      artifact_upload_mode:
+        required: false
+        type: string
+        default: 上传全部
+      droidspaces_ntsync:
+        required: false
+        type: boolean
+        default: false
+      use_bbr:
+        description: 设置 BBR 为默认 TCP 拥塞算法（融合自 ShirkNeko）
+        required: false
+        type: boolean
+        default: false
+      send_telegram:
+        description: 构建结束后发送 Telegram 通知（需配置 secrets）
+        required: false
+        type: boolean
+        default: false
+      use_release_cache:
+        description: 用 GitHub Release 存储 ccache（突破 actions/cache 容量与过期限制，融合自 ShirkNeko）
+        required: false
+        type: boolean
+        default: false
+jobs:
+  build-kernel:
+    name: ${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}-${{ inputs.ksu_variant }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CCACHE_COMPILERCHECK: '%compiler% -dumpmachine; %compiler% -dumpversion'
+      CCACHE_NOHASHDIR: 'true'
+      CCACHE_HARDLINK: 'true'
+    steps:
+    - name: 检出代码仓库
+      uses: actions/checkout@v7
+    - name: 恢复 Release 缓存（可选）
+      if: ${{ inputs.use_release_cache }}
+      uses: ./.github/actions/cache-restore
+      with:
+        cache_path: /home/runner/.ccache
+        cache_key: ${{ github.ref_name }}-${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}
+        cache_bucket: ccache-cache
+    - name: 恢复 ccache 缓存
+      uses: actions/cache@v5
+      with:
+        path: ~/.ccache
+        key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-ccache-${{ github.sha }}
+        restore-keys: ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-ccache-
+    - name: 恢复 bazel 磁盘缓存
+      if: inputs.android_version != 'android12' && inputs.android_version != 'android13'
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/bazel
+        key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-bazel-${{ github.sha }}
+        restore-keys: '${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-bazel-
+
+          ${{ inputs.android_version }}-${{ inputs.kernel_version }}-bazel-'
+    - name: 缓存工具链
+      id: cache-toolchain
+      uses: actions/cache@v5
+      with:
+        path: 'kernel-build-tools
+
+          mkbootimg'
+        key: toolchain-${{ runner.os }}-v1
+    - name: 构建内核
+      id: build
+      run: ./scripts/build_kernel.sh --all
+      env:
+        ANDROID_VERSION: ${{ inputs.android_version }}
+        KERNEL_VERSION: ${{ inputs.kernel_version }}
+        SUB_LEVEL: ${{ inputs.sub_level }}
+        OS_PATCH_LEVEL: ${{ inputs.os_patch_level }}
+        KSU_VARIANT: ${{ inputs.ksu_variant }}
+        KSU_MODE: ${{ inputs.ksu_mode }}
+        VERSION: ${{ inputs.version }}
+        REVISION: ${{ inputs.revision }}
+        BUILD_TIME: ${{ inputs.build_time }}
+        USE_ZRAM: ${{ inputs.use_zram }}
+        USE_BBG: ${{ inputs.use_bbg }}
+        USE_KPM: ${{ inputs.use_kpm }}
+        USE_REKERNEL: ${{ inputs.use_rekernel }}
+        CVE_2026_43499_PATCH: ${{ inputs.cve_2026_43499_patch }}
+        EXPORT_SUSFS_PATCHES: ${{ inputs.export_susfs_patches }}
+        ENABLE_SUSFS: ${{ inputs.enable_susfs }}
+        SUPP_OP: ${{ inputs.supp_op }}
+        DROIDSPACES: ${{ inputs.droidspaces }}
+        DROIDSPACES_NTSYNC: ${{ inputs.droidspaces_ntsync }}
+        ARTIFACT_UPLOAD_MODE: ${{ inputs.artifact_upload_mode }}
+        USE_BBR: ${{ inputs.use_bbr }}
+        TOOLCHAIN_CACHE_HIT: ${{ steps.cache-toolchain.outputs.cache-hit }}
+        WORKSPACE: ${{ github.workspace }}
+    - name: 保存 Release 缓存（可选）
+      if: ${{ inputs.use_release_cache && !cancelled() }}
+      uses: ./.github/actions/cache-save
+      with:
+        cache_path: /home/runner/.ccache
+        cache_key: ${{ github.ref_name }}-${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}
+        cache_bucket: ccache-cache
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+    - name: 上传编译失败日志
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v6
+      with:
+        name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}-Build-Logs
+        path: build-logs/
+        if-no-files-found: ignore
+        retention-days: 7
+        compression-level: 9
+    - name: 上传 SUSFS 集成补丁
+      if: success() && env.SUSFS_PATCH_EXPORT == 'true'
+      uses: actions/upload-artifact@v6
+      with:
+        name: SUSFS-Patch-${{ inputs.ksu_variant }}-${{ env.CONFIG }}-${{ inputs.os_patch_level }}
+        path: susfs-patch/
+        if-no-files-found: warn
+        compression-level: 9
+    - name: 上传 AnyKernel3 刷入包
+      if: inputs.artifact_upload_mode != '上传全部'
+      uses: actions/upload-artifact@v6
+      with:
+        name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}-AnyKernel3
+        path: AnyKernel3/*
+        compression-level: 9
+    - name: 上传全部构建产物
+      if: inputs.artifact_upload_mode == '上传全部'
+      uses: actions/upload-artifact@v6
+      with:
+        name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}
+        path: '*AnyKernel3.zip
+
+          *.img'
+        compression-level: 9
+    - name: 上传补丁冲突文件
+      if: always() && env.REJ_COUNT > 0
+      uses: actions/upload-artifact@v6
+      with:
+        name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}-Rejects
+        path: patch-rejects/
+        if-no-files-found: ignore
+        compression-level: 9
+    - name: 发送 Telegram 通知
+      if: ${{ inputs.send_telegram }}
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        TELEGRAM_MESSAGE_THREAD_ID: ${{ secrets.TELEGRAM_MESSAGE_THREAD_ID }}
+        ANDROID_VERSION: ${{ inputs.android_version }}
+        KERNEL_VERSION: ${{ inputs.kernel_version }}
+        SUB_LEVEL: ${{ inputs.sub_level }}
+        OS_PATCH_LEVEL: ${{ inputs.os_patch_level }}
+        KSU_VARIANT: ${{ inputs.ksu_variant }}
+        KSU_MODE: ${{ inputs.ksu_mode }}
+        VERSION: ${{ inputs.version }}
+        REVISION: ${{ inputs.revision }}
+        BUILD_TIME: ${{ inputs.build_time }}
+        USE_ZRAM: ${{ inputs.use_zram }}
+        USE_BBG: ${{ inputs.use_bbg }}
+        USE_KPM: ${{ inputs.use_kpm }}
+        USE_REKERNEL: ${{ inputs.use_rekernel }}
+        CVE_2026_43499_PATCH: ${{ inputs.cve_2026_43499_patch }}
+        EXPORT_SUSFS_PATCHES: ${{ inputs.export_susfs_patches }}
+        ENABLE_SUSFS: ${{ inputs.enable_susfs }}
+        SUPP_OP: ${{ inputs.supp_op }}
+        DROIDSPACES: ${{ inputs.droidspaces }}
+        DROIDSPACES_NTSYNC: ${{ inputs.droidspaces_ntsync }}
+        ARTIFACT_UPLOAD_MODE: ${{ inputs.artifact_upload_mode }}
+        USE_BBR: ${{ inputs.use_bbr }}
+        WORKSPACE: ${{ github.workspace }}
+      run: python3 scripts/telegram_notify.py single || true
