@@ -5,7 +5,10 @@
 # 本文件只保留 GitHub Actions 专属能力：缓存、产物上传、失败日志、Telegram 通知。
 # 修改构建逻辑请改 scripts/build_kernel.sh，不要在本文件里重写 shell。
 # =============================================================================
-name: ${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}-${{ inputs.ksu_variant }}
+name: 内核构建流程
+permissions:
+  contents: write
+  actions: write
 'on':
   workflow_call:
     inputs:
