@@ -35,7 +35,7 @@ set -eo pipefail
 : "${EXPORT_SUSFS_PATCHES:=false}"
 : "${ENABLE_SUSFS:=true}"
 : "${SUPP_OP:=false}"
-: "${DROIDSPACES:=off}"
+: "${DROIDSPACES:=不启用}"
 : "${DROIDSPACES_NTSYNC:=false}"
 : "${ARTIFACT_UPLOAD_MODE:=上传全部}"
 
@@ -943,7 +943,7 @@ stage_clone_droidspaces() {
 
 # 条件执行（等价原工作流 if:）
 run_clone_droidspaces() {
-  if [ "$DROIDSPACES" != "off" ]; then
+  if [ "$DROIDSPACES" != "不启用" ]; then
     stage_clone_droidspaces "$@"
   else
     echo "跳过阶段: clone_droidspaces（条件不满足）"
@@ -1091,7 +1091,7 @@ stage_integrate_droidspaces() {
 
 # 条件执行（等价原工作流 if:）
 run_integrate_droidspaces() {
-  if [ "$DROIDSPACES" != "off" ]; then
+  if [ "$DROIDSPACES" != "不启用" ]; then
     stage_integrate_droidspaces "$@"
   else
     echo "跳过阶段: integrate_droidspaces（条件不满足）"
@@ -1158,7 +1158,7 @@ stage_inject_ntsync() {
 
 # 条件执行（等价原工作流 if:）
 run_inject_ntsync() {
-  if [ "$DROIDSPACES" != "off" ] && [ "$DROIDSPACES_NTSYNC" = "true" ]; then
+  if [ "$DROIDSPACES" != "不启用" ] && [ "$DROIDSPACES_NTSYNC" = "true" ]; then
     stage_inject_ntsync "$@"
   else
     echo "跳过阶段: inject_ntsync（条件不满足）"

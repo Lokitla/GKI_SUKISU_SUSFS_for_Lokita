@@ -77,7 +77,7 @@ permissions:
       droidspaces:
         required: false
         type: string
-        default: 'off'
+        default: '不启用'
       artifact_upload_mode:
         required: false
         type: string
@@ -87,17 +87,17 @@ permissions:
         type: boolean
         default: false
       use_bbr:
-        description: 设置 BBR 为默认 TCP 拥塞算法（融合自 ShirkNeko）
+        description: 设置 BBR 为默认拥塞算法
         required: false
         type: boolean
         default: false
       send_telegram:
-        description: 构建结束后发送 Telegram 通知（需配置 secrets）
+        description: 发送 Telegram 通知（需配置 secrets）
         required: false
         type: boolean
         default: false
       use_release_cache:
-        description: 用 GitHub Release 存储 ccache（突破 actions/cache 容量与过期限制，融合自 ShirkNeko）
+        description: 用 GitHub Release 存储 ccache
         required: false
         type: boolean
         default: false

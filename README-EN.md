@@ -71,8 +71,28 @@ The following features were merged from
 | **Telegram notification** | Push build results and checksums to Telegram | Actions: `send_telegram` |
 | **Release cache** | Store ccache in GitHub Releases, bypassing `actions/cache` size and expiry limits | Actions: `use_release_cache` |
 | **Spoofed manager toggle** | Choose whether to also fetch the SukiSU manager APK disguised as the official KernelSU package name | Actions: `manager_spoofed` |
+| **KPM image patching** | Patch `Image` after compilation so KPM modules can load (ported from ShirkNeko's `patch_kpm_image`); 5.x only, skipped on 6.6 | Actions: `use_kpm` → `enabled` / `patched` |
+| **Split manager artifacts** | The normal and Spoofed managers are uploaded as two separate artifacts instead of one combined archive | Always on |
+| **Standalone SUSFS switch** | The three-state "KernelSU / SUSFS mode" picker is now a simple "Integrate SUSFS" checkbox (plain GKI is no longer offered) | Actions: `enable_susfs` |
 
-> **About releases:** upstream hard-coded the "create release" job to run only in `zzh20188/GKI_KernelSU_SUSFS`, so a fork could never publish one. That restriction has been removed here — set `Release type` to `Release` / `Pre-Release` in the **Build kernel** workflow.
+### Defaults aligned with ShirkNeko's recommended setup
+
+Upstream zzh ships everything disabled. Here each option is aligned with ShirkNeko's
+"SukiSU + SUSFS + KPM + LZ4KD + BBG + GhostLock CVE" recommendation:
+
+| Option | Old default | New default |
+|---|---|---|
+| KernelSU variant | `ReSukiSU` | **`SukiSU`** |
+| Integrate SUSFS | Off (same) | **On** |
+| KPM | `disabled` | **`enabled` (with image patching)** |
+| ZRAM (LZ4KD) | Off | **On** |
+| BBG security patch | Off | **On** |
+| CVE-2026-43499 fix | Off | **On** |
+| Telegram notification | Off | **On** (skipped when secrets are missing) |
+| Spoofed manager | — | **On** |
+| Release type (Build kernel) | `Actions` (no release) | **`Release`** |
+
+> **About releases:** upstream hard-coded the "create release" job to run only in `zzh20188/GKI_KernelSU_SUSFS`, so a fork could never publish one. That restriction has been removed here, and publishing is now the default: `Release type` in the **Build kernel** workflow defaults to `Release`. Pick `Actions` if you only want artifacts without creating a release.
 
 ### Configuring Telegram notifications
 
@@ -101,7 +121,7 @@ GhostLock is a pair of high-risk Linux kernel vulnerabilities tracked as `CVE-20
 
 The vulnerability cannot be triggered directly over the network. However, a malicious application, untrusted code in a shared environment, or an attacker who already gained code execution through another vulnerability can use GhostLock as the next step. Extra care should therefore be taken with applications, modules, and scripts from unknown sources.
 
-This project can check and apply the complete fix when building kernels 5.10, 5.15, 6.1, 6.6, and 6.12. The option is disabled by default. To include GhostLock protection, manually enable `CVE-2026-43499 rtmutex fix chain` when starting a build. Both vulnerability fixes must be present together, and the workflow handles this automatically. Kernels that already contain the complete fix are not patched again.
+This project can check and apply the complete fix when building kernels 5.10, 5.15, 6.1, 6.6, and 6.12. The option is **enabled by default** (aligned with ShirkNeko's recommended setup). Uncheck `CVE-2026-43499 rtmutex fix chain` when starting a build if you do not want GhostLock protection. Both vulnerability fixes must be present together, and the workflow handles this automatically. Kernels that already contain the complete fix are not patched again.
 
 The fix has passed a [full build validation covering 84 kernel versions](https://github.com/zzh20188/GKI_KernelSU_SUSFS/actions/runs/29509099128). For vulnerability details, affected systems, public exploits, and mitigation guidance, read CIQ's article: [GhostLock Mitigation](https://kb.ciq.com/article/rocky-linux/rl-ghostlock-mitigation).
 
@@ -121,12 +141,12 @@ The fix has passed a [full build validation covering 84 kernel versions](https:/
 
 | Option | Description |
 |:---:|:---|
-| `off` | Disabled (default) |
+| `不启用` (disabled) | Disabled (default) |
 | `678` | Use 6_7_8 slot patch (recommended) |
 | `123` | Use 1_2_3 slot patch (fallback) |
 | `345` | Use 3_4_5 slot patch (fallback) |
 
-> **Note:** Kernel 6.12 has only one patch — any non-off option will use it.
+> **Note:** Kernel 6.12 has only two options — `不启用` (disabled) and `启用` (enabled). There are no slots there.
 
 **If the build fails or bootloops after flashing:** Try switching to a different slot patch (e.g. 678 → 123 or 345). Different kernel sub-levels may require different patches.
 
@@ -270,15 +290,16 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 
 | Option | Description |
 |---|---|
-| `--ksu-variant` | KernelSU variant: `ReSukiSU` / `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `Official` |
+| `--ksu-variant` | KernelSU variant, defaults to `SukiSU`: `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` |
 | `--zram` | Enable ZRAM (LZ4KD) |
-| `--bbr` | Set BBR as the default TCP congestion algorithm |
+| `--bbr` | Set BBR as the default congestion algorithm |
 | `--kpm` | Enable KPM kernel module support |
 | `--bbg` | Enable Baseband-guard |
 | `--rekernel` | Enable Re-Kernel |
-| `--op8e` | Enable OnePlus 8E support |
+| `--no-susfs` | Skip SUSFS integration (integrated by default) |
+| `--op8e` | Enable OnePlus 8E support (OnePlus only) |
 | `--cve-patch` | Apply the CVE-2026-43499 fix |
-| `--droidspaces` | Droidspaces container support (`off` / `678` / `123` / `345`) |
+| `--droidspaces` | Droidspaces container support (`不启用` / `678` / `123` / `345`) |
 | `--ntsync` | Enable NTSync (requires `--droidspaces`) |
 | `--only <phase>` | Run a single phase (for debugging) |
 | `--from <phase>` | Resume from a given phase |

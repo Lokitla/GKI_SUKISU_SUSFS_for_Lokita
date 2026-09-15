@@ -27,10 +27,10 @@ on:
         description: "发布类型"
         type: choice
         options:
-          - Actions
-          - Pre-Release
           - Release
-        default: Actions
+          - Pre-Release
+          - Actions
+        default: Release
       kernelsu_variant:
         description: "KernelSU 变体"
         type: choice
@@ -41,29 +41,29 @@ on:
           - ReSukiSU
           - Official
           #- Next
-        default: ReSukiSU
+        default: SukiSU
       enable_susfs:
-        description: "集成 SUSFS（取消勾选 = 只集成 KernelSU，不打 SUSFS 补丁）"
+        description: "集成 SUSFS"
         required: false
         type: boolean
         default: true
       use_kpm:
-        description: "KPM 功能（开启后会在编译完修补 Image 以支持加载 KPM 模块，仅 5.x 有效，6.6 自动跳过；patched 与 enabled 行为一致）"
+        description: "KPM 模块支持（编译后修补 Image，6.6 内核不支持）"
         type: choice
         default: "enabled (开启)"
         options:
           - "disabled (关闭)"
           - "enabled (开启)"
-          - "patched (开启并修补，尚不支持)"
+          - "patched (开启并修补)"
       droidspaces:
-        description: "Droidspaces 容器支持 (5.10~6.6: 槽位补丁, 6.12: 开/关)"
+        description: "Droidspaces 容器支持"
         type: choice
         options:
-          - "off"
+          - "不启用"
           - "678"
           - "123"
           - "345"
-        default: "off"
+        default: "不启用"
 
       # ==================== 文本输入 ====================
       version:
@@ -125,32 +125,32 @@ on:
         type: boolean
         default: true
       droidspaces_ntsync:
-        description: "启用 Droidspaces 容器 NTSync 支持（需启用 Droidspaces）"
+        description: "启用 NTSync 支持（需先启用 Droidspaces）"
         type: boolean
         default: false
 
       use_bbr:
-        description: "设置 BBR 为默认 TCP 拥塞算法（融合自 ShirkNeko）"
+        description: "设置 BBR 为默认拥塞算法"
         required: false
         type: boolean
         default: false
       send_telegram:
-        description: "构建结束后发送 Telegram 通知（需配置 secrets）"
+        description: "发送 Telegram 通知（需配置 secrets）"
         required: false
         type: boolean
         default: true
       use_release_cache:
-        description: "用 GitHub Release 存储 ccache（融合自 ShirkNeko）"
+        description: "用 GitHub Release 存储 ccache"
         required: false
         type: boolean
         default: false
       manager_spoofed:
-        description: "一并拉取 Spoofed（伪装官方包名）管理器"
+        description: "一并拉取 Spoofed 管理器（伪装包名）"
         required: false
         type: boolean
         default: true
       supp_op:
-        description: "启用一加 8E 支持"
+        description: "启用一加 8E 支持（非一加勿开）"
         required: false
         type: boolean
         default: false
@@ -628,7 +628,7 @@ jobs:
           if [[ "${{ inputs.use_kpm }}" == enabled* ]]; then
             echo "KPM_STATUS=支持" >> $GITHUB_ENV
           elif [[ "${{ inputs.use_kpm }}" == patched* ]]; then
-            echo "KPM_STATUS=支持（补丁尚不支持）" >> $GITHUB_ENV
+            echo "KPM_STATUS=支持（已修补镜像）" >> $GITHUB_ENV
           else
             echo "KPM_STATUS=未开启" >> $GITHUB_ENV
           fi

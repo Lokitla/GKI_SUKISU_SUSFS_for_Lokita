@@ -113,10 +113,11 @@ Wiki 涵盖内容：
 
 ### 默认值已对齐 ShirkNeko 推荐配置
 
-原 zzh 上游默认全是关闭，这里改成 ShirkNeko 那套「SukiSU + SUSFS + KPM + LZ4KD + BBG + GhostLock CVE」推荐组合：
+原 zzh 上游默认全是关闭，这里逐项对齐 ShirkNeko 那套「SukiSU + SUSFS + KPM + LZ4KD + BBG + GhostLock CVE」推荐组合：
 
 | 选项 | 原默认 | 现默认 |
 |---|---|---|
+| KernelSU 变体 | `ReSukiSU` | **`SukiSU`** |
 | 集成 SUSFS | 关闭（等同） | **开启** |
 | KPM | `disabled` | **`enabled`（含镜像修补）** |
 | ZRAM (LZ4KD) | 关闭 | **开启** |
@@ -124,9 +125,11 @@ Wiki 涵盖内容：
 | CVE-2026-43499 修复 | 关闭 | **开启** |
 | Telegram 通知 | 关闭 | **开启**（未配 secrets 则自动跳过） |
 | Spoofed 管理器 | — | **开启** |
+| 发布类型（构建内核） | `Actions`（不发 Release） | **`Release`** |
 
 > **关于 Release：** 原上游把「创建 Release」这一步硬编码成只在 `zzh20188/GKI_KernelSU_SUSFS` 仓库执行，
-> fork 后永远发不出来。本分支已去掉该限制，在 **构建内核** 里把 `发布类型` 选成 `Release` / `Pre-Release` 即可发布。
+> fork 后永远发不出来。本分支已去掉该限制，并把默认改成发布：在 **构建内核** 里 `发布类型` 现在默认为 `Release`，
+> 想只跑构建、不建 Release 时选 `Actions` 即可。
 
 ### 配置 Telegram 通知
 
@@ -155,7 +158,7 @@ GhostLock 是影响 Linux 内核的一组高风险漏洞，包括 `CVE-2026-4349
 
 该漏洞不能直接从网络远程触发，但恶意应用、共享运行环境中的不可信程序，或者已经通过其他漏洞取得代码执行能力的攻击者，都可以进一步利用它。因此，安装来源不明的应用、模块或脚本时尤其需要注意。
 
-本项目支持在构建 5.10、5.15、6.1、6.6 和 6.12 内核时检查并应用完整修复。该选项默认关闭，如需加入 GhostLock 防护，请在触发构建时手动开启 `CVE-2026-43499 rtmutex 修复链`。两个漏洞的修复必须同时存在，工作流会自动处理这一点；已经包含完整修复的内核不会重复打补丁。
+本项目支持在构建 5.10、5.15、6.1、6.6 和 6.12 内核时检查并应用完整修复。该选项默认开启（对齐 ShirkNeko 的推荐配置），不需要 GhostLock 防护时取消勾选 `CVE-2026-43499 rtmutex 修复链` 即可。两个漏洞的修复必须同时存在，工作流会自动处理这一点；已经包含完整修复的内核不会重复打补丁。
 
 该修复已完成 [84 个内核版本的全量构建验证](https://github.com/zzh20188/GKI_KernelSU_SUSFS/actions/runs/29509099128)。如果想了解漏洞原理、受影响范围、公开利用和缓解措施，请阅读 CIQ 的详细文章：[GhostLock Mitigation](https://kb.ciq.com/article/rocky-linux/rl-ghostlock-mitigation)。
 
@@ -175,12 +178,12 @@ GhostLock 是影响 Linux 内核的一组高风险漏洞，包括 `CVE-2026-4349
 
 | 选项 | 说明 |
 |:---:|:---|
-| `off` | 关闭（默认） |
+| `不启用` | 关闭（默认） |
 | `678` | 使用 6_7_8 槽位补丁（推荐） |
 | `123` | 使用 1_2_3 槽位补丁（备用） |
 | `345` | 使用 3_4_5 槽位补丁（备用） |
 
-> **提示：** 6.12 内核仅有一个补丁，选择任意非关闭选项即可。
+> **提示：** 6.12 内核只有 `不启用` / `启用` 两项，没有槽位之分。
 
 **如果构建失败或刷入后 bootloop：** 可尝试切换到其他槽位补丁（如 678 → 123 或 345），不同内核子版本可能适用不同的补丁。
 
@@ -323,16 +326,17 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 
 | 选项 | 说明 |
 |---|---|
-| `--ksu-variant` | KernelSU 变体：`ReSukiSU` / `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `Official` |
+| `--ksu-variant` | KernelSU 变体，默认 `SukiSU`：`SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` |
 | `--zram` | 启用 ZRAM (LZ4KD) |
-| `--bbr` | 设置 BBR 为默认 TCP 拥塞算法 |
+| `--bbr` | 设置 BBR 为默认拥塞算法 |
 | `--kpm` | 启用 KPM 内核模块支持 |
 | `--bbg` | 启用 Baseband-guard |
 | `--rekernel` | 启用 Re-Kernel |
-| `--op8e` | 启用一加 8E 处理器支持 |
+| `--no-susfs` | 不集成 SUSFS（默认集成） |
+| `--op8e` | 启用一加 8E 支持（非一加勿开） |
 | `--cve-patch` | 应用 CVE-2026-43499 安全修复 |
-| `--droidspaces` | Droidspaces 容器支持（`off` / `678` / `123` / `345`） |
-| `--ntsync` | 启用 NTSync（需配合 `--droidspaces`） |
+| `--droidspaces` | Droidspaces 容器支持（`不启用` / `678` / `123` / `345`） |
+| `--ntsync` | 启用 NTSync 支持（需先启用 Droidspaces） |
 | `--only <阶段>` | 只运行指定阶段（调试用） |
 | `--from <阶段>` | 从指定阶段开始（断点续建） |
 | `--list-phases` | 列出全部构建阶段 |
