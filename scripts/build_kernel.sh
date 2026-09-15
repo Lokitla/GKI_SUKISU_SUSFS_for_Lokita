@@ -38,6 +38,9 @@ set -eo pipefail
 : "${DROIDSPACES:=off}"
 : "${DROIDSPACES_NTSYNC:=false}"
 : "${ARTIFACT_UPLOAD_MODE:=上传全部}"
+
+# [融合] KPM 镜像修补工具，移植自 ShirkNeko/GKI_KernelSU_SUSFS (scripts/config.py)
+: "${KPM_PATCH_URL:=https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux}"
 : "${WORKSPACE:=$(pwd)}"
 : "${COMPILE_TIMEOUT_MINUTES:=30}"
 : "${COMPILE_MAX_ATTEMPTS:=3}"
@@ -1725,6 +1728,59 @@ run_collect_fail_log() {
   fi
 }
 
+stage_patch_kpm_image() {
+  log_stage "patch_kpm_image" "修补 Image（KPM）"
+  local _pwd="$PWD"
+
+  # [融合] 移植自 ShirkNeko/GKI_KernelSU_SUSFS 的 patch_kpm_image()
+  # 用 SukiSU_patch 的 kpm/patch_linux 对编译产物 Image 打补丁，使其具备加载
+  # KPM 模块的能力。仅在开启 KPM 且非 6.6 内核时执行。
+  case "${USE_KPM}" in
+    enabled*|patched*) ;;
+    *)
+      echo "KPM 未开启，跳过镜像修补"
+      cd "$_pwd"
+      return 0
+      ;;
+  esac
+
+  if [ "${KERNEL_VERSION}" = "6.6" ]; then
+    echo "6.6 内核不支持 KPM 镜像修补，跳过"
+    cd "$_pwd"
+    return 0
+  fi
+
+  local image_dir
+  if [ "${ANDROID_VERSION}" = "android12" ] || [ "${ANDROID_VERSION}" = "android13" ]; then
+    image_dir="$KERNEL_ROOT/out/${ANDROID_VERSION}-${KERNEL_VERSION}/dist"
+  else
+    image_dir="$KERNEL_ROOT/bazel-bin/common/kernel_aarch64"
+  fi
+
+  if [ ! -d "$image_dir" ]; then
+    echo "::warning::未找到镜像目录 $image_dir，跳过 KPM 修补"
+    cd "$_pwd"
+    return 0
+  fi
+
+  cd "$image_dir"
+  echo "在 $image_dir 执行 KPM 镜像修补"
+  if curl -LSs "$KPM_PATCH_URL" -o patch && chmod 777 patch; then
+    ./patch || echo "::warning::KPM 修补脚本返回非零，请查看上方输出"
+    if [ -f oImage ]; then
+      mv oImage Image
+      echo "已用修补产物 oImage 替换 Image"
+    fi
+  else
+    echo "::warning::下载 KPM 修补工具失败，跳过（不影响其余产物）"
+  fi
+  rm -f patch
+
+  cd "$_pwd"
+}
+
+run_patch_kpm_image() { stage_patch_kpm_image "$@"; }
+
 stage_prepare_boot() {
   log_stage "prepare_boot" "准备 Boot 镜像"
   local _pwd="$PWD"
@@ -1946,6 +2002,7 @@ PHASES=(
   set_build_time
   compile_kernel
   collect_fail_log
+  patch_kpm_image
   prepare_boot
   make_anykernel3
   prepare_anykernel3

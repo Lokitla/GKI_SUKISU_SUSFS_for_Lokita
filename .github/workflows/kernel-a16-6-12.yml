@@ -20,20 +20,16 @@ on:
           - SukiSU(40548)
           - ReSukiSU
         default: ReSukiSU
-      ksu_mode:
-        description: "KernelSU / SUSFS 模式（关闭 = 不禁用任何项，即 KSU + SUSFS 全开，默认；禁用SUSFS = 只集成 KSU、不打 SUSFS 补丁；禁用KSU = 纯净 GKI，KSU 与 SUSFS 都不集成）"
-        required: true
-        type: choice
-        options:
-          - 关闭
-          - 禁用SUSFS
-          - 禁用KSU
-        default: 关闭
+      enable_susfs:
+        description: "集成 SUSFS（取消勾选 = 只集成 KernelSU，不打 SUSFS 补丁）"
+        required: false
+        type: boolean
+        default: true
       use_kpm:
-        description: "KPM 功能（enabled = 开启 CONFIG_KPM；patched = 开启并修补镜像，本项目未实现该修补，选它等同于 enabled）"
+        description: "KPM 功能（开启后会在编译完修补 Image 以支持加载 KPM 模块，仅 5.x 有效，6.6 自动跳过；patched 与 enabled 行为一致）"
         required: true
         type: choice
-        default: "disabled (关闭)"
+        default: "enabled (开启)"
         options:
           - "disabled (关闭)"
           - "enabled (开启)"
@@ -71,12 +67,12 @@ on:
         description: "启用 ZRAM 增强算法"
         required: true
         type: boolean
-        default: false
+        default: true
       use_bbg:
         description: "启用 BBG 防格机"
         required: true
         type: boolean
-        default: false
+        default: true
       use_rekernel:
         description: "启用 Re-Kernel 驱动"
         required: false
@@ -86,7 +82,7 @@ on:
         description: "应用 CVE-2026-43499 rtmutex 修复链"
         required: false
         type: boolean
-        default: false
+        default: true
       supp_op:
         description: "启用一加 8E 支持"
         required: false
@@ -102,6 +98,21 @@ on:
         required: false
         type: boolean
         default: true
+      use_bbr:
+        description: "设置 BBR 为默认 TCP 拥塞算法（融合自 ShirkNeko）"
+        required: false
+        type: boolean
+        default: false
+      send_telegram:
+        description: "构建结束后发送 Telegram 通知（需配置 secrets）"
+        required: false
+        type: boolean
+        default: true
+      use_release_cache:
+        description: "用 GitHub Release 存储 ccache（突破 actions/cache 容量与过期限制）"
+        required: false
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       kernelsu_variant:
@@ -130,11 +141,12 @@ on:
       cve_2026_43499_patch:
         required: false
         type: boolean
-        default: false
-      ksu_mode:
+        default: true
+      enable_susfs:
+        description: "集成 SUSFS（取消勾选 = 只集成 KernelSU，不打 SUSFS 补丁）"
         required: false
-        type: string
-        default: 关闭
+        type: boolean
+        default: true
       supp_op:
         required: false
         type: boolean
@@ -170,7 +182,7 @@ on:
         description: "构建结束后发送 Telegram 通知（需配置 secrets）"
         required: false
         type: boolean
-        default: false
+        default: true
       use_release_cache:
         description: "用 GitHub Release 存储 ccache（融合自 ShirkNeko）"
         required: false
@@ -215,8 +227,8 @@ jobs:
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches || false }}
       supp_op: ${{ inputs.supp_op || false }}
-      enable_susfs: ${{ inputs.ksu_mode != '禁用SUSFS' && inputs.ksu_mode != '禁用KSU' }}
-      ksu_mode: ${{ inputs.ksu_mode || '关闭' }}
+      enable_susfs: ${{ inputs.enable_susfs }}
+      ksu_mode: ${{ inputs.enable_susfs && '关闭' || '禁用SUSFS' }}
       droidspaces: ${{ inputs.droidspaces || 'off' }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync || false }}
       artifact_upload_mode: ${{ inputs.artifact_upload_mode }}

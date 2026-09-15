@@ -42,18 +42,15 @@ on:
           - Official
           #- Next
         default: ReSukiSU
-      ksu_mode:
-        description: "KernelSU / SUSFS 模式（关闭 = 不禁用任何项，即 KSU + SUSFS 全开，默认；禁用SUSFS = 只集成 KSU、不打 SUSFS 补丁；禁用KSU = 纯净 GKI，KSU 与 SUSFS 都不集成）"
-        type: choice
-        options:
-          - 关闭
-          - 禁用SUSFS
-          - 禁用KSU
-        default: 关闭
+      enable_susfs:
+        description: "集成 SUSFS（取消勾选 = 只集成 KernelSU，不打 SUSFS 补丁）"
+        required: false
+        type: boolean
+        default: true
       use_kpm:
-        description: "KPM 功能（enabled = 开启 CONFIG_KPM；patched = 开启并修补镜像，本项目未实现该修补，选它等同于 enabled）"
+        description: "KPM 功能（开启后会在编译完修补 Image 以支持加载 KPM 模块，仅 5.x 有效，6.6 自动跳过；patched 与 enabled 行为一致）"
         type: choice
-        default: "disabled (关闭)"
+        default: "enabled (开启)"
         options:
           - "disabled (关闭)"
           - "enabled (开启)"
@@ -114,11 +111,11 @@ on:
       use_zram:
         description: "启用 ZRAM 增强算法"
         type: boolean
-        default: false
+        default: true
       use_bbg:
         description: "启用 BBG 防格机"
         type: boolean
-        default: false
+        default: true
       use_rekernel:
         description: "启用 Re-Kernel 驱动"
         type: boolean
@@ -126,7 +123,7 @@ on:
       cve_2026_43499_patch:
         description: "应用 CVE-2026-43499 rtmutex 修复链"
         type: boolean
-        default: false
+        default: true
       droidspaces_ntsync:
         description: "启用 Droidspaces 容器 NTSync 支持（需启用 Droidspaces）"
         type: boolean
@@ -141,7 +138,7 @@ on:
         description: "构建结束后发送 Telegram 通知（需配置 secrets）"
         required: false
         type: boolean
-        default: false
+        default: true
       use_release_cache:
         description: "用 GitHub Release 存储 ccache（融合自 ShirkNeko）"
         required: false
@@ -152,6 +149,11 @@ on:
         required: false
         type: boolean
         default: true
+      supp_op:
+        description: "启用一加 8E 支持"
+        required: false
+        type: boolean
+        default: false
 jobs:
   # ==================== 获取管理器 ====================
   # 下载最新的 KernelSU 管理器 APK 和 SUSFS 模块
@@ -177,7 +179,7 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
-      ksu_mode: ${{ inputs.ksu_mode }}
+      enable_susfs: ${{ inputs.enable_susfs }}
       droidspaces: ${{ inputs.droidspaces }}
       artifact_upload_mode: "上传全部"
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
@@ -186,6 +188,7 @@ jobs:
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
       manager_spoofed: ${{ inputs.manager_spoofed }}
+      supp_op: ${{ inputs.supp_op }}
 
   # ==================== Android 13 - 5.15 构建 ====================
   build-a13-5-15:
@@ -202,7 +205,7 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
-      ksu_mode: ${{ inputs.ksu_mode }}
+      enable_susfs: ${{ inputs.enable_susfs }}
       droidspaces: ${{ inputs.droidspaces }}
       artifact_upload_mode: "上传全部"
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
@@ -211,6 +214,7 @@ jobs:
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
       manager_spoofed: ${{ inputs.manager_spoofed }}
+      supp_op: ${{ inputs.supp_op }}
 
   # ==================== Android 14 - 6.1 构建 ====================
   build-a14-6-1:
@@ -227,7 +231,7 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
-      ksu_mode: ${{ inputs.ksu_mode }}
+      enable_susfs: ${{ inputs.enable_susfs }}
       droidspaces: ${{ inputs.droidspaces }}
       artifact_upload_mode: "上传全部"
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
@@ -236,6 +240,7 @@ jobs:
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
       manager_spoofed: ${{ inputs.manager_spoofed }}
+      supp_op: ${{ inputs.supp_op }}
 
   # ==================== Android 15 - 6.6 构建 ====================
   build-a15-6-6:
@@ -252,7 +257,7 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
-      ksu_mode: ${{ inputs.ksu_mode }}
+      enable_susfs: ${{ inputs.enable_susfs }}
       droidspaces: ${{ inputs.droidspaces }}
       artifact_upload_mode: "上传全部"
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
@@ -261,6 +266,7 @@ jobs:
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
       manager_spoofed: ${{ inputs.manager_spoofed }}
+      supp_op: ${{ inputs.supp_op }}
 
   # ==================== Android 16 - 6.12 构建 ====================
   build-a16-6-12:
@@ -277,7 +283,7 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
-      ksu_mode: ${{ inputs.ksu_mode }}
+      enable_susfs: ${{ inputs.enable_susfs }}
       droidspaces: ${{ inputs.droidspaces }}
       artifact_upload_mode: "上传全部"
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
@@ -286,6 +292,7 @@ jobs:
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
       manager_spoofed: ${{ inputs.manager_spoofed }}
+      supp_op: ${{ inputs.supp_op }}
 
   # ==================== 收集补丁冲突文件 ====================
   # 汇总所有构建任务中的 .rej 文件，方便调试补丁问题
@@ -409,7 +416,7 @@ jobs:
   # 汇总各构建任务导出的 SUSFS 集成补丁，打成一个 zip 供 Release 分发
   # 仅 SukiSU / ReSukiSU 且启用 SUSFS 时有产物
   collect-susfs-patches:
-    if: ${{ !cancelled() && inputs.export_susfs_patches && inputs.ksu_mode == '关闭' && (inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'ReSukiSU') }}
+    if: ${{ !cancelled() && inputs.export_susfs_patches && inputs.enable_susfs && (inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'ReSukiSU') }}
     runs-on: ubuntu-latest
     needs:
       - build-a12-5-10
@@ -641,28 +648,15 @@ jobs:
           fi
 
           # 发布标题与 KernelSU / SUSFS 模式（GITHUB_ENV 中后写入的同名变量会覆盖前面的值）
-          case "${{ inputs.ksu_mode }}" in
-            "禁用KSU")
-              echo "KSU_NAME=未集成" >> $GITHUB_ENV
-              echo "KSU_VER=" >> $GITHUB_ENV
-              echo "SUS_VER=未集成" >> $GITHUB_ENV
-              echo "BRANCH_INFO=-" >> $GITHUB_ENV
-              echo "HOOK_TYPE=无" >> $GITHUB_ENV
-              echo "MOUNT_TYPE=无" >> $GITHUB_ENV
-              echo "KPM_STATUS=未开启" >> $GITHUB_ENV
-              echo "RELEASE_HEADLINE=**纯净 GKI 内核**（未集成 KernelSU / SUSFS）" >> $GITHUB_ENV
-              echo "RELEASE_NAME=GKI Kernel: 纯净版（无 KernelSU / SUSFS）" >> $GITHUB_ENV
-              ;;
-            "禁用SUSFS")
-              echo "SUS_VER=未集成" >> $GITHUB_ENV
-              echo "RELEASE_HEADLINE=**${KSU_NAME} ${KSU_VER}**（未集成 SUSFS）" >> $GITHUB_ENV
-              echo "RELEASE_NAME=GKI Kernel: ${KSU_NAME} ${KSU_VER}（无 SUSFS）" >> $GITHUB_ENV
-              ;;
-            *)
-              echo "RELEASE_HEADLINE=**${KSU_NAME} ${KSU_VER}** + **SUSFS ${SUS_VER}**" >> $GITHUB_ENV
-              echo "RELEASE_NAME=GKI Kernel: ${KSU_NAME} ${KSU_VER} + SUSFS ${SUS_VER}" >> $GITHUB_ENV
-              ;;
-          esac
+          # [融合] 三态选择已简化为「是否集成 SUSFS」，纯净 GKI 不再提供
+          if [[ "${{ inputs.enable_susfs }}" != "true" ]]; then
+            echo "SUS_VER=未集成" >> $GITHUB_ENV
+            echo "RELEASE_HEADLINE=**${KSU_NAME} ${KSU_VER}**（未集成 SUSFS）" >> $GITHUB_ENV
+            echo "RELEASE_NAME=GKI Kernel: ${KSU_NAME} ${KSU_VER}（无 SUSFS）" >> $GITHUB_ENV
+          else
+            echo "RELEASE_HEADLINE=**${KSU_NAME} ${KSU_VER}** + **SUSFS ${SUS_VER}**" >> $GITHUB_ENV
+            echo "RELEASE_NAME=GKI Kernel: ${KSU_NAME} ${KSU_VER} + SUSFS ${SUS_VER}" >> $GITHUB_ENV
+          fi
 
       # ==================== 验证构建状态 ====================
       # 确保所有选中的构建任务都成功完成
@@ -692,12 +686,11 @@ jobs:
       # ==================== 确定 KSU 引用 ====================
       # 根据实际构建逻辑确定 KernelSU 上游引用
       - name: 确定 KSU 引用
-        if: inputs.ksu_mode != '禁用KSU'
         run: |
           case "${{ inputs.kernelsu_variant }}" in
             "Official") BRANCH="main" ;;
             "SukiSU")
-              if [ "${{ inputs.ksu_mode }}" != "关闭" ]; then
+              if [ "${{ inputs.enable_susfs }}" != "true" ]; then
                 BRANCH="main"
               else
                 BRANCH="builtin"
@@ -713,7 +706,6 @@ jobs:
       # ==================== 获取 KernelSU 提交信息 ====================
       # 获取当前使用的 KernelSU 版本的 Git 提交信息
       - name: 获取 KernelSU 提交信息
-        if: inputs.ksu_mode != '禁用KSU'
         run: |
           case "${{ inputs.kernelsu_variant }}" in
             "Official") REPO_URL="https://github.com/tiann/KernelSU.git"; REPO_URL2="tiann/KernelSU" ;;
@@ -744,7 +736,7 @@ jobs:
       # ==================== 获取 SUSFS 提交信息 ====================
       # 获取各版本 SUSFS 的 Git 提交信息
       - name: 获取 SUSFS 提交信息
-        if: inputs.ksu_mode == '关闭'
+        if: inputs.enable_susfs
         run: |
           GITLAB_OWNER="simonpunk"
           GITLAB_REPO="susfs4ksu"
@@ -775,11 +767,7 @@ jobs:
           else
             KSU_DISPLAY_REF="$KSU_REF"
           fi
-          if [[ "${{ inputs.ksu_mode }}" == "禁用KSU" ]]; then
-            KSU_COMMIT_LINE="- 本次构建未集成 KernelSU"
-          else
-            KSU_COMMIT_LINE="- $KSU_NAME: [\`$KSU_DISPLAY_REF\`]($KSU_URL)"
-          fi
+          KSU_COMMIT_LINE="- $KSU_NAME: [\`$KSU_DISPLAY_REF\`]($KSU_URL)"
 
           build_targets=""
           append_target() {
@@ -813,7 +801,7 @@ jobs:
           append_susfs_commit "${{ inputs.build_a14_6_1 || inputs.build_all }}" "Android 14 / 6.1" "${COMMIT_HASH_gki_android14_6_1}" "${COMMIT_URL_gki_android14_6_1}"
           append_susfs_commit "${{ inputs.build_a15_6_6 || inputs.build_all }}" "Android 15 / 6.6" "${COMMIT_HASH_gki_android15_6_6}" "${COMMIT_URL_gki_android15_6_6}"
           append_susfs_commit "${{ inputs.build_a16_6_12 || inputs.build_all }}" "Android 16 / 6.12" "${COMMIT_HASH_gki_android16_6_12}" "${COMMIT_URL_gki_android16_6_12}"
-          if [[ "${{ inputs.ksu_mode }}" != "关闭" ]]; then
+          if [[ "${{ inputs.enable_susfs }}" != "true" ]]; then
             echo "- 本次构建未集成 SUSFS" > susfs_commits.md
           elif [[ ! -s susfs_commits.md ]]; then
             echo "- 未获取到本次构建对应的 SUSFS 提交信息" > susfs_commits.md
@@ -834,7 +822,7 @@ jobs:
 
           | 项目 | 内容 |
           |:---|:---|
-          | KernelSU / SUSFS 模式 | ${{ inputs.ksu_mode }} |
+          | 集成 SUSFS | ${{ inputs.enable_susfs && '是' || '否' }} |
           | KernelSU 变体 | $KSU_NAME |
           | KernelSU 分支 | $BRANCH_INFO |
           | SUSFS | $SUS_VER |

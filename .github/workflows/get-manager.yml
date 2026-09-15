@@ -369,13 +369,40 @@ jobs:
         if: steps.add_KSU.outcome == 'failure'
         run: echo "下载CI构建的KSU失败!"
 
-      - name: 上传APK
+      # [融合] 按 APK 路径/文件名是否含 spoofed 分流，
+      # 让普通管理器与 Spoofed（伪装官方包名）管理器成为两个独立产物，
+      # 而不是混在一个压缩包里。
+      - name: 分流管理器 APK
+        if: steps.add_KSU.outcome == 'success'
+        run: |
+          rm -rf manager-out manager-out-spoofed
+          mkdir -p manager-out manager-out-spoofed
+          find manager-artifacts -type f -name "*.apk" | while IFS= read -r f; do
+            case "$f" in
+              *[Ss]poofed*) cp -f "$f" "manager-out-spoofed/$(basename "$f")" ;;
+              *) cp -f "$f" "manager-out/$(basename "$f")" ;;
+            esac
+          done
+          echo "--- 普通管理器 ---"
+          ls -1 manager-out || true
+          echo "--- Spoofed 管理器 ---"
+          ls -1 manager-out-spoofed || true
+
+      - name: 上传管理器 APK
         if: steps.add_KSU.outcome == 'success'
         uses: actions/upload-artifact@v6
         with:
           name: ${{ inputs.kernelsu_variant }}-Manager(${{ env.KSU_VERSION }})
-          path: |
-            manager-artifacts/**/*.apk
+          path: manager-out/*.apk
+          if-no-files-found: warn
+
+      - name: 上传 Spoofed 管理器 APK
+        if: steps.add_KSU.outcome == 'success' && inputs.spoofed
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ inputs.kernelsu_variant }}-Spoofed-Manager(${{ env.KSU_VERSION }})
+          path: manager-out-spoofed/*.apk
+          if-no-files-found: warn
 
       - name: 上传SUSFS模块
         if: steps.add_SUSFS.outcome == 'success'
