@@ -70,7 +70,7 @@ on:
 
       # ==================== 文本输入 ====================
       os_patch_level:
-        description: "安全补丁级别 (如 2022-01, lts)"
+        description: "构建目标：可填子版本代号（如 66、236）或补丁级别日期（如 2022-01）；lts = LTS 版本；all = 该内核全部版本（耗时很长）；也可用逗号分隔多个（如 66,236,2022-01）。默认只构建一个版本。"
         required: true
         type: string
         default: "2022-01"
@@ -143,6 +143,7 @@ jobs:
       android_version: ${{ steps.resolve.outputs.android_version }}
       sub_level: ${{ steps.resolve.outputs.sub_level }}
       kernel_full: ${{ steps.resolve.outputs.kernel_full }}
+      matrix: ${{ steps.resolve.outputs.matrix }}
     steps:
       - name: 检出版本数据
         uses: actions/checkout@v7
@@ -182,45 +183,124 @@ jobs:
           with data_path.open("r", encoding="utf-8") as f:
               data = json.load(f)
 
-          if os_patch_level == "lts":
-              kernel_full = data.get("lts")
-              if not kernel_full:
-                  print(f"::error::{android_version} / {kernel_version} 缺少 LTS 版本数据")
-                  sys.exit(1)
-              sub_level = "X"
-          else:
-              matched = next(
-                  (entry for entry in data.get("entries", []) if entry.get("date") == os_patch_level),
-                  None,
-              )
-              if matched is None:
-                  print(f"::error::未找到 {android_version} / {kernel_version} / {os_patch_level} 对应的版本数据")
-                  sys.exit(1)
-              kernel_full = matched.get("kernel", "")
-              prefix = f"{kernel_version}."
-              if not kernel_full.startswith(prefix):
-                  print(f"::error::版本数据异常: {kernel_full} 不属于 {kernel_version}")
-                  sys.exit(1)
-              sub_level = kernel_full.rsplit(".", 1)[-1]
+          entries = data.get("entries", [])
+          prefix = f"{kernel_version}."
 
+          # 供错误提示使用：列出该内核全部可用子版本代号
+          available_subs = []
+          for entry in entries:
+              k = entry.get("kernel", "")
+              if k.startswith(prefix):
+                  s = k.rsplit(".", 1)[-1]
+                  if s not in available_subs:
+                      available_subs.append(s)
+          available_hint = "子版本代号: " + ", ".join(available_subs)
+
+          # ---------- 解析用户请求的补丁级别列表 ----------
+          # 支持：all / lts / latest / 单个日期 / 逗号分隔多个日期
+          mode = os_patch_level.lower()
+          if mode == "all":
+              # 同一内核版本可能被多个补丁级别复用（如 5.10.43 对应 2021-08/09/10），
+              # 这里按内核版本去重，只保留该版本最新的那个补丁级别。
+              newest_date_by_kernel = {}
+              for entry in entries:
+                  k = entry.get("kernel", "")
+                  if k:
+                      newest_date_by_kernel[k] = entry.get("date")
+              try:
+                  ordered = sorted(
+                      newest_date_by_kernel.items(),
+                      key=lambda kv: int(kv[0].rsplit(".", 1)[-1]),
+                  )
+              except ValueError:
+                  ordered = list(newest_date_by_kernel.items())
+              wanted = [d for _, d in ordered]
+              if data.get("lts"):
+                  wanted.append("lts")
+          elif mode == "latest":
+              wanted = [entries[-1].get("date")] if entries else []
+          else:
+              wanted = [p.strip() for p in os_patch_level.split(",") if p.strip()]
+
+          include = []
+          seen = set()
+          for patch in wanted:
+              if patch.lower() == "lts":
+                  kernel_full = data.get("lts")
+                  if not kernel_full:
+                      print(f"::error::{android_version} / {kernel_version} 缺少 LTS 版本数据")
+                      sys.exit(1)
+                  item = {"sub_level": "X", "os_patch_level": "lts", "kernel_full": kernel_full}
+              else:
+                  # 既支持补丁级别日期（2022-01），也支持子版本代号（66 / 236）
+                  if patch.isdigit():
+                      candidates = [
+                          entry for entry in entries
+                          if entry.get("kernel") == f"{kernel_version}.{patch}"
+                      ]
+                      if not candidates:
+                          print(f"::error::未找到 {android_version} / {kernel_version}.{patch} 对应的版本数据")
+                          print(f"::error::{available_hint}")
+                          sys.exit(1)
+                      # 同一子版本可能对应多个补丁级别，取最新的那个
+                      matched = candidates[-1]
+                  else:
+                      matched = next(
+                          (entry for entry in entries if entry.get("date") == patch),
+                          None,
+                      )
+                      if matched is None:
+                          print(f"::error::未找到 {android_version} / {kernel_version} / {patch} 对应的版本数据")
+                          print(f"::error::可填补丁级别日期（如 2022-01）或子版本代号（如 66）")
+                          print(f"::error::{available_hint}")
+                          sys.exit(1)
+                  kernel_full = matched.get("kernel", "")
+                  if not kernel_full.startswith(prefix):
+                      print(f"::error::版本数据异常: {kernel_full} 不属于 {kernel_version}")
+                      sys.exit(1)
+                  item = {
+                      "sub_level": kernel_full.rsplit(".", 1)[-1],
+                      "os_patch_level": matched.get("date"),
+                      "kernel_full": kernel_full,
+                  }
+              key = (item["sub_level"], item["os_patch_level"])
+              if key in seen:
+                  continue
+              seen.add(key)
+              include.append(item)
+
+          if not include:
+              print(f"::error::未能解析出任何构建目标，请检查 os_patch_level: {os_patch_level}")
+              sys.exit(1)
+
+          matrix = {"include": include}
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"android_version={android_version}\n")
-              output.write(f"sub_level={sub_level}\n")
-              output.write(f"kernel_full={kernel_full}\n")
+              # 兼容旧引用：取第一个目标
+              output.write(f"sub_level={include[0]['sub_level']}\n")
+              output.write(f"kernel_full={include[0]['kernel_full']}\n")
+              output.write("matrix<<__MATRIX_EOF__\n")
+              output.write(json.dumps(matrix, ensure_ascii=False))
+              output.write("\n__MATRIX_EOF__\n")
 
-          print(f"解析结果: {android_version} / {kernel_full}，子版本号: {sub_level}")
+          print(f"解析结果: {android_version} / {kernel_version}，共 {len(include)} 个构建目标")
+          for item in include:
+              print(f"   - {item['kernel_full']}  ({item['os_patch_level']})")
           PY
 
   build-custom-kernel:
-    name: "${{ needs.resolve-version.outputs.kernel_full }}-${{ needs.resolve-version.outputs.android_version }}-${{ inputs.os_patch_level }}"
+    name: "${{ matrix.kernel_full }}-${{ needs.resolve-version.outputs.android_version }}-${{ matrix.os_patch_level }}"
     needs: resolve-version
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve-version.outputs.matrix) }}
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
       android_version: ${{ needs.resolve-version.outputs.android_version }}
       kernel_version: ${{ inputs.kernel_version }}
-      sub_level: ${{ needs.resolve-version.outputs.sub_level }}
-      os_patch_level: ${{ inputs.os_patch_level }}
+      sub_level: ${{ matrix.sub_level }}
+      os_patch_level: ${{ matrix.os_patch_level }}
       revision: "r1"
       ksu_variant: ${{ inputs.kernelsu_variant }}
       version: ${{ inputs.version || '' }}
