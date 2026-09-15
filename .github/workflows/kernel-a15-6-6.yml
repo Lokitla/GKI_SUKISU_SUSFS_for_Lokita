@@ -21,7 +21,7 @@ on:
           - ReSukiSU
         default: ReSukiSU
       ksu_mode:
-        description: "KernelSU / SUSFS 模式"
+        description: "KernelSU / SUSFS 模式（关闭 = 不禁用任何项，即 KSU + SUSFS 全开，默认；禁用SUSFS = 只集成 KSU、不打 SUSFS 补丁；禁用KSU = 纯净 GKI，KSU 与 SUSFS 都不集成）"
         required: true
         type: choice
         options:
@@ -30,7 +30,7 @@ on:
           - 禁用KSU
         default: 关闭
       use_kpm:
-        description: "KPM 功能（patched 尚不支持）"
+        description: "KPM 功能（enabled = 开启 CONFIG_KPM；patched = 开启并修补镜像，本项目未实现该修补，选它等同于 enabled）"
         required: true
         type: choice
         default: "disabled (关闭)"
@@ -99,6 +99,11 @@ on:
         required: false
         type: boolean
         default: false
+      manager_spoofed:
+        description: "一并拉取 Spoofed（伪装官方包名）管理器"
+        required: false
+        type: boolean
+        default: true
   workflow_call:
     inputs:
       kernelsu_variant:
@@ -173,6 +178,11 @@ on:
         required: false
         type: boolean
         default: false
+      manager_spoofed:
+        description: "一并拉取 Spoofed（伪装官方包名）管理器"
+        required: false
+        type: boolean
+        default: true
 jobs:
   build-kernels-a15-6-6:
     name: "6.6.${{ matrix.sub_level }}-${{ matrix.os_patch_level }}"
@@ -243,3 +253,4 @@ jobs:
     secrets: inherit
     with:
       kernelsu_variant: ${{ inputs.kernelsu_variant }}
+      spoofed: ${{ inputs.manager_spoofed }}

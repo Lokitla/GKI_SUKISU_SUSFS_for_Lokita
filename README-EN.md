@@ -1,11 +1,24 @@
 <div align="center">
 
 # GKI KernelSU SUSFS
+
+---
+
+> [!WARNING]
+> **⚠️ Personal fork · Not an official release · Modified with AI assistance**
+>
+> - This repository is a **personal fork** of [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS). Builds here are for the owner's own testing and are **not an official distribution channel**.
+> - Workflows, build scripts and docs in this repo were **modified with AI assistance** and have not been reviewed by the upstream author; behaviour may differ from upstream.
+> - Flashing third-party kernels risks bricking, data loss and app integrity-check failures. Back up your stock boot image and proceed at your own risk.
+> - Please report issues here rather than to the upstream author.
+
+---
+
 ### 🏮 2026 🐎 Happy New Year! 🏮
 
 **Automated GKI Kernel Builds | KernelSU + SUSFS Integrated**
 
-[![Release](https://img.shields.io/github/v/release/zzh20188/GKI_KernelSU_SUSFS?label=Release&style=flat-square&logo=github&logoColor=white&color=2ea44f)](https://github.com/zzh20188/GKI_KernelSU_SUSFS/releases)
+[![Release](https://img.shields.io/github/v/release/Lokitla/GKI_SUKISU_SUSFS_for_Lokita?label=Release&style=flat-square&logo=github&logoColor=white&color=2ea44f)](https://github.com/Lokitla/GKI_SUKISU_SUSFS_for_Lokita/releases)
 [![Coolapk](https://img.shields.io/badge/Follow-Coolapk-3DDC84?style=flat-square&logo=android&logoColor=white)](http://www.coolapk.com/u/11253396)
 [![KernelSU](https://img.shields.io/badge/KernelSU-Supported-5AA300?style=flat-square)](https://kernelsu.org/)
 [![SUSFS](https://img.shields.io/badge/SUSFS-Integrated-E67E22?style=flat-square)](https://gitlab.com/simonpunk/susfs4ksu)
@@ -46,64 +59,6 @@ Wiki covers:
 
 ---
 
-## 💻 Local Build (CLI)
-
-Besides GitHub Actions, kernels can now be built locally. **Both paths share the same
-build logic** (`scripts/build_kernel.sh`), so local and cloud builds behave identically —
-there is no second implementation to keep in sync.
-
-### Requirements
-
-- Linux (Ubuntu 22.04+ recommended), `sudo` needed to install build dependencies
-- At least **40 GB** of free disk space
-- Python 3.8+
-
-### Quick start
-
-```bash
-# List supported version combinations (data comes from data/)
-python3 build.py --list-configs
-
-# Build a single version
-python3 build.py --android android14 --kernel 6.1 --sub-level 124 --os-patch 2025-02
-
-# Build every sub-level of a combination
-python3 build.py --matrix android14-6.1
-
-# Build everything (very long, use with care)
-python3 build.py --all
-
-# Validate parameters without building
-python3 build.py --android android14 --kernel 6.1 --dry-run
-```
-
-### Common options
-
-| Option | Description |
-|---|---|
-| `--ksu-variant` | KernelSU variant: `ReSukiSU` / `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `Official` |
-| `--zram` | Enable ZRAM (LZ4KD) |
-| `--bbr` | Set BBR as the default TCP congestion algorithm |
-| `--kpm` | Enable KPM kernel module support |
-| `--bbg` | Enable Baseband-guard |
-| `--rekernel` | Enable Re-Kernel |
-| `--op8e` | Enable OnePlus 8E support |
-| `--cve-patch` | Apply the CVE-2026-43499 fix |
-| `--droidspaces` | Droidspaces container support (`off` / `678` / `123` / `345`) |
-| `--ntsync` | Enable NTSync (requires `--droidspaces`) |
-| `--only <phase>` | Run a single phase (for debugging) |
-| `--from <phase>` | Resume from a given phase |
-| `--list-phases` | List all build phases |
-
-> **Tip:** use `--only <phase>` to re-run a single step, e.g.
-> `python3 build.py --android android14 --kernel 6.1 --only compile_kernel`,
-> instead of restarting from a full source clone.
-
-> **Note:** the "free disk space" step only runs on GitHub Actions runners.
-> Local builds skip it so your own files are never deleted.
-
----
-
 ## 🆕 Merged Capabilities
 
 The following features were merged from
@@ -115,6 +70,9 @@ The following features were merged from
 | **BBR congestion control** | Set BBR as the default TCP congestion algorithm | Actions: `use_bbr`; CLI: `--bbr` |
 | **Telegram notification** | Push build results and checksums to Telegram | Actions: `send_telegram` |
 | **Release cache** | Store ccache in GitHub Releases, bypassing `actions/cache` size and expiry limits | Actions: `use_release_cache` |
+| **Spoofed manager toggle** | Choose whether to also fetch the SukiSU manager APK disguised as the official KernelSU package name | Actions: `manager_spoofed` |
+
+> **About releases:** upstream hard-coded the "create release" job to run only in `zzh20188/GKI_KernelSU_SUSFS`, so a fork could never publish one. That restriction has been removed here — set `Release type` to `Release` / `Pre-Release` in the **Build kernel** workflow.
 
 ### Configuring Telegram notifications
 
@@ -274,3 +232,61 @@ During the build, the workflow will automatically:
 ⭐ If this project helps you, please give it a Star!
 
 </div>
+
+---
+
+## 💻 Local Build (CLI)
+
+Besides GitHub Actions, kernels can now be built locally. **Both paths share the same
+build logic** (`scripts/build_kernel.sh`), so local and cloud builds behave identically —
+there is no second implementation to keep in sync.
+
+### Requirements
+
+- Linux (Ubuntu 22.04+ recommended), `sudo` needed to install build dependencies
+- At least **40 GB** of free disk space
+- Python 3.8+
+
+### Quick start
+
+```bash
+# List supported version combinations (data comes from data/)
+python3 build.py --list-configs
+
+# Build a single version
+python3 build.py --android android14 --kernel 6.1 --sub-level 124 --os-patch 2025-02
+
+# Build every sub-level of a combination
+python3 build.py --matrix android14-6.1
+
+# Build everything (very long, use with care)
+python3 build.py --all
+
+# Validate parameters without building
+python3 build.py --android android14 --kernel 6.1 --dry-run
+```
+
+### Common options
+
+| Option | Description |
+|---|---|
+| `--ksu-variant` | KernelSU variant: `ReSukiSU` / `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `Official` |
+| `--zram` | Enable ZRAM (LZ4KD) |
+| `--bbr` | Set BBR as the default TCP congestion algorithm |
+| `--kpm` | Enable KPM kernel module support |
+| `--bbg` | Enable Baseband-guard |
+| `--rekernel` | Enable Re-Kernel |
+| `--op8e` | Enable OnePlus 8E support |
+| `--cve-patch` | Apply the CVE-2026-43499 fix |
+| `--droidspaces` | Droidspaces container support (`off` / `678` / `123` / `345`) |
+| `--ntsync` | Enable NTSync (requires `--droidspaces`) |
+| `--only <phase>` | Run a single phase (for debugging) |
+| `--from <phase>` | Resume from a given phase |
+| `--list-phases` | List all build phases |
+
+> **Tip:** use `--only <phase>` to re-run a single step, e.g.
+> `python3 build.py --android android14 --kernel 6.1 --only compile_kernel`,
+> instead of restarting from a full source clone.
+
+> **Note:** the "free disk space" step only runs on GitHub Actions runners.
+> Local builds skip it so your own files are never deleted.

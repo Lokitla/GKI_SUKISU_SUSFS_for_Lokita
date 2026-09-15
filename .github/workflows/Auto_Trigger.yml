@@ -8,8 +8,8 @@ on:
 jobs:
   check-and-trigger:
     runs-on: ubuntu-latest
-    # 如果要运行自动编译工作流，请手动添加/修改仓库所有者用户名
-    if: contains(fromJSON('["zzh20188", "elysias123"]'), github.repository_owner)
+    # [融合] 仓库所有者白名单：fork 后需把自己的用户名加进来，否则自动构建永不触发
+    if: contains(fromJSON('["zzh20188", "elysias123", "Lokitla"]'), github.repository_owner)
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7

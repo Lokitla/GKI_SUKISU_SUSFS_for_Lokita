@@ -1,11 +1,24 @@
 <div align="center">
 
 # GKI KernelSU SUSFS
+
+---
+
+> [!WARNING]
+> **⚠️ 自用仓库 · 非官方发布 · 由 AI 辅助修改**
+>
+> - 本仓库是 [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) 的**个人自用分支**，产物仅供本人测试，**不是官方发布渠道**。
+> - 仓库内的工作流、构建脚本与文档经过 **AI 辅助修改与二次开发**，未经上游作者审阅，行为可能与上游不一致。
+> - 刷入第三方内核存在变砖、丢失数据、触发应用风控等风险；请自行备份原厂 Boot 镜像，风险自负。
+> - 遇到问题请在本仓库反馈，不要去打扰上游作者。
+
+---
+
 ### 🏮 2026 🐎 Happy New Year! 🏮
 
 **自动化构建 GKI 内核 | 集成 KernelSU + SUSFS**
 
-[![Release](https://img.shields.io/github/v/release/zzh20188/GKI_KernelSU_SUSFS?label=Release&style=flat-square&logo=github&logoColor=white&color=2ea44f)](https://github.com/zzh20188/GKI_KernelSU_SUSFS/releases)
+[![Release](https://img.shields.io/github/v/release/Lokitla/GKI_SUKISU_SUSFS_for_Lokita?label=Release&style=flat-square&logo=github&logoColor=white&color=2ea44f)](https://github.com/Lokitla/GKI_SUKISU_SUSFS_for_Lokita/releases)
 [![Coolapk](https://img.shields.io/badge/Follow-Coolapk-3DDC84?style=flat-square&logo=android&logoColor=white)](http://www.coolapk.com/u/11253396)
 [![KernelSU](https://img.shields.io/badge/KernelSU-Supported-5AA300?style=flat-square)](https://kernelsu.org/)
 [![SUSFS](https://img.shields.io/badge/SUSFS-Integrated-E67E22?style=flat-square)](https://gitlab.com/simonpunk/susfs4ksu)
@@ -19,7 +32,7 @@
 ## 🚀 快速导航
 
 - 📖 [文档](https://github.com/zzh20188/GKI_KernelSU_SUSFS/wiki)
-- 📥 [下载](https://github.com/zzh20188/GKI_KernelSU_SUSFS/releases)
+- 📥 [下载](https://github.com/Lokitla/GKI_SUKISU_SUSFS_for_Lokita/releases)
 - 🔰 [教程](https://zzh20188.github.io/GKI_KernelSU_SUSFS/guide.html)
 
 ---
@@ -51,63 +64,6 @@ Wiki 涵盖内容：
 
 ---
 
-## 💻 本地构建（CLI）
-
-除了 GitHub Actions，现在也支持在本机直接构建。**两者共用同一份构建逻辑**
-（`scripts/build_kernel.sh`），因此本地构建与云端构建行为完全一致，不存在两套维护分叉。
-
-### 环境要求
-
-- Linux（推荐 Ubuntu 22.04+），首次构建需 `sudo` 安装编译依赖
-- 至少 **40GB** 可用磁盘空间
-- Python 3.8+
-
-### 快速开始
-
-```bash
-# 查看支持的版本组合（数据来自 data/）
-python3 build.py --list-configs
-
-# 构建单个版本
-python3 build.py --android android14 --kernel 6.1 --sub-level 124 --os-patch 2025-02
-
-# 构建某个组合的全部子版本
-python3 build.py --matrix android14-6.1
-
-# 构建全部版本（耗时极长，谨慎使用）
-python3 build.py --all
-
-# 只校验参数，不真正构建
-python3 build.py --android android14 --kernel 6.1 --dry-run
-```
-
-### 常用选项
-
-| 选项 | 说明 |
-|---|---|
-| `--ksu-variant` | KernelSU 变体：`ReSukiSU` / `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `Official` |
-| `--zram` | 启用 ZRAM (LZ4KD) |
-| `--bbr` | 设置 BBR 为默认 TCP 拥塞算法 |
-| `--kpm` | 启用 KPM 内核模块支持 |
-| `--bbg` | 启用 Baseband-guard |
-| `--rekernel` | 启用 Re-Kernel |
-| `--op8e` | 启用一加 8E 处理器支持 |
-| `--cve-patch` | 应用 CVE-2026-43499 安全修复 |
-| `--droidspaces` | Droidspaces 容器支持（`off` / `678` / `123` / `345`） |
-| `--ntsync` | 启用 NTSync（需配合 `--droidspaces`） |
-| `--only <阶段>` | 只运行指定阶段（调试用） |
-| `--from <阶段>` | 从指定阶段开始（断点续建） |
-| `--list-phases` | 列出全部构建阶段 |
-
-> **调试技巧：** 用 `--only <阶段>` 可以单独重跑某一步，例如
-> `python3 build.py --android android14 --kernel 6.1 --only compile_kernel`，
-> 不必每次都从克隆源码重新开始。
-
-> **注意：**「清理磁盘空间」这一步只在 GitHub Actions runner 上执行，本地构建会自动跳过，
-> 以免误删你机器上的文件。
-
----
-
 ## 🆕 融合新增能力
 
 本仓库在原有基础上，合并了 [ShirkNeko/GKI_KernelSU_SUSFS](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) 的以下能力：
@@ -118,6 +74,10 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 | **BBR 拥塞控制** | 将 BBR 设为默认 TCP 拥塞算法 | Actions: `use_bbr`；CLI: `--bbr` |
 | **Telegram 通知** | 构建完成后推送消息与产物校验值到 TG | Actions: `send_telegram` |
 | **Release 缓存** | 用 GitHub Release 存 ccache，突破 `actions/cache` 的容量与过期限制 | Actions: `use_release_cache` |
+| **Spoofed 管理器开关** | 可单独控制是否一并拉取伪装官方包名的 SukiSU 管理器 APK | Actions: `manager_spoofed` |
+
+> **关于 Release：** 原上游把「创建 Release」这一步硬编码成只在 `zzh20188/GKI_KernelSU_SUSFS` 仓库执行，
+> fork 后永远发不出来。本分支已去掉该限制，在 **构建内核** 里把 `发布类型` 选成 `Release` / `Pre-Release` 即可发布。
 
 ### 配置 Telegram 通知
 
@@ -277,3 +237,60 @@ sukisu=
 ⭐ 如果这个项目对你有帮助，请点个 Star 支持一下！
 
 </div>
+
+---
+
+## 💻 本地构建（CLI）
+
+除了 GitHub Actions，现在也支持在本机直接构建。**两者共用同一份构建逻辑**
+（`scripts/build_kernel.sh`），因此本地构建与云端构建行为完全一致，不存在两套维护分叉。
+
+### 环境要求
+
+- Linux（推荐 Ubuntu 22.04+），首次构建需 `sudo` 安装编译依赖
+- 至少 **40GB** 可用磁盘空间
+- Python 3.8+
+
+### 快速开始
+
+```bash
+# 查看支持的版本组合（数据来自 data/）
+python3 build.py --list-configs
+
+# 构建单个版本
+python3 build.py --android android14 --kernel 6.1 --sub-level 124 --os-patch 2025-02
+
+# 构建某个组合的全部子版本
+python3 build.py --matrix android14-6.1
+
+# 构建全部版本（耗时极长，谨慎使用）
+python3 build.py --all
+
+# 只校验参数，不真正构建
+python3 build.py --android android14 --kernel 6.1 --dry-run
+```
+
+### 常用选项
+
+| 选项 | 说明 |
+|---|---|
+| `--ksu-variant` | KernelSU 变体：`ReSukiSU` / `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `Official` |
+| `--zram` | 启用 ZRAM (LZ4KD) |
+| `--bbr` | 设置 BBR 为默认 TCP 拥塞算法 |
+| `--kpm` | 启用 KPM 内核模块支持 |
+| `--bbg` | 启用 Baseband-guard |
+| `--rekernel` | 启用 Re-Kernel |
+| `--op8e` | 启用一加 8E 处理器支持 |
+| `--cve-patch` | 应用 CVE-2026-43499 安全修复 |
+| `--droidspaces` | Droidspaces 容器支持（`off` / `678` / `123` / `345`） |
+| `--ntsync` | 启用 NTSync（需配合 `--droidspaces`） |
+| `--only <阶段>` | 只运行指定阶段（调试用） |
+| `--from <阶段>` | 从指定阶段开始（断点续建） |
+| `--list-phases` | 列出全部构建阶段 |
+
+> **调试技巧：** 用 `--only <阶段>` 可以单独重跑某一步，例如
+> `python3 build.py --android android14 --kernel 6.1 --only compile_kernel`，
+> 不必每次都从克隆源码重新开始。
+
+> **注意：**「清理磁盘空间」这一步只在 GitHub Actions runner 上执行，本地构建会自动跳过，
+> 以免误删你机器上的文件。

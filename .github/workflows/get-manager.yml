@@ -9,6 +9,11 @@ on:
       kernelsu_variant:
         required: true
         type: string
+      spoofed:
+        description: "是否一并拉取 Spoofed（伪装官方包名）管理器；关闭则只保留普通管理器"
+        required: false
+        type: boolean
+        default: true
     outputs:
       susVer:
         description: "The fetched SUSFS version number"
@@ -198,17 +203,27 @@ jobs:
             esac
           }
 
+          # [融合] Spoofed（伪装官方 KernelSU 包名）管理器开关
+          #   开启：一并拉取 Spoofed-Manager（伪装官方包名的管理器）
+          #   关闭：过滤掉所有名字含 spoofed 的产物，只保留普通管理器
+          WANT_SPOOFED="${{ inputs.spoofed }}"
+          case "$WANT_SPOOFED" in
+            true|TRUE|True|1) JQ_SPOOFED=true ;;
+            *) JQ_SPOOFED=false ;;
+          esac
+          echo "拉取 Spoofed 管理器: $JQ_SPOOFED"
+
           get_manager_artifacts() {
             local artifacts="$1"
             if [ "${{ inputs.kernelsu_variant }}" == "Next" ]; then
-              printf '%s' "$artifacts" | jq -r --arg name "$KSUM" \
-                '.artifacts[] | select(.name == $name) | "\(.name)\t\(.archive_download_url)"'
+              printf '%s' "$artifacts" | jq -r --arg name "$KSUM" --argjson sp "$JQ_SPOOFED" \
+                '.artifacts[] | select(.name == $name) | select($sp or ((.name | ascii_downcase) | contains("spoofed") | not)) | "\(.name)\t\(.archive_download_url)"'
             elif [ "${{ inputs.kernelsu_variant }}" == "ReSukiSU" ]; then
-              printf '%s' "$artifacts" | jq -r \
-                '.artifacts[] | select(.name == "Manager-release" or .name == "Spoofed-Manager-release") | "\(.name)\t\(.archive_download_url)"'
+              printf '%s' "$artifacts" | jq -r --argjson sp "$JQ_SPOOFED" \
+                '.artifacts[] | select(.name == "Manager-release" or ($sp and .name == "Spoofed-Manager-release")) | "\(.name)\t\(.archive_download_url)"'
             else
-              printf '%s' "$artifacts" | jq -r --arg needle "$KSUM" \
-                '.artifacts[] | select((.name | ascii_downcase) | contains($needle)) | "\(.name)\t\(.archive_download_url)"'
+              printf '%s' "$artifacts" | jq -r --arg needle "$KSUM" --argjson sp "$JQ_SPOOFED" \
+                '.artifacts[] | select((.name | ascii_downcase) | contains($needle)) | select($sp or ((.name | ascii_downcase) | contains("spoofed") | not)) | "\(.name)\t\(.archive_download_url)"'
             fi
           }
 
