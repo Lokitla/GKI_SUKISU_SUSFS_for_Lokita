@@ -432,13 +432,13 @@ the core work comes from the upstream authors below. The full list lives in [NOT
 
 | Project | Upstream contribution | Licence |
 |---|---|---|
-| [WildKernels/GKI_KernelSU_SUSFS](https://github.com/WildKernels/GKI_KernelSU_SUSFS) | Common root of both zzh and ShirkNeko | bundled in repo |
+| [WildKernels/GKI_KernelSU_SUSFS](https://github.com/WildKernels/GKI_KernelSU_SUSFS) | Common root of both zzh and ShirkNeko | **GPL-3.0-or-later** (custom LICENSE header + full GPL-3.0 text; GitHub reports `Other`) |
 | [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) | **Build scaffolding and the bulk of the code** (matrix, scripts, patch adaptation) | GPL-2.0 |
 | [ShirkNeko/GKI_KernelSU_SUSFS](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) | KPM image patching, local CLI design | not declared |
 | [coolzyd9107/GKI_SukiSU_Ultra_SUSFS](https://github.com/coolzyd9107/GKI_SukiSU_Ultra_SUSFS) | Release notes template | GPL-2.0 |
 | [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) | The KernelSU variant itself | GPL-3.0 |
 | [simonpunk/susfs4ksu](https://gitlab.com/simonpunk/susfs4ksu) | SUSFS patch set | GPL-3.0 |
-| [WildKernels/AnyKernel3](https://github.com/WildKernels/AnyKernel3) | Flashable package template | bundled in repo |
+| [WildKernels/AnyKernel3](https://github.com/WildKernels/AnyKernel3) | Flashable package template | **BSD-3-Clause style** (osm0sis' AK3 script licence; bundled `magiskboot` / `magiskpolicy` are **GPL-3.0+**) |
 
 **This repository is GPL-2.0 as a whole**, matching its primary upstreams. The scripts and
 docs newly added here are distributed under GPL-2.0-or-later so they can coexist with the
@@ -449,6 +449,29 @@ detection); attribution and compatibility notes all live in [NOTICE](NOTICE).
 
 If you are an upstream author and believe any attribution is wrong, please open an issue
 here and it will be corrected immediately.
+
+### GPL-2.0 vs GPL-3.0
+
+This repository touches both licences (the zzh base is GPL-2.0; SukiSU / SUSFS are GPL-3.0). The differences:
+
+| Aspect | GPL-2.0 | GPL-3.0 / GPL-3.0-or-later |
+|---|---|---|
+| Anti-Tivoization | no requirement | forbids signature/hardware locks — consumer devices must allow installing modified builds |
+| Patent grant | no explicit clause | contributors grant a patent licence; suing over patents terminates your licence |
+| Reinstatement after violation | terminated, no way back | first violation can be cured within 60 days |
+| Combination with AGPL | not allowed | AGPL-3.0 code may be combined |
+| Additional terms | not allowed | seven limited categories allowed |
+| Compatibility with the other | GPL-2.0-only code **cannot** be folded into a GPL-3.0 work | GPL-2.0-**or-later** code can be upgraded to GPL-3.0 |
+
+**Core obligations shared by both (copyleft):**
+
+- When distributing binaries (the boot images and AnyKernel3 zips published here), the **complete corresponding source code** must be made available as well;
+- Derivative works must be released under the **same licence** — you cannot relicense to closed or more permissive terms;
+- Copyright notices, the licence text and modification notes must be kept, and everything is provided **AS IS** without warranty.
+
+**What this means here:** this repo is public, so all build scripts, patches and configs are inspectable, and the SukiSU / SUSFS / KernelSU sources are available from their own upstreams — the source-availability requirement is met. Anyone redistributing artifacts built here inherits the same obligations.
+
+> **On `-or-later`:** the parts newly added here use GPL-2.0-or-later, meaning users may take them under GPL-2.0 or any later GPL version (e.g. GPL-3.0). That is exactly why they can coexist with the GPL-3.0 components; code that is GPL-2.0-*only* cannot be upgraded this way.
 
 ---
 

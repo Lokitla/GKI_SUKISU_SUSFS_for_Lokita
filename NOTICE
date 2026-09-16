@@ -25,7 +25,10 @@ GKI_SUKISU_SUSFS_for_Lokita
 
   WildKernels/GKI_KernelSU_SUSFS
     用途：zzh20188 与 ShirkNeko 两个分支的共同原始上游
-    许可：仓库内附许可证（GitHub 未识别为 SPDX 标准条目）
+    许可：GPL-3.0-or-later
+          注：该仓库 LICENSE 由「自定义声明头 + GPL-3.0 全文」组成，声明自家文件
+              为 GPL-3.0-or-later、构建时拉取的第三方组件各自保留原许可（见其
+              THIRD_PARTY_NOTICES.md）。因非标准纯文本，GitHub 识别为 Other。
 
   zzh20188/GKI_KernelSU_SUSFS
     用途：本仓库主基座，工作流与构建流程主体
@@ -65,13 +68,26 @@ GKI_SUKISU_SUSFS_for_Lokita
 
 [构建工具与补丁资源]
 
-  WildKernels/AnyKernel3      刷机包模板             仓库内附许可证
+  WildKernels/AnyKernel3      刷机包模板             BSD-3-Clause 风格（osm0sis 的
+                                                     AK3 脚本许可）
+                              注：包内 magiskboot / magiskpolicy 来自 Magisk，为
+                                  GPL-3.0+。
   WildKernels/kernel_patches  三星 min_kdp 等补丁     未声明
-  Numbersf/Action-Build       Unicode 绕过修复补丁    仓库内附许可证
+  Numbersf/Action-Build       Unicode 绕过修复补丁    自定义许可（非标准开源协议）
   SukiSU-Ultra/SukiSU_patch   ZRAM / LZ4KD 补丁      未声明
                               KPM 镜像修补工具（patch_linux）
                               注：原名 ShirkNeko/SukiSU_patch，已改名；
                                   本仓库直接引用新名称，不再依赖旧地址跳转。
+
+  Numbersf/Action-Build 的自定义许可（要点摘录，非原文）：
+    - 允许：查看、学习、修改（个人 / 内部 / 开发用途）；允许 fork 用于个人使用、
+      实验、开发或贡献；
+    - 限制：禁止「原样 fork 再分发或公开宣传」，除非再分发版本带有与原作清晰可辨
+      的修改，或取得版权人书面许可；
+    - 明确允许：分发由本软件生成的编译产物（二进制、内核镜像、ZIP 包等），
+      不论源码是否改动，只要不宣称原创作者身份。
+    ⇒ 本仓库整体与其原仓库存在明显区别（非镜像），且仅以补丁形式引用其修复，
+      符合上述例外条件；产出的内核镜像与刷机包亦在其明确允许之列。
 
 [可选功能模块]
 

@@ -486,13 +486,13 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 
 | 项目 | 上游贡献 | 许可证 |
 |---|---|---|
-| [WildKernels/GKI_KernelSU_SUSFS](https://github.com/WildKernels/GKI_KernelSU_SUSFS) | zzh 与 ShirkNeko 的共同原始上游 | 仓库内附 |
+| [WildKernels/GKI_KernelSU_SUSFS](https://github.com/WildKernels/GKI_KernelSU_SUSFS) | zzh 与 ShirkNeko 的共同原始上游 | **GPL-3.0-or-later**（自定义 LICENSE 声明头 + GPL-3.0 全文，GitHub 识别为 `Other`） |
 | [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) | **构建基座与绝大部分代码**（矩阵、脚本、补丁适配） | GPL-2.0 |
 | [ShirkNeko/GKI_KernelSU_SUSFS](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) | KPM 镜像修补、本地 CLI 设计 | 未声明 |
 | [coolzyd9107/GKI_SukiSU_Ultra_SUSFS](https://github.com/coolzyd9107/GKI_SukiSU_Ultra_SUSFS) | Release 说明模板 | GPL-2.0 |
 | [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) | KernelSU 变体本体 | GPL-3.0 |
 | [simonpunk/susfs4ksu](https://gitlab.com/simonpunk/susfs4ksu) | SUSFS 补丁集 | GPL-3.0 |
-| [WildKernels/AnyKernel3](https://github.com/WildKernels/AnyKernel3) | 刷机包模板 | 仓库内附 |
+| [WildKernels/AnyKernel3](https://github.com/WildKernels/AnyKernel3) | 刷机包模板 | **BSD-3-Clause 风格**（osm0sis 的 AK3 脚本许可；其中 `magiskboot` / `magiskpolicy` 为 **GPL-3.0+**） |
 
 **本仓库主体采用 GPL-2.0**，与主要上游保持一致；其中本仓库新增的脚本与文档部分
 按 GPL-2.0-or-later 分发，以便与 GPL-3.0 组件共存。
@@ -501,6 +501,29 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 归属与兼容性说明全部写在 [NOTICE](NOTICE) 里。
 
 如果你是上游作者，认为归属描述有误，请在本仓库提 Issue，我会立即更正。
+
+### GPL-2.0 与 GPL-3.0 的区别
+
+本仓库同时涉及这两种许可证（基座 zzh 是 GPL-2.0，SukiSU / SUSFS 是 GPL-3.0），差异如下：
+
+| 维度 | GPL-2.0 | GPL-3.0 / GPL-3.0-or-later |
+|---|---|---|
+| 反硬件锁定（Anti-Tivoization） | 无要求 | 禁止用签名或硬件锁死，消费设备必须能安装修改后的版本 |
+| 专利授权 | 无显式条款 | 贡献者自动授予专利许可；起诉他人专利侵权则许可自动终止 |
+| 违反后恢复 | 违反即终止，无恢复路径 | 首次违反后 60 天内纠正可恢复许可 |
+| 与 AGPL 合并 | 不允许 | 允许与 AGPL-3.0 代码合并 |
+| 附加条款 | 不允许额外限制 | 允许 7 类有限附加条款 |
+| 与对方的兼容性 | GPL-2.0-only 代码**不能**并入 GPL-3.0 作品 | GPL-2.0-**or-later** 可升级到 GPL-3.0 |
+
+**两者共同的核心限制**（copyleft 传染性）：
+
+- 分发二进制（如本仓库发布的 boot 镜像与 AnyKernel3 刷机包）时，**必须同时提供对应的完整源代码**；
+- 衍生作品必须以**同一许可证**分发，不能改成闭源或更宽松的协议；
+- 必须保留原作者的版权声明、许可证全文与修改说明，且无担保（AS IS）。
+
+**因此本仓库的实际约束**：本仓库是公开仓库，构建脚本、补丁与配置全部可查，上游 SukiSU / SUSFS / KernelSU 的源码也均可从其官方仓库获取，满足源码可得要求；任何二次分发本仓库产物的行为，同样需要遵守上述义务。
+
+> **关于 `-or-later`**：本仓库新增部分采用 GPL-2.0-or-later，意味着使用者可以选择按 GPL-2.0 或任何更高版本的 GPL（如 GPL-3.0）来使用这部分代码，这正是它能与 GPL-3.0 组件共存的原因；而纯 GPL-2.0-only 的代码则不能这样升级。
 
 ---
 
