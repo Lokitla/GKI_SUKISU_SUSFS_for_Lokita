@@ -159,11 +159,6 @@ on:
         required: false
         type: string
         default: ""
-      susfs_commit:
-        description: "SUSFS 提交 hash：内核 SUSFS 修补使用该 commit（留空则取 config/config 或分支最新）"
-        required: false
-        type: string
-        default: ""
 jobs:
   # ==================== 获取管理器 ====================
   # 下载最新的 KernelSU 管理器 APK 和 SUSFS 模块
@@ -200,7 +195,6 @@ jobs:
       manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
-      susfs_commit: ${{ inputs.susfs_commit || '' }}
   # ==================== Android 13 - 5.15 构建 ====================
   build-a13-5-15:
     if: inputs.build_a13_5_15 || inputs.build_all
@@ -227,7 +221,6 @@ jobs:
       manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
-      susfs_commit: ${{ inputs.susfs_commit || '' }}
   # ==================== Android 14 - 6.1 构建 ====================
   build-a14-6-1:
     if: inputs.build_a14_6_1 || inputs.build_all
@@ -254,7 +247,6 @@ jobs:
       manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
-      susfs_commit: ${{ inputs.susfs_commit || '' }}
   # ==================== Android 15 - 6.6 构建 ====================
   build-a15-6-6:
     if: inputs.build_a15_6_6 || inputs.build_all
@@ -281,7 +273,6 @@ jobs:
       manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
-      susfs_commit: ${{ inputs.susfs_commit || '' }}
   # ==================== Android 16 - 6.12 构建 ====================
   build-a16-6-12:
     if: inputs.build_a16_6_12 || inputs.build_all
@@ -308,7 +299,6 @@ jobs:
       manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
-      susfs_commit: ${{ inputs.susfs_commit || '' }}
   # ==================== 收集补丁冲突文件 ====================
   # 汇总所有构建任务中的 .rej 文件，方便调试补丁问题
   collect-rejects:
