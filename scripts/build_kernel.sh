@@ -51,8 +51,8 @@ esac
 # [融合] KPM 镜像修补工具，移植自 ShirkNeko/GKI_KernelSU_SUSFS (scripts/config.py)
 # ShirkNeko/SukiSU_patch 已改名为 SukiSU-Ultra/SukiSU_patch，旧路径目前靠 301 跳转苟活，
 # 直接指向新名字，免得哪天跳转撤掉就整片构建一起挂。
-# P1-2 修复：供应链固定到具体 commit（防上游接管）。定期 bump 到此仓库最新稳定 commit。
-: "${KPM_PATCH_URL:=https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/547ae94bcaec53d030398f857950c64662043a5d/kpm/patch_linux}"
+# 跟随 SukiSU_patch 上游 main 分支（不钉 commit，便于自动跟进上游）
+: "${KPM_PATCH_URL:=https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux}"
 : "${WORKSPACE:=$(pwd)}"
 : "${COMPILE_TIMEOUT_MINUTES:=30}"
 : "${COMPILE_MAX_ATTEMPTS:=3}"
@@ -759,8 +759,8 @@ stage_add_kernelsu() {
   case "${KSU_VARIANT}" in
     "Official")
       echo "添加 KernelSU 官方版..."
-      # P1-2 修复：供应链固定到具体 commit（防上游接管），下载后显式校验再执行
-      KSU_SETUP="https://raw.githubusercontent.com/tiann/KernelSU/3a7ac9dc0dc8c0b573fd4eb4836fd0860ef4242e/kernel/setup.sh"
+      # P1-2 修复：下载后显式校验再执行（不钉 commit，跟随上游 main 分支）
+      KSU_SETUP="https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh"
       if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 KernelSU 官方 setup.sh 失败"; return 1; fi
       bash /tmp/ksu_setup.sh $BRANCH || { echo "::error::KernelSU 官方 setup.sh 执行失败"; return 1; }
 
@@ -776,22 +776,22 @@ stage_add_kernelsu() {
       ;;
     "Next")
       echo "添加 KernelSU-Next..."
-      # P1-2 修复：供应链固定到具体 commit，下载后显式校验再执行
-      KSU_SETUP="https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/f9a69951d3b6db7f0904688da08658da646b2368/kernel/setup.sh"
+      # P1-2 修复：下载后显式校验再执行（不钉 commit，跟随上游 dev 分支）
+      KSU_SETUP="https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/refs/heads/dev/kernel/setup.sh"
       if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 KernelSU-Next setup.sh 失败"; return 1; fi
       bash /tmp/ksu_setup.sh -s dev_susfs || { echo "::error::KernelSU-Next setup.sh 执行失败"; return 1; }
       ;;
     "SukiSU")
       echo "添加 ${KSU_VARIANT}..."
-      # P1-2 修复：供应链固定到具体 commit，下载后显式校验再执行
-      KSU_SETUP="https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/7755cdb36f63945f286d7b1cab662b42b18f2789/kernel/setup.sh"
+      # P1-2 修复：下载后显式校验再执行（不钉 commit，跟随上游 main 分支）
+      KSU_SETUP="https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh"
       if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 SukiSU setup.sh 失败"; return 1; fi
       bash /tmp/ksu_setup.sh $BRANCH || { echo "::error::SukiSU setup.sh 执行失败"; return 1; }
       ;;
     "ReSukiSU")
       echo "添加 ReSukiSU..."
-      # P1-2 修复：供应链固定到具体 commit，下载后显式校验再执行
-      KSU_SETUP="https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/6d674e50a022a85076dcfe4498af9a8bfead2cf9/kernel/setup.sh"
+      # P1-2 修复：下载后显式校验再执行（不钉 commit，跟随上游 main 分支）
+      KSU_SETUP="https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh"
       if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 ReSukiSU setup.sh 失败"; return 1; fi
       bash /tmp/ksu_setup.sh $BRANCH || { echo "::error::ReSukiSU setup.sh 执行失败"; return 1; }
       ;;
@@ -801,8 +801,8 @@ stage_add_kernelsu() {
         exit 1
       fi
       echo "添加 ${KSU_VARIANT}..."
-      # P1-2 修复：供应链固定到具体 commit，下载后显式校验再执行
-      KSU_SETUP="https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/7755cdb36f63945f286d7b1cab662b42b18f2789/kernel/setup.sh"
+      # P1-2 修复：下载后显式校验再执行（不钉 commit，跟随上游 main 分支）
+      KSU_SETUP="https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh"
       if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 SukiSU setup.sh 失败"; return 1; fi
       bash /tmp/ksu_setup.sh $BRANCH || { echo "::error::SukiSU setup.sh 执行失败"; return 1; }
       ;;
