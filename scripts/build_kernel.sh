@@ -21,7 +21,7 @@ set -eo pipefail
 : "${KERNEL_VERSION:=6.1}"
 : "${SUB_LEVEL:=124}"
 : "${OS_PATCH_LEVEL:=2025-02}"
-: "${KSU_VARIANT:=ReSukiSU}"
+: "${KSU_VARIANT:=SukiSU}"
 : "${KSU_MODE:=关闭}"
 : "${VERSION:=}"
 : "${REVISION:=}"
@@ -77,6 +77,8 @@ export COMPILE_FAILED=0
 export SUSFS_PATCH_EXPORT=false
 export REJ_COUNT=0
 export TOOLCHAIN_CACHE_HIT="${TOOLCHAIN_CACHE_HIT:-false}"
+# SUSFS 集成补丁导出目录，须与工作流上传路径 susfs-patch/ 保持一致
+export OUT_DIR="${OUT_DIR:-$WORKSPACE/susfs-patch}"
 
 log_stage() {
   echo ""
@@ -1563,20 +1565,21 @@ stage_set_build_time() {
   local _pwd="$PWD"
   set -euo pipefail
 
-  if [[ -n "$INPUT_TIME" && "$INPUT_TIME" != "N" && "$INPUT_TIME" != "n" ]]; then
+  local input_time="${BUILD_TIME:-}"
+  if [[ -n "$input_time" && "$input_time" != "N" && "$input_time" != "n" ]]; then
     TIME_REGEX='^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (0[1-9]|[12][0-9]|3[01]) ([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9] UTC [0-9]{4}$'
-    if [[ ! "$INPUT_TIME" =~ $TIME_REGEX ]]; then
+    if [[ ! "$input_time" =~ $TIME_REGEX ]]; then
       echo "::error title=构建时间格式错误::自定义构建时间必须形如 Sun Dec 01 08:10:00 UTC 2024，请删除多余前缀并使用两位日期。"
-      exit 1
+      return 1
     fi
 
-    NORMALIZED_TIME="$(LC_ALL=C TZ=UTC date -u -d "$INPUT_TIME" +'%a %b %d %T UTC %Y' 2>/dev/null || true)"
-    if [[ "$NORMALIZED_TIME" != "$INPUT_TIME" ]]; then
+    NORMALIZED_TIME="$(LC_ALL=C TZ=UTC date -u -d "$input_time" +'%a %b %d %T UTC %Y' 2>/dev/null || true)"
+    if [[ "$NORMALIZED_TIME" != "$input_time" ]]; then
       echo "::error title=构建时间无效::自定义构建时间无法解析为真实 UTC 时间，或星期与日期不匹配。"
-      exit 1
+      return 1
     fi
 
-    DATESTR="$INPUT_TIME"
+    DATESTR="$input_time"
   else
     DATESTR="$(TZ='UTC' date +'%a %b %d %T %Z %Y')"
   fi

@@ -5,6 +5,11 @@ on:
     - cron: '0 0 */3 * *'  # 每两天执行一次
   workflow_dispatch:     # 允许手动触发
 
+# 需要向 sha 分支推送 SukiSU 最新提交号，缺少写权限时 git push 会被 403 拒绝
+permissions:
+  contents: write
+  actions: write
+
 jobs:
   check-and-trigger:
     runs-on: ubuntu-latest
