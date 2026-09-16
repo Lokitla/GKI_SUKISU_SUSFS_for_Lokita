@@ -51,10 +51,10 @@ GitHub Actions 与本地 `build.py` 共用这一份 45 阶段脚本，不存在�
 |---|---|---|
 | KernelSU 变体 | `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` | `SukiSU` |
 | SUSFS | 集成 SUSFS 补丁集，支持 inline hook | 开启 |
-| KPM | 编译后修补 Image 使其可加载 KPM 模块（6.6 内核不支持） | `enabled（开启）` |
+| KPM | 编译后修补 Image 使其可加载 KPM 模块（6.6 内核不支持） | `patched（开启并修补）` |
 | Hook 类型 | SUSFS Inline Hooks，编译期手写 syscall 拦截，不留 kprobe 痕迹 | — |
 | Magic Mount | SukiSU 默认挂载方式 | 开启 |
-| ZRAM / LZ4KD | ZRAM 增强算法 | 关闭 |
+| ZRAM / LZ4KD | ZRAM 增强算法 | **开启** |
 | BBR | 设为默认拥塞算法 | 关闭 |
 | BBG | Baseband-guard 防格机 | 关闭 |
 | Re-Kernel | Re-Kernel 驱动 | 关闭 |
@@ -177,8 +177,8 @@ Wiki 涵盖内容：
 |---|---|---|
 | KernelSU 变体 | **`SukiSU`** | `Stable(标准)`（无变体选项） |
 | 集成 SUSFS | **开启** | 内置，无独立开关 |
-| KPM | **`enabled`（含镜像修补）** | `true` |
-| ZRAM (LZ4KD) | **关闭** | `false` |
+| KPM | **`patched`（开启并修补镜像）** | `true` |
+| ZRAM (LZ4KD) | **开启** | `false` |
 | BBG 安全补丁 | **关闭** | `false` |
 | CVE-2026-43499 修复 | **关闭** | 无此选项（本分支保留为可选） |
 | BBR 拥塞控制 | 关闭 | `false` |
@@ -216,6 +216,7 @@ Wiki 涵盖内容：
 
 **默认跑「全部版本」**：5.10 + 5.15 + 6.1 + 6.6 的全矩阵，共
 **22 + 20 + 23 + 15 = 80 个内核版本**（与上游 zzh 每次 Release 的数量一致）。
+构建配置固定为 **KPM `patched`（开启并修补）+ ZRAM (LZ4KD) 开启**，其余增强项（BBG / Re-Kernel / BBR 等）关闭。
 想省时间时手动选「单版本冒烟」，只编 5.10.66 一个。
 
 **6.12 默认不参与**：SukiSU 主线与 6.12 的 LSM hook 签名不兼容——
@@ -424,9 +425,9 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 | 选项 | 说明 |
 |---|---|
 | `--ksu-variant` | KernelSU 变体，默认 `SukiSU`：`SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` |
-| `--zram` | 启用 ZRAM (LZ4KD) |
+| `--zram` / `--no-zram` | ZRAM (LZ4KD) 增强算法（默认开启） |
 | `--bbr` | 设置 BBR 为默认拥塞算法 |
-| `--kpm` | 启用 KPM 内核模块支持；可带值 `enabled`（默认）/ `patched`（额外做 Image 修补） |
+| `--kpm` | KPM 模块支持，默认 `patched`（开启并修补）；可带值 `disabled` / `enabled` / `patched` |
 | `--bbg` | 启用 Baseband-guard |
 | `--rekernel` | 启用 Re-Kernel |
 | `--no-susfs` | 不集成 SUSFS（默认集成） |

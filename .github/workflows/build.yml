@@ -45,7 +45,7 @@ permissions:
       use_zram:
         required: true
         type: boolean
-        default: false
+        default: true
       use_bbg:
         required: true
         type: boolean
@@ -53,7 +53,7 @@ permissions:
       use_kpm:
         required: true
         type: string
-        default: disabled (关闭)
+        default: patched (开启并修补)
       use_rekernel:
         required: false
         type: boolean

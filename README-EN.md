@@ -53,10 +53,10 @@ English | [**简体中文**](README.md)
 |---|---|---|
 | KernelSU variant | `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` | `SukiSU` |
 | SUSFS | SUSFS patch set with inline hook support | On |
-| KPM | Patch `Image` after compilation so KPM modules can load (unsupported on 6.6) | `enabled` |
+| KPM | Patch `Image` after compilation so KPM modules can load (unsupported on 6.6) | `patched` (on + patched) |
 | Hook type | SUSFS Inline Hooks — hand-written syscall interception at compile time, no kprobe traces | — |
 | Magic Mount | SukiSU default mount mode | On |
-| ZRAM / LZ4KD | Enhanced ZRAM algorithm | Off |
+| ZRAM / LZ4KD | Enhanced ZRAM algorithm | **On** |
 | BBR | Set as the default congestion algorithm | Off |
 | BBG | Baseband-guard anti-wipe protection | Off |
 | Re-Kernel | Re-Kernel driver | Off |
@@ -144,8 +144,8 @@ on the **main branch of [ShirkNeko/GKI_KernelSU_SUSFS](https://github.com/ShirkN
 |---|---|---|
 | KernelSU variant | **`SukiSU`** | `Stable` (no variant picker) |
 | Integrate SUSFS | **On** | built in, no separate switch |
-| KPM | **`enabled`** (with image patching) | `true` |
-| ZRAM (LZ4KD) | **Off** | `false` |
+| KPM | **`patched`** (enabled + image patching) | `true` |
+| ZRAM (LZ4KD) | **On** | `false` |
 | BBG security patch | **Off** | `false` |
 | CVE-2026-43499 fix | **Off** | not offered upstream (kept here as an option) |
 | BBR congestion control | Off | `false` |
@@ -182,6 +182,8 @@ compares it against the value recorded on this repository's `sha` branch:
 
 **By default the full matrix runs**: 5.10 + 5.15 + 6.1 + 6.6 —
 **22 + 20 + 23 + 15 = 80 kernel versions**, matching what upstream zzh publishes per Release.
+The build config is fixed at **KPM `patched` (on + patched) + ZRAM (LZ4KD) on**, with the other
+enhancements (BBG / Re-Kernel / BBR, etc.) off.
 Pick `单版本冒烟` for a quick run that builds just 5.10.66.
 
 **6.12 is excluded by default**: current SukiSU mainline does not compile on 6.12 —
@@ -392,9 +394,9 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 | Option | Description |
 |---|---|
 | `--ksu-variant` | KernelSU variant, defaults to `SukiSU`: `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` |
-| `--zram` | Enable ZRAM (LZ4KD) |
+| `--zram` / `--no-zram` | ZRAM (LZ4KD) enhancement (on by default) |
 | `--bbr` | Set BBR as the default congestion algorithm |
-| `--kpm` | Enable KPM kernel module support; optional value `enabled` (default) / `patched` (also patches `Image`) |
+| `--kpm` | KPM module support, defaults to `patched` (on + patched); optional value `disabled` / `enabled` / `patched` |
 | `--bbg` | Enable Baseband-guard |
 | `--rekernel` | Enable Re-Kernel |
 | `--no-susfs` | Skip SUSFS integration (integrated by default) |

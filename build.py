@@ -33,6 +33,7 @@ DROIDSPACES_CHOICES = ["不启用", "678", "123", "345"]
 ARTIFACT_MODES = ["上传全部", "仅 AnyKernel3"]
 # CLI 的 KPM 取值 → 与 Actions 下拉选项完全一致的文案，避免两边各说各话
 KPM_MODES = {
+    "disabled": "disabled (关闭)",
     "enabled": "enabled (开启)",
     "patched": "patched (开启并修补)",
 }
@@ -183,11 +184,12 @@ def main():
     parser.add_argument("--version", help="自定义版本名")
     parser.add_argument("--build-time", help="自定义构建时间")
 
-    parser.add_argument("--zram", action="store_true", help="启用 ZRAM (LZ4KD)")
+    parser.add_argument("--zram", action=argparse.BooleanOptionalAction, default=True,
+                        help="ZRAM (LZ4KD) 增强算法（默认开启，--no-zram 关闭）")
     parser.add_argument("--bbr", action="store_true", help="设置 BBR 为默认拥塞算法")
-    parser.add_argument("--kpm", nargs="?", choices=KPM_MODES, const="enabled", default=None,
-                        metavar="{enabled,patched}",
-                        help="启用 KPM；不带值等同 enabled，patched 额外做 Image 修补")
+    parser.add_argument("--kpm", nargs="?", choices=KPM_MODES, const="patched", default="patched",
+                        metavar="{disabled,enabled,patched}",
+                        help="KPM 模块支持（默认 patched 开启并修补；--kpm disabled 关闭）")
     parser.add_argument("--bbg", action="store_true", help="启用 Baseband-guard")
     parser.add_argument("--rekernel", action="store_true", help="启用 Re-Kernel")
     parser.add_argument("--no-susfs", action="store_true", help="禁用 SUSFS")

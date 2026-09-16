@@ -50,7 +50,7 @@ on:
       use_kpm:
         description: "KPM 模块支持（编译后修补 Image，6.6 内核不支持）"
         type: choice
-        default: "enabled (开启)"
+        default: "patched (开启并修补)"
         options:
           - "disabled (关闭)"
           - "enabled (开启)"
@@ -111,7 +111,7 @@ on:
       use_zram:
         description: "启用 ZRAM 增强算法"
         type: boolean
-        default: false
+        default: true
       use_bbg:
         description: "启用 BBG 防格机"
         type: boolean

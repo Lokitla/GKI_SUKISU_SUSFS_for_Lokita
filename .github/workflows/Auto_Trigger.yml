@@ -8,6 +8,9 @@
 # （22 + 20 + 23 + 15 = 80 个内核版本，与上游 zzh 每次 Release 的数量一致）。
 # 想省时间时手动选「单版本冒烟」，只编 5.10.66 一个。
 #
+# 默认构建配置：KPM = patched（开启并修补）、ZRAM (LZ4KD) = 开启，
+# 其余功能开关（BBG / Re-Kernel / BBR / Droidspaces 等）保持关闭。
+#
 # 为什么默认排除 6.12：
 #   SukiSU 主线与 6.12 的 LSM hook 签名不兼容 —— security_add_hooks 的第三参数
 #   在 6.12 上是 const struct lsm_id *，SukiSU 仍按老签名传字符串
@@ -172,7 +175,7 @@ jobs:
                     release_type: $release_type,
                     kernelsu_variant: "SukiSU",
                     enable_susfs: "true",
-                    use_kpm: "enabled (开启)",
+                    use_kpm: "patched (开启并修补)",
                     droidspaces: "不启用",
                     build_time: "",
                     build_all: "false",
@@ -182,7 +185,7 @@ jobs:
                     build_a14_6_1: "true",
                     build_a15_6_6: "true",
                     build_a16_6_12: $build_a16,
-                    use_zram: "false",
+                    use_zram: "true",
                     use_bbg: "false",
                     use_rekernel: "false",
                     cve_2026_43499_patch: "false",
@@ -209,13 +212,13 @@ jobs:
                     kernel_version: "5.10",
                     kernelsu_variant: "SukiSU",
                     enable_susfs: "true",
-                    use_kpm: "enabled (开启)",
+                    use_kpm: "patched (开启并修补)",
                     droidspaces: "不启用",
                     artifact_upload_mode: "仅上传 AnyKernel3.zip",
                     build_scope: "指定版本",
                     os_patch_level: "66",
                     build_time: "",
-                    use_zram: "false",
+                    use_zram: "true",
                     use_bbg: "false",
                     use_rekernel: "false",
                     cve_2026_43499_patch: "false",
