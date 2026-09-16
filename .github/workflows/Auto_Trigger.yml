@@ -1,14 +1,53 @@
+# =============================================================================
+# SukiSU 上游更新检测 → 自动触发内核构建
+# -----------------------------------------------------------------------------
+# 流程：拉取 SukiSU-Ultra/main 最新提交号 → 与 sha 分支记录的旧值比对 →
+#       有更新则回写 sha 分支，并按 build_scope 触发「构建内核」(main.yml)。
+#
+# 关于默认范围：默认只构建 Android 16 (6.12) 单版本做冒烟验证，
+# 而不是一上来就跑满 80 个版本——全量构建会让 80 个任务同时去
+# android.googlesource.com 拉内核源码，对上游是实打实的压力，
+# 也容易把 Runner 时长烧在一个可能根本编不过的新提交上。
+# 确认新提交没问题后，再手动跑「构建内核」选全部版本。
+# =============================================================================
 name: Auto Trigger on SukiSU Update
 
 on:
   schedule:
-    - cron: '0 0 */3 * *'  # 每两天执行一次
-  workflow_dispatch:     # 允许手动触发
+    # 每三天 UTC 00:00 检查一次。GitHub 的 cron 不保证准点，高峰期可能延后数十分钟，属正常现象。
+    - cron: '0 0 */3 * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 忽略「是否有新提交」，强制触发一次构建
+        type: boolean
+        default: false
+      build_scope:
+        description: 检测到更新后要构建的范围
+        type: choice
+        default: 单版本验证
+        options:
+          - 单版本验证
+          - 全部版本
+          - 不构建
+      release_type:
+        description: 构建完成后的发布方式
+        type: choice
+        default: Release
+        options:
+          - Release
+          - Pre-Release
+          - Actions
 
-# 需要向 sha 分支推送 SukiSU 最新提交号，缺少写权限时 git push 会被 403 拒绝
+# 写：回写 sha 分支；actions：调用 workflow_dispatch 接口触发构建
 permissions:
   contents: write
   actions: write
+
+# 同一时间只允许一个检测任务在跑，避免定时任务和手动触发互相踩
+concurrency:
+  group: auto-trigger-sukisu
+  cancel-in-progress: false
 
 jobs:
   check-and-trigger:
@@ -21,90 +60,134 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
-          
-      - name: Get latest commit SHA from SukiSU-Ultra
+
+      - name: 获取 SukiSU-Ultra 最新提交号
         id: get_sha
         run: |
-          LATEST_SHA=$(curl -s https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/commits/main | jq -r '.sha')
-          echo "sha=$LATEST_SHA" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          LATEST_SHA=$(curl -fsSL https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/commits/main | jq -r '.sha')
+          # API 限流或仓库改名时会拿到空值/null，这时宁可不触发，也不要带着空提交号去构建
+          if [[ -z "$LATEST_SHA" || "$LATEST_SHA" == "null" ]]; then
+            echo "::error::无法获取 SukiSU 最新提交号（API 限流或接口变更），本次跳过"
+            exit 1
+          fi
+          echo "sha=$LATEST_SHA" >> "$GITHUB_OUTPUT"
           echo "Latest SHA: $LATEST_SHA"
-          
-      - name: Get previous SHA from sha branch
+
+      - name: 读取 sha 分支记录的旧提交号
         id: get_prev_sha
         run: |
-
+          set -euo pipefail
+          PREV_SHA=""
           if git ls-remote --heads origin sha | grep -q sha; then
-            echo "SHA branch exists, fetching previous SHA..."
+            echo "sha 分支存在，读取历史记录…"
             git fetch origin sha:sha || true
             git checkout sha || true
             if [ -f "latest_sha.txt" ]; then
               PREV_SHA=$(cat latest_sha.txt)
-              echo "prev_sha=$PREV_SHA" >> $GITHUB_OUTPUT
               echo "Previous SHA found: $PREV_SHA"
             else
-              echo "prev_sha=" >> $GITHUB_OUTPUT
-              echo "No previous SHA file found"
+              echo "sha 分支上没有 latest_sha.txt"
             fi
           else
-            echo "prev_sha=" >> $GITHUB_OUTPUT
-            echo "SHA branch does not exist yet"
+            echo "sha 分支尚不存在，视为首次运行"
           fi
+          echo "prev_sha=$PREV_SHA" >> "$GITHUB_OUTPUT"
+          git checkout "${{ github.ref_name }}"
 
-          git checkout ${{ github.ref_name }}
-          
-      - name: Compare with previous SHA
+      - name: 比对是否有新提交
         id: compare
         run: |
+          set -euo pipefail
           CURR_SHA="${{ steps.get_sha.outputs.sha }}"
           PREV_SHA="${{ steps.get_prev_sha.outputs.prev_sha }}"
-          
+          FORCE="${{ inputs.force || 'false' }}"
+
           echo "Current SHA: $CURR_SHA"
-          echo "Previous SHA: $PREV_SHA"
-          
-          if [ "$CURR_SHA" != "$PREV_SHA" ]; then
-            echo "new_commit=true" >> $GITHUB_OUTPUT
-            echo "New commit detected!"
+          echo "Previous SHA: ${PREV_SHA:-<none>}"
+
+          if [[ "$FORCE" == "true" ]]; then
+            echo "new_commit=true"
+            echo "new_commit=true" >> "$GITHUB_OUTPUT"
+            echo "手动强制触发"
+          elif [[ "$CURR_SHA" != "$PREV_SHA" ]]; then
+            echo "new_commit=true" >> "$GITHUB_OUTPUT"
+            echo "检测到新提交"
           else
-            echo "new_commit=false" >> $GITHUB_OUTPUT
-            echo "No new commits"
+            echo "new_commit=false" >> "$GITHUB_OUTPUT"
+            echo "无新提交"
           fi
-          
-      - name: Update SHA file in sha branch
+
+      - name: 回写最新提交号到 sha 分支
         if: steps.compare.outputs.new_commit == 'true'
         run: |
-
+          set -euo pipefail
           git checkout sha 2>/dev/null || git checkout --orphan sha
-          
-
           if [ ! -f "latest_sha.txt" ]; then
             git rm -rf . 2>/dev/null || true
           fi
-
           echo "${{ steps.get_sha.outputs.sha }}" > latest_sha.txt
-          
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add latest_sha.txt
-          git commit -m "Update SukiSU latest SHA to ${{ steps.get_sha.outputs.sha }}" || exit 0
+          git commit -m "chore(sha): 更新 SukiSU 最新提交号为 ${{ steps.get_sha.outputs.sha }}" || exit 0
           git push origin sha
-          
-      # - name: Trigger test_release.yml workflow
-      #   if: steps.compare.outputs.new_commit == 'true'
-      #   run: |
-      #      curl -X POST \
-      #       -H "Accept: application/vnd.github+json" \
-      #       -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-      #       -H "X-GitHub-Api-Version: 2022-11-28" \
-      #       https://api.github.com/repos/${{ github.repository }}/actions/workflows/test_release.yml/dispatches \
-      #       -d '{
-      #         "ref": "dev",
-      #         "inputs": {
-      #           "make_release": "true",
-      #           "kernelsu_variant": "SukiSU",
-      #           "version": "",
-      #           "use_zram": "false",
-      #           "use_bbg": "true",
-      #           "use_kpm": "true",
-      #           "get_manager": "true"
-      #         }
-      #       }'
+
+      - name: 触发「构建内核」工作流
+        if: steps.compare.outputs.new_commit == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SCOPE: ${{ inputs.build_scope || '单版本验证' }}
+          RELEASE_TYPE: ${{ inputs.release_type || 'Release' }}
+        run: |
+          set -euo pipefail
+
+          # 默认走单版本冒烟；只有显式选择「全部版本」才展开完整矩阵
+          case "$SCOPE" in
+            "全部版本")
+              BUILD_ALL=true
+              BUILD_A16=false
+              ;;
+            "不构建")
+              echo "本次只更新 sha 分支，不触发构建"
+              exit 0
+              ;;
+            *)  # 单版本验证
+              BUILD_ALL=false
+              BUILD_A16=true
+              ;;
+          esac
+
+          echo "触发范围：$SCOPE（build_all=$BUILD_ALL, a16=$BUILD_A16）"
+
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/${{ github.repository }}/actions/workflows/main.yml/dispatches" \
+            -f "ref=${{ github.ref_name }}" \
+            -f "input[release_type]=$RELEASE_TYPE" \
+            -f "input[kernelsu_variant]=SukiSU" \
+            -f "input[enable_susfs]=true" \
+            -f "input[use_kpm]=enabled (开启)" \
+            -f "input[droidspaces]=不启用" \
+            -f "input[build_time]=" \
+            -f "input[build_all]=$BUILD_ALL" \
+            -f "input[export_susfs_patches]=true" \
+            -f "input[build_a12_5_10]=false" \
+            -f "input[build_a13_5_15]=false" \
+            -f "input[build_a14_6_1]=false" \
+            -f "input[build_a15_6_6]=false" \
+            -f "input[build_a16_6_12]=$BUILD_A16" \
+            -f "input[use_zram]=false" \
+            -f "input[use_bbg]=false" \
+            -f "input[use_rekernel]=false" \
+            -f "input[cve_2026_43499_patch]=false" \
+            -f "input[droidspaces_ntsync]=false" \
+            -f "input[use_bbr]=false" \
+            -f "input[send_telegram]=true" \
+            -f "input[use_release_cache]=false" \
+            -f "input[manager_spoofed]=true" \
+            -f "input[supp_op]=false"
+
+          echo "已触发「构建内核」工作流"

@@ -31,6 +31,11 @@ DATA_DIR = ROOT / "data"
 KSU_VARIANTS = ["SukiSU", "SukiSU(40726)", "SukiSU(40548)", "ReSukiSU", "Official"]
 DROIDSPACES_CHOICES = ["不启用", "678", "123", "345"]
 ARTIFACT_MODES = ["上传全部", "仅 AnyKernel3"]
+# CLI 的 KPM 取值 → 与 Actions 下拉选项完全一致的文案，避免两边各说各话
+KPM_MODES = {
+    "enabled": "enabled (开启)",
+    "patched": "patched (开启并修补)",
+}
 
 
 def load_configs():
@@ -117,7 +122,9 @@ def build_env(args, android, kernel, sub_level, os_patch):
         "BUILD_TIME": args.build_time or "",
         "USE_ZRAM": str(args.zram).lower(),
         "USE_BBR": str(args.bbr).lower(),
-        "USE_KPM": str(args.kpm).lower(),
+        # 与 Actions 的下拉选项保持一致：脚本只认 "enabled (开启)" / "patched (开启并修补)"，
+        # 早期 CLI 直接传 "true"，脚本匹配不到，--kpm 会静默失效。
+        "USE_KPM": KPM_MODES.get(args.kpm or "", "disabled (关闭)"),
         "USE_BBG": str(args.bbg).lower(),
         "USE_REKERNEL": str(args.rekernel).lower(),
         "ENABLE_SUSFS": str(not args.no_susfs).lower(),
@@ -172,19 +179,21 @@ def main():
     parser.add_argument("--os-patch", help="OS 补丁级别，如 2025-02")
     parser.add_argument("--revision", help="Android 12 revision（可选）")
     parser.add_argument("--ksu-variant", default="SukiSU", choices=KSU_VARIANTS,
-                        help="KernelSU 变体（默认 SukiSU）")
+                        metavar="变体", help="KernelSU 变体（默认 SukiSU）")
     parser.add_argument("--version", help="自定义版本名")
     parser.add_argument("--build-time", help="自定义构建时间")
 
     parser.add_argument("--zram", action="store_true", help="启用 ZRAM (LZ4KD)")
     parser.add_argument("--bbr", action="store_true", help="设置 BBR 为默认拥塞算法")
-    parser.add_argument("--kpm", action="store_true", help="启用 KPM")
+    parser.add_argument("--kpm", nargs="?", choices=KPM_MODES, const="enabled", default=None,
+                        metavar="{enabled,patched}",
+                        help="启用 KPM；不带值等同 enabled，patched 额外做 Image 修补")
     parser.add_argument("--bbg", action="store_true", help="启用 Baseband-guard")
     parser.add_argument("--rekernel", action="store_true", help="启用 Re-Kernel")
     parser.add_argument("--no-susfs", action="store_true", help="禁用 SUSFS")
     parser.add_argument("--op8e", action="store_true", help="启用一加 8E 支持（非一加勿开）")
     parser.add_argument("--droidspaces", default="不启用", choices=DROIDSPACES_CHOICES,
-                        help="Droidspaces 容器支持（默认 不启用）")
+                        metavar="槽位", help="Droidspaces 容器支持（默认 不启用）")
     parser.add_argument("--ntsync", action="store_true", help="启用 NTSync 支持（需先启用 Droidspaces）")
     parser.add_argument("--cve-patch", action="store_true", help="应用 CVE-2026-43499 修复")
     parser.add_argument("--export-susfs-patches", action="store_true", help="导出 SUSFS 集成补丁")

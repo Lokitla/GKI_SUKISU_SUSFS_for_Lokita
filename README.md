@@ -14,9 +14,16 @@
 
 ---
 
-### 🏮 2026 🐎 Happy New Year! 🏮
-
 **自动化构建 GKI 内核 | 集成 KernelSU + SUSFS**
+
+本仓库以 [zzh20188 的 GKI 构建基架](https://github.com/zzh20188/GKI_KernelSU_SUSFS) 为主体，
+吸收了 [ShirkNeko](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) 的 KPM 镜像修补与本地 CLI 设计、
+[coolzyd](https://github.com/coolzyd9107/GKI_SukiSU_Ultra_SUSFS) 的 Release 呈现方式，
+并把三套流程收敛到同一份 [`scripts/build_kernel.sh`](scripts/build_kernel.sh)：
+GitHub Actions 与本地 `build.py` 共用这一份 45 阶段脚本，不存在两套逻辑分叉。
+
+覆盖 Android 12 / 13 / 14 / 15 / 16（内核 5.10 / 5.15 / 6.1 / 6.6 / 6.12），
+每次构建产出 AnyKernel3 刷机包、三种压缩格式的 boot 镜像、KernelSU 管理器与 SUSFS 配套模块。
 
 [![Release](https://img.shields.io/github/v/release/Lokitla/GKI_SUKISU_SUSFS_for_Lokita?label=Release&style=flat-square&logo=github&logoColor=white&color=2ea44f)](https://github.com/Lokitla/GKI_SUKISU_SUSFS_for_Lokita/releases)
 [![Coolapk](https://img.shields.io/badge/Follow-Coolapk-3DDC84?style=flat-square&logo=android&logoColor=white)](http://www.coolapk.com/u/11253396)
@@ -34,6 +41,56 @@
 - 📖 [文档](https://github.com/zzh20188/GKI_KernelSU_SUSFS/wiki)
 - 📥 [下载](https://github.com/Lokitla/GKI_SUKISU_SUSFS_for_Lokita/releases)
 - 🔰 [教程](https://zzh20188.github.io/GKI_KernelSU_SUSFS/guide.html)
+- 📄 [上游来源与许可证](NOTICE)
+
+---
+
+## ✨ 功能特性
+
+| 能力 | 说明 | 默认 |
+|---|---|---|
+| KernelSU 变体 | `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` | `SukiSU` |
+| SUSFS | 集成 SUSFS 补丁集，支持 inline hook | 开启 |
+| KPM | 编译后修补 Image 使其可加载 KPM 模块（6.6 内核不支持） | `enabled（开启）` |
+| Hook 类型 | SUSFS Inline Hooks，编译期手写 syscall 拦截，不留 kprobe 痕迹 | — |
+| Magic Mount | SukiSU 默认挂载方式 | 开启 |
+| ZRAM / LZ4KD | ZRAM 增强算法 | 关闭 |
+| BBR | 设为默认拥塞算法 | 关闭 |
+| BBG | Baseband-guard 防格机 | 关闭 |
+| Re-Kernel | Re-Kernel 驱动 | 关闭 |
+| Droidspaces | LXC 式容器支持（实验性） | 不启用 |
+| NTSync | 需先启用 Droidspaces | 关闭 |
+| CVE-2026-43499 | rtmutex 修复链 | 关闭 |
+| 一加 8E 支持 | 非一加设备勿开 | 关闭 |
+| Spoofed 管理器 | 一并拉取伪装包名的管理器 APK | 开启 |
+| Telegram 通知 | 构建完成后推送通知 | 开启 |
+| 自定义构建时间 | 固定内核 `UTS_VERSION` 时间戳 | 留空 |
+
+> 除 SukiSU、SUSFS、KPM、Spoofed 管理器和 Telegram 通知外，其余开关默认关闭，
+> 与 ShirkNeko **原仓库**的默认值保持一致。
+
+---
+
+## 📦 构建产物说明
+
+「上传全部」模式下，每个内核版本会拆成两个产物：
+
+| 产物 | 内容 | 体积（以 5.10 为例） |
+|---|---|---|
+| `..._kernel-<版本>-AnyKernel3` | `AnyKernel3.zip` 刷机包 | 约 18 MB |
+| `..._kernel-<版本>-Images` | `boot.img` / `boot-gz.img` / `boot-lz4.img` | 约 50 MB（压缩后） |
+
+**刷机只需要 AnyKernel3 那个包**，里面的 `Image` 由 `anykernel.sh` 在设备上现场处理。
+
+三个 boot 镜像的区别在于内核部分的压缩方式，供 `fastboot flash boot` 直接刷入时使用：
+
+| 文件 | 内核压缩 | 适用 |
+|---|---|---|
+| `boot.img` | 未压缩 | 兼容性最强，老 bootloader |
+| `boot-gz.img` | gzip | 传统默认，几乎所有 bootloader 都支持 |
+| `boot-lz4.img` | lz4 | 现代 GKI 常用，解压最快 |
+
+现代设备优先 `boot-lz4.img`；卡第一屏换 `-gz`；仍不行用未压缩的 `boot.img`。
 
 ---
 
@@ -145,6 +202,33 @@ Wiki 涵盖内容：
 | `TELEGRAM_MESSAGE_THREAD_ID` | 话题 ID（可选，仅论坛群组需要） |
 
 未配置时通知会自动跳过，不会影响构建。
+
+---
+
+## 🔄 SukiSU 上游更新自动触发
+
+`.github/workflows/Auto_Trigger.yml` 每三天检查一次 [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra)
+`main` 分支的最新提交号，与本仓库 `sha` 分支上记录的旧值比对：
+
+1. 有新提交 → 回写 `sha` 分支，并触发 **构建内核** 工作流；
+2. 无新提交 → 什么都不做，不消耗 Runner 时长；
+3. 拿不到提交号（API 限流）→ 直接失败退出，不会带着空值去构建。
+
+**默认只构建 Android 16 (6.12) 单版本做冒烟验证**，不是一上来就跑满 80 个版本。
+理由很实在：全量构建会让 80 个任务同时去 `android.googlesource.com` 拉源码，对上游是
+实打实的压力，也容易把时长烧在一个可能根本编不过的新提交上。确认新提交没问题后，
+再手动跑「构建内核」选全部版本。
+
+手动运行时可改这三个输入：
+
+| 输入 | 说明 | 默认 |
+|---|---|---|
+| `force` | 忽略「是否有新提交」，强制触发 | 否 |
+| `build_scope` | `单版本验证` / `全部版本` / `不构建` | `单版本验证` |
+| `release_type` | `Release` / `Pre-Release` / `Actions` | `Release` |
+
+> 需要仓库 **Settings → Actions → Workflow permissions** 为 `Read and write`，
+> 否则回写 `sha` 分支会被 `github-actions[bot]` 的 403 拦下。
 
 ---
 
@@ -332,7 +416,7 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 | `--ksu-variant` | KernelSU 变体，默认 `SukiSU`：`SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` |
 | `--zram` | 启用 ZRAM (LZ4KD) |
 | `--bbr` | 设置 BBR 为默认拥塞算法 |
-| `--kpm` | 启用 KPM 内核模块支持 |
+| `--kpm` | 启用 KPM 内核模块支持；可带值 `enabled`（默认）/ `patched`（额外做 Image 修补） |
 | `--bbg` | 启用 Baseband-guard |
 | `--rekernel` | 启用 Re-Kernel |
 | `--no-susfs` | 不集成 SUSFS（默认集成） |
@@ -350,3 +434,59 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 
 > **注意：**「清理磁盘空间」这一步只在 GitHub Actions runner 上执行，本地构建会自动跳过，
 > 以免误删你机器上的文件。
+
+---
+
+## 🗂️ 仓库结构
+
+| 路径 | 用途 |
+|---|---|
+| `scripts/build_kernel.sh` | **构建逻辑唯一来源**，45 个阶段；Actions 与本地 `build.py` 都调它 |
+| `build.py` | 本地 CLI 入口，只负责参数解析与调用 `scripts/build_kernel.sh` |
+| `.github/workflows/build.yml` | 可复用构建工作流，只保留缓存/产物/日志/通知等 Actions 专属能力 |
+| `.github/workflows/main.yml` | 「构建内核」总入口，负责展开版本矩阵并调用 `build.yml` |
+| `.github/workflows/kernel-*.yml` | 按 Android 版本拆分的独立入口 |
+| `.github/workflows/Auto_Trigger.yml` | 检测 SukiSU 上游更新并自动触发构建 |
+| `.github/workflows/get-manager.yml` | 抓取 KernelSU / SukiSU 管理器 APK |
+| `.github/workflows/update-pages.yml` | 更新 `data/` 版本数据并部署 GitHub Pages |
+| `config/` | 内核配置片段、`config/config` 提交锁定、SukiSU 变体配置 |
+| `data/` | 各 Android 版本可用的内核子版本与补丁级别数据（驱动版本矩阵） |
+| `security_patch/` | CVE-2026-43499（GhostLock）修复链与适配脚本 |
+| `zram/` | LZ4KD / ZRAM 增强算法补丁 |
+| `web/` | GitHub Pages 站点源码（构建版本查询） |
+| `scripts/susfs_fixes/apply.sh` | SUSFS 补丁的适配与冲突修复 |
+| `scripts/telegram_notify.py` | Telegram 通知推送 |
+| `scripts/gki_fetch.py` 等 | 从 Google 拉取 GKI 版本数据，供 `update-pages.yml` 使用 |
+| `tools/migration/` | 融合时用过的一次性脚本，仅作过程留档，**不参与构建** |
+| `FUSION.md` | 三个上游仓库的比对与融合记录 |
+
+> 改构建行为请改 `scripts/build_kernel.sh`，不要在 `build.yml` 里重写 shell ——
+> 否则本地与云端会立刻分叉。
+
+---
+
+## 🔗 上游来源与许可证
+
+本仓库是融合产物，完整清单见 [NOTICE](NOTICE)。主要来源：
+
+| 项目 | 吸收了什么 | 许可证 |
+|---|---|---|
+| [WildKernels/GKI_KernelSU_SUSFS](https://github.com/WildKernels/GKI_KernelSU_SUSFS) | zzh 与 ShirkNeko 的共同原始上游 | 仓库内附 |
+| [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) | 构建基座主干 | GPL-2.0 |
+| [ShirkNeko/GKI_KernelSU_SUSFS](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) | KPM 镜像修补、本地 CLI 设计 | 未声明 |
+| [coolzyd9107/GKI_SukiSU_Ultra_SUSFS](https://github.com/coolzyd9107/GKI_SukiSU_Ultra_SUSFS) | Release 说明模板 | GPL-2.0 |
+| [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) | KernelSU 变体本体 | GPL-3.0 |
+| [simonpunk/susfs4ksu](https://gitlab.com/simonpunk/susfs4ksu) | SUSFS 补丁集 | GPL-3.0 |
+| [WildKernels/AnyKernel3](https://github.com/WildKernels/AnyKernel3) | 刷机包模板 | 仓库内附 |
+
+**本仓库主体采用 GPL-2.0**，与主要上游保持一致；其中本仓库新增的脚本与文档部分
+按 GPL-2.0-or-later 分发，以便与 GPL-3.0 组件共存。完整正文见 [LICENSE](LICENSE)。
+
+如果你是上游作者，认为归属描述有误，请在本仓库提 Issue，我会立即更正。
+
+---
+
+## 🙏 致谢
+
+感谢所有上游作者的开源工作——本仓库只是把他们的成果拼装成自己用着顺手的样子。
+有任何问题请在本仓库反馈，**不要去打扰上游作者**。

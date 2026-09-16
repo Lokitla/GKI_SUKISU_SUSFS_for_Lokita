@@ -39,8 +39,19 @@ set -eo pipefail
 : "${DROIDSPACES_NTSYNC:=false}"
 : "${ARTIFACT_UPLOAD_MODE:=上传全部}"
 
+# USE_KPM 取值归一化：Actions 下拉传 "enabled (开启)" / "patched (开启并修补)"，
+# 早期本地 CLI 传 "true"/"false"，而脚本只按 enabled* / patched* 匹配，
+# 导致 --kpm 静默失效。这里统一成三态，任何入口传什么都不至于判错。
+case "${USE_KPM,,}" in
+  enabled*|patched*) : ;;
+  true|1|yes|on|开启)  USE_KPM="enabled (开启)" ;;
+  *)                   USE_KPM="disabled (关闭)" ;;
+esac
+
 # [融合] KPM 镜像修补工具，移植自 ShirkNeko/GKI_KernelSU_SUSFS (scripts/config.py)
-: "${KPM_PATCH_URL:=https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux}"
+# ShirkNeko/SukiSU_patch 已改名为 SukiSU-Ultra/SukiSU_patch，旧路径目前靠 301 跳转苟活，
+# 直接指向新名字，免得哪天跳转撤掉就整片构建一起挂。
+: "${KPM_PATCH_URL:=https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux}"
 : "${WORKSPACE:=$(pwd)}"
 : "${COMPILE_TIMEOUT_MINUTES:=30}"
 : "${COMPILE_MAX_ATTEMPTS:=3}"
@@ -323,21 +334,38 @@ stage_clone_deps() {
   ANYKERNEL_BRANCH="gki-2.0"
   SUSFS_BRANCH="gki-${ANDROID_VERSION}-${KERNEL_VERSION}"
 
+  # 只取工作树所需文件，全部浅克隆：这些仓库每次构建都会被 80+ 个任务各拉一遍，
+  # 全量克隆会白白吃掉上游带宽，也让每个任务多花几十秒。
   echo "克隆 AnyKernel3..."
-  git clone https://github.com/WildKernels/AnyKernel3.git -b "$ANYKERNEL_BRANCH"
+  git clone --depth 1 https://github.com/WildKernels/AnyKernel3.git -b "$ANYKERNEL_BRANCH"
   rm -rf AnyKernel3/.git
 
   echo "克隆 SUSFS (分支: $SUSFS_BRANCH)..."
   if [ -n "$LEGACY_SUKISU_CONFIG" ]; then
-    git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
+    git clone --depth 1 https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
   elif [ "${KSU_VARIANT}" == "SukiSU" ]; then
-    if ! git clone https://github.com/ShirkNeko/susfs4ksu.git -b "$SUSFS_BRANCH" 2>/dev/null; then
+    if ! git clone --depth 1 https://github.com/ShirkNeko/susfs4ksu.git -b "$SUSFS_BRANCH" 2>/dev/null; then
       echo "ShirkNeko 仓库未找到分支 $SUSFS_BRANCH，回退到 simonpunk 原版..."
-      git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
+      git clone --depth 1 https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
     fi
   else
-    git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
+    git clone --depth 1 https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
   fi
+
+  # 先记录分支最新提交日期，之后再切到固定提交，避免把这个日期读成固定提交的日期
+  SUSFS_LATEST_COMMIT_DATE=$(git -C susfs4ksu log -1 --date=format:'%Y-%m-%d %H:%M:%S %z' --format='%cd')
+  export SUSFS_LATEST_COMMIT_DATE="$SUSFS_LATEST_COMMIT_DATE"
+  echo "SUSFS 仓库最新提交日期: $SUSFS_LATEST_COMMIT_DATE"
+
+  # 浅克隆只含分支头，切换到历史提交前需要单独拉取该提交
+  checkout_susfs_commit() {
+    local target="$1"
+    if git -C susfs4ksu cat-file -e "${target}^{commit}" 2>/dev/null; then
+      git -C susfs4ksu checkout "$target"
+    else
+      git -C susfs4ksu fetch --depth 1 origin "$target" && git -C susfs4ksu checkout "$target"
+    fi
+  }
 
   if [ -n "$LEGACY_SUKISU_CONFIG" ]; then
     SUSFS_FIXED_COMMIT=$(grep "^${SUSFS_BRANCH}=" "$LEGACY_SUKISU_CONFIG" | cut -d'=' -f2-)
@@ -346,7 +374,7 @@ stage_clone_deps() {
       exit 1
     fi
     echo "${KSU_VARIANT} 固定 SUSFS 提交: $SUSFS_FIXED_COMMIT"
-    git -C susfs4ksu checkout "$SUSFS_FIXED_COMMIT"
+    checkout_susfs_commit "$SUSFS_FIXED_COMMIT"
   fi
 
   CONFIG_FILE="config/config"
@@ -356,20 +384,14 @@ stage_clone_deps() {
       CUSTOM_COMMIT=$(grep "^${SUSFS_BRANCH}=" "$CONFIG_FILE" | cut -d'=' -f2)
       if [ -n "$CUSTOM_COMMIT" ]; then
         echo "切换 SUSFS 到自定义提交: $CUSTOM_COMMIT"
-        cd susfs4ksu
-        git checkout "$CUSTOM_COMMIT"
-        cd ..
+        checkout_susfs_commit "$CUSTOM_COMMIT"
       fi
     fi
   fi
 
-  SUSFS_LATEST_COMMIT_DATE=$(git -C susfs4ksu log -1 --date=format:'%Y-%m-%d %H:%M:%S %z' --format='%cd')
-  export SUSFS_LATEST_COMMIT_DATE="$SUSFS_LATEST_COMMIT_DATE"
-  echo "SUSFS 仓库最新提交日期: $SUSFS_LATEST_COMMIT_DATE"
-
   echo "准备补丁资源..."
-  git clone https://github.com/WildKernels/kernel_patches.git
-  git clone https://github.com/ShirkNeko/SukiSU_patch.git
+  git clone --depth 1 https://github.com/WildKernels/kernel_patches.git
+  git clone --depth 1 https://github.com/SukiSU-Ultra/SukiSU_patch.git
   echo "使用当前仓库补丁目录: $ZZH_PATCHES"
   git clone https://github.com/Numbersf/Action-Build.git --depth=1
 
@@ -601,9 +623,28 @@ stage_add_oneplus8e() {
   log_stage "add_oneplus8e" "添加一加 8E 处理器支持"
   local _pwd="$PWD"
   cd ${KERNEL_ROOT}/common/drivers
-  echo "下载一加 8E 支持补丁..."
-  curl -LSs "https://github.com/zzh20188/GKI_KernelSU_SUSFS/raw/refs/heads/dev/hmbird_patch.c" -o hmbird_patch.c
-  echo "obj-y += hmbird_patch.o" >> Makefile
+
+  # 优先用仓库里随版本固定的副本（hmbird_patch.c）。
+  # 原先每次构建都直取 zzh 的 dev 分支：一来 dev 随时会变，抓回来的代码可能
+  # 与本仓库其他部分对不上，属于把构建稳定性交给了别人的开发分支；
+  # 二来每个任务都打一次上游 raw 接口，纯属无谓请求。
+  # 本地副本缺失时才回退到远程，且加 -f 让下载失败显式报错，而不是留下一个空文件。
+  if [ -f "${WORKSPACE}/hmbird_patch.c" ]; then
+    echo "使用仓库内的 hmbird_patch.c"
+    cp "${WORKSPACE}/hmbird_patch.c" ./hmbird_patch.c
+  else
+    echo "仓库内无副本，从上游获取 hmbird_patch.c..."
+    curl -fLSs "https://github.com/zzh20188/GKI_KernelSU_SUSFS/raw/refs/heads/dev/hmbird_patch.c" -o hmbird_patch.c || {
+      echo "::error::hmbird_patch.c 获取失败，一加 8E 支持无法启用"
+      cd "$_pwd"
+      return 1
+    }
+  fi
+
+  # 重复运行时不要往 Makefile 里堆重复行
+  if ! grep -q 'obj-y += hmbird_patch.o' Makefile; then
+    echo "obj-y += hmbird_patch.o" >> Makefile
+  fi
 
   cd "$_pwd"
 }

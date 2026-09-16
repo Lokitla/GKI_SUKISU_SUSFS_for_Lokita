@@ -14,9 +14,18 @@
 
 ---
 
-### 🏮 2026 🐎 Happy New Year! 🏮
-
 **Automated GKI Kernel Builds | KernelSU + SUSFS Integrated**
+
+This repository is built on top of [zzh20188's GKI scaffolding](https://github.com/zzh20188/GKI_KernelSU_SUSFS),
+absorbing [ShirkNeko](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS)'s KPM image patching and local-CLI design,
+plus [coolzyd](https://github.com/coolzyd9107/GKI_SukiSU_Ultra_SUSFS)'s Release presentation style.
+All three pipelines are converged into a single
+[`scripts/build_kernel.sh`](scripts/build_kernel.sh): GitHub Actions and the local
+`build.py` share that same 45-phase script, so there is no second implementation to drift.
+
+Covers Android 12 / 13 / 14 / 15 / 16 (kernels 5.10 / 5.15 / 6.1 / 6.6 / 6.12).
+Every build produces an AnyKernel3 flashable zip, boot images in three compression
+formats, the KernelSU manager and the companion SUSFS module.
 
 [![Release](https://img.shields.io/github/v/release/Lokitla/GKI_SUKISU_SUSFS_for_Lokita?label=Release&style=flat-square&logo=github&logoColor=white&color=2ea44f)](https://github.com/Lokitla/GKI_SUKISU_SUSFS_for_Lokita/releases)
 [![Coolapk](https://img.shields.io/badge/Follow-Coolapk-3DDC84?style=flat-square&logo=android&logoColor=white)](http://www.coolapk.com/u/11253396)
@@ -32,8 +41,60 @@ English | [**简体中文**](README.md)
 ## 🚀 Quick Navigation
 
 - 📖 [Documentation](https://github.com/zzh20188/GKI_KernelSU_SUSFS/wiki)
-- 📥 [Downloads](https://github.com/zzh20188/GKI_KernelSU_SUSFS/releases)
+- 📥 [Downloads](https://github.com/Lokitla/GKI_SUKISU_SUSFS_for_Lokita/releases)
 - 🔰 [Tutorial](https://zzh20188.github.io/GKI_KernelSU_SUSFS/guide.html)
+- 📄 [Upstream sources & licences](NOTICE)
+
+---
+
+## ✨ Features
+
+| Capability | Description | Default |
+|---|---|---|
+| KernelSU variant | `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` | `SukiSU` |
+| SUSFS | SUSFS patch set with inline hook support | On |
+| KPM | Patch `Image` after compilation so KPM modules can load (unsupported on 6.6) | `enabled` |
+| Hook type | SUSFS Inline Hooks — hand-written syscall interception at compile time, no kprobe traces | — |
+| Magic Mount | SukiSU default mount mode | On |
+| ZRAM / LZ4KD | Enhanced ZRAM algorithm | Off |
+| BBR | Set as the default congestion algorithm | Off |
+| BBG | Baseband-guard anti-wipe protection | Off |
+| Re-Kernel | Re-Kernel driver | Off |
+| Droidspaces | LXC-style container support (experimental) | Disabled |
+| NTSync | Requires Droidspaces | Off |
+| CVE-2026-43499 | rtmutex fix chain | Off |
+| OnePlus 8E support | Do not enable on non-OnePlus devices | Off |
+| Spoofed manager | Also fetch the manager APK disguised as the official package name | On |
+| Telegram notification | Push a notification when the build finishes | On |
+| Custom build time | Pin the kernel `UTS_VERSION` timestamp | Empty |
+
+> Apart from SukiSU, SUSFS, KPM, the spoofed manager and Telegram notifications, every
+> other toggle defaults to off, matching the defaults of ShirkNeko's **original repository**.
+
+---
+
+## 📦 Build artifacts
+
+In `上传全部` (upload everything) mode, each kernel version is split into two artifacts:
+
+| Artifact | Contents | Size (5.10 example) |
+|---|---|---|
+| `..._kernel-<version>-AnyKernel3` | `AnyKernel3.zip` flashable package | ~18 MB |
+| `..._kernel-<version>-Images` | `boot.img` / `boot-gz.img` / `boot-lz4.img` | ~50 MB (compressed) |
+
+**Flashing only needs the AnyKernel3 package** — its `Image` is handled on-device by `anykernel.sh`.
+
+The three boot images differ only in how the kernel payload is compressed; they are meant
+for `fastboot flash boot`:
+
+| File | Kernel compression | Use when |
+|---|---|---|
+| `boot.img` | uncompressed | Widest compatibility, older bootloaders |
+| `boot-gz.img` | gzip | Traditional default, supported by nearly all bootloaders |
+| `boot-lz4.img` | lz4 | Common on modern GKI, fastest decompression |
+
+Try `boot-lz4.img` first on modern devices; if it hangs on the first screen, switch to
+`-gz`; if that still fails, use the uncompressed `boot.img`.
 
 ---
 
@@ -106,6 +167,35 @@ Add these under **Settings → Secrets and variables → Actions**:
 | `TELEGRAM_MESSAGE_THREAD_ID` | Topic ID (optional, forum groups only) |
 
 If they are not configured, notifications are skipped silently and never break a build.
+
+---
+
+## 🔄 Automatic trigger on SukiSU updates
+
+`.github/workflows/Auto_Trigger.yml` checks the latest commit on
+[SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) `main` every three days and
+compares it against the value recorded on this repository's `sha` branch:
+
+1. New commit found → write it back to the `sha` branch and trigger the **构建内核** workflow;
+2. No new commit → do nothing, no runner minutes burned;
+3. Commit SHA unavailable (API rate limit) → fail fast instead of building with an empty value.
+
+**By default only Android 16 (6.12) is built as a smoke test**, not all 80 versions at once.
+The reason is practical: a full run means 80 jobs pulling kernel source from
+`android.googlesource.com` simultaneously — real load on upstream, and a good way to burn
+runner minutes on a commit that may not even compile. Once a new commit looks healthy, run
+**构建内核** manually with the full matrix.
+
+Manual runs accept three inputs:
+
+| Input | Description | Default |
+|---|---|---|
+| `force` | Trigger even when no new commit was detected | false |
+| `build_scope` | `单版本验证` (single) / `全部版本` (all) / `不构建` (none) | `单版本验证` |
+| `release_type` | `Release` / `Pre-Release` / `Actions` | `Release` |
+
+> Requires **Settings → Actions → Workflow permissions** to be `Read and write`,
+> otherwise the push back to the `sha` branch is rejected with a 403 for `github-actions[bot]`.
 
 ---
 
@@ -294,7 +384,7 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 | `--ksu-variant` | KernelSU variant, defaults to `SukiSU`: `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` |
 | `--zram` | Enable ZRAM (LZ4KD) |
 | `--bbr` | Set BBR as the default congestion algorithm |
-| `--kpm` | Enable KPM kernel module support |
+| `--kpm` | Enable KPM kernel module support; optional value `enabled` (default) / `patched` (also patches `Image`) |
 | `--bbg` | Enable Baseband-guard |
 | `--rekernel` | Enable Re-Kernel |
 | `--no-susfs` | Skip SUSFS integration (integrated by default) |
@@ -312,3 +402,34 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 
 > **Note:** the "free disk space" step only runs on GitHub Actions runners.
 > Local builds skip it so your own files are never deleted.
+
+---
+
+## 🔗 Upstream sources & licences
+
+This repository is a fusion. The full list lives in [NOTICE](NOTICE); the main sources are:
+
+| Project | What was absorbed | Licence |
+|---|---|---|
+| [WildKernels/GKI_KernelSU_SUSFS](https://github.com/WildKernels/GKI_KernelSU_SUSFS) | Common root of both zzh and ShirkNeko | bundled in repo |
+| [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) | Main build scaffolding | GPL-2.0 |
+| [ShirkNeko/GKI_KernelSU_SUSFS](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) | KPM image patching, local CLI design | not declared |
+| [coolzyd9107/GKI_SukiSU_Ultra_SUSFS](https://github.com/coolzyd9107/GKI_SukiSU_Ultra_SUSFS) | Release notes template | GPL-2.0 |
+| [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) | The KernelSU variant itself | GPL-3.0 |
+| [simonpunk/susfs4ksu](https://gitlab.com/simonpunk/susfs4ksu) | SUSFS patch set | GPL-3.0 |
+| [WildKernels/AnyKernel3](https://github.com/WildKernels/AnyKernel3) | Flashable package template | bundled in repo |
+
+**This repository is GPL-2.0 as a whole**, matching its primary upstreams. The scripts and
+docs newly added here are distributed under GPL-2.0-or-later so they can coexist with the
+GPL-3.0 components. Full text: [LICENSE](LICENSE).
+
+If you are an upstream author and believe any attribution is wrong, please open an issue
+here and it will be corrected immediately.
+
+---
+
+## 🙏 Acknowledgements
+
+Thanks to every upstream author for their open-source work — this repository merely
+reassembles their results into a shape that is convenient for personal use.
+Please report issues here and **do not disturb the upstream authors**.

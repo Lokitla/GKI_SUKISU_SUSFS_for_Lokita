@@ -1,0 +1,97 @@
+GKI_SUKISU_SUSFS_for_Lokita
+第三方组件与上游来源声明
+
+本仓库是个人自用分支，由多个上游项目融合而成（融合说明见 FUSION.md）。
+仓库自身的构建脚本、工作流与文档，在下列上游项目的许可证框架下发布。
+
+================================================================================
+一、本仓库自身许可证
+================================================================================
+
+本仓库主体采用 GNU General Public License v2.0（GPL-2.0），完整文本见 LICENSE。
+该选择用于与主要上游 zzh20188/GKI_KernelSU_SUSFS 保持一致。
+
+构建产物（内核镜像、AnyKernel3 刷机包、boot 镜像）由下列上游代码编译而来，
+其分发行受各自许可证约束，且受 Linux 内核 GPL-2.0 的衍生作品条款约束。
+
+================================================================================
+二、上游项目与依赖组件
+================================================================================
+
+[构建基座]
+
+  WildKernels/GKI_KernelSU_SUSFS
+    用途：zzh20188 与 ShirkNeko 两个分支的共同原始上游
+    许可：仓库内附许可证（GitHub 未识别为 SPDX 标准条目）
+
+  zzh20188/GKI_KernelSU_SUSFS
+    用途：本仓库主基座，工作流与构建流程主体
+    许可：GPL-2.0
+
+  coolzyd9107/GKI_SukiSU_Ultra_SUSFS
+    用途：Release 说明模板、SukiSU 相关术语与展示方式
+    许可：GPL-2.0
+
+  ShirkNeko/GKI_KernelSU_SUSFS
+    用途：KPM 镜像修补流程、本地构建 CLI 设计参考
+    许可：该仓库未附带许可证文件。按其未声明许可的默认含义，
+          其中代码的再分发权利并未显式授予。本仓库仅吸收其构建思路，
+          并在本文件中如实标注来源；若作者提出异议，将立即移除相关内容。
+
+[内核与 Root 组件]
+
+  SukiSU-Ultra/SukiSU-Ultra
+    用途：KernelSU 变体本体（SukiSU / SukiSU(40726) / SukiSU(40548)）
+    许可：GPL-3.0
+
+  ReSukiSU/ReSukiSU
+    用途：KernelSU 变体（ReSukiSU）
+    许可：以其仓库声明为准
+
+  tiann/KernelSU
+    用途：KernelSU 官方版（Official 变体）
+    许可：GPL-3.0
+
+  simonpunk/susfs4ksu（GitLab）、ShirkNeko/susfs4ksu
+    用途：SUSFS for KernelSU 补丁集
+    许可：ShirkNeko 镜像为 GPL-3.0
+
+  AOSP kernel/common（android.googlesource.com）
+    用途：GKI 内核源码
+    许可：GPL-2.0（含 Linux 内核 syscall 例外）
+
+[构建工具与补丁资源]
+
+  WildKernels/AnyKernel3      刷机包模板             仓库内附许可证
+  WildKernels/kernel_patches  三星 min_kdp 等补丁     未声明
+  Numbersf/Action-Build       Unicode 绕过修复补丁    仓库内附许可证
+  SukiSU-Ultra/SukiSU_patch   ZRAM / LZ4KD 补丁      未声明
+                              KPM 镜像修补工具（patch_linux）
+                              注：原名 ShirkNeko/SukiSU_patch，已改名；
+                                  本仓库直接引用新名称，不再依赖旧地址跳转。
+
+[可选功能模块]
+
+  ravindu644/Droidspaces-OSS       Droidspaces 容器支持      GPL-3.0
+  Sakion-Team/Re-Kernel            Re-Kernel 驱动            GPL-2.0
+  vc-teahouse/Baseband-guard       BBG 防格机                GPL-2.0
+  zzh20188/GKI_KernelSU_SUSFS      hmbird_patch.c            GPL-2.0
+
+================================================================================
+三、许可证兼容性说明
+================================================================================
+
+本仓库混合了 GPL-2.0 与 GPL-3.0 组件。GPL-2.0-only 与 GPL-3.0 之间不兼容，
+因此涉及 GPL-3.0 组件（SukiSU-Ultra、SUSFS 镜像、Droidspaces）的部分，
+应在 GPL-3.0 条款下分发；本仓库自身新增的脚本与文档采用 GPL-2.0-or-later，
+以便在上述两种条款下均可分发。
+
+若你是上游作者，认为此处对你的项目描述或归属有误，请在本仓库提交 Issue，
+我会立即更正或移除相关内容。
+
+================================================================================
+四、反馈渠道
+================================================================================
+
+本仓库为个人自用，未经上游作者审阅。请勿就本分支的行为去打扰上游作者，
+相关问题请在本仓库反馈。
