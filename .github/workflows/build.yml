@@ -202,14 +202,23 @@ jobs:
         name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}-AnyKernel3
         path: AnyKernel3/*
         compression-level: 9
-    - name: 上传全部构建产物
+    # 「上传全部」拆成两个产物：刷入包(~17MB)与启动镜像(~50MB)分开，
+    # 避免下载一个 70MB 的压缩包只为拿 AnyKernel3.zip
+    - name: 上传 AnyKernel3 刷入包
       if: inputs.artifact_upload_mode == '上传全部'
       uses: actions/upload-artifact@v6
       with:
-        name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}
-        path: '*AnyKernel3.zip
-
-          *.img'
+        name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}-AnyKernel3
+        path: '*AnyKernel3.zip'
+        if-no-files-found: warn
+        compression-level: 9
+    - name: 上传启动镜像
+      if: inputs.artifact_upload_mode == '上传全部'
+      uses: actions/upload-artifact@v6
+      with:
+        name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}-Images
+        path: '*.img'
+        if-no-files-found: warn
         compression-level: 9
     - name: 上传补丁冲突文件
       if: always() && env.REJ_COUNT > 0
