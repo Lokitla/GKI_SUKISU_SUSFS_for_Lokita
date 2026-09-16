@@ -180,19 +180,28 @@ compares it against the value recorded on this repository's `sha` branch:
 2. No new commit → do nothing, no runner minutes burned;
 3. Commit SHA unavailable (API rate limit) → fail fast instead of building with an empty value.
 
-**By default only the 4 sub-levels of Android 16 (6.12) are built as a smoke test**, not all
-80 versions at once. The reason is practical: a full run means 80 jobs pulling kernel source
-from `android.googlesource.com` simultaneously — real load on upstream, and a good way to
-burn runner minutes on a commit that may not even compile. Once a new commit looks healthy,
-run **构建内核** manually with the full matrix.
+**By default a single 5.10 sub-level is built as a smoke test** (via the
+Android 内核构建-自定义 workflow — exactly one build), not all 80 versions at once.
+Two reasons: a full run means 80 jobs pulling kernel source from `android.googlesource.com`
+simultaneously, which is real load on upstream; and it is a good way to burn runner minutes
+on a commit that may not even compile. Once the smoke test passes, run **构建内核**
+manually with the full matrix.
+
+> The smoke target is deliberately 5.10 rather than 6.12 (which has the fewest sub-levels):
+> **current SukiSU mainline does not compile on 6.12** — `security_add_hooks` takes a
+> `const struct lsm_id *` on 6.12 while SukiSU still passes a string — so a 6.12 smoke test
+> would be permanently red. For 6.12, use the legacy SukiSU variants (40726 / 40548).
 
 Manual runs accept three inputs:
 
 | Input | Description | Default |
 |---|---|---|
 | `force` | Trigger even when no new commit was detected | false |
-| `build_scope` | `仅 6.12 冒烟` (6.12 only) / `全部版本` (all) / `不构建` (none) | `仅 6.12 冒烟` |
+| `build_scope` | `单版本冒烟` (single) / `全部版本` (all) / `不构建` (none) | `单版本冒烟` |
 | `release_type` | `Release` / `Pre-Release` / `Actions` | `Release` |
+
+> `单版本冒烟` dispatches `kernel-custom.yml`; only `全部版本` dispatches `main.yml` with
+> the full matrix.
 
 > Requires **Settings → Actions → Workflow permissions** to be `Read and write`,
 > otherwise the push back to the `sha` branch is rejected with a 403 for `github-actions[bot]`.

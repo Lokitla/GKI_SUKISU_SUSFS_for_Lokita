@@ -2,13 +2,19 @@
 # SukiSU 上游更新检测 → 自动触发内核构建
 # -----------------------------------------------------------------------------
 # 流程：拉取 SukiSU-Ultra/main 最新提交号 → 与 sha 分支记录的旧值比对 →
-#       有更新则回写 sha 分支，并按 build_scope 触发「构建内核」(main.yml)。
+#       有更新则回写 sha 分支，并按 build_scope 触发构建。
 #
-# 关于默认范围：默认只构建 Android 16 (6.12) 单版本做冒烟验证，
+# 关于默认范围：默认是「单版本冒烟」，走 kernel-custom 只编 5.10 的一个子版本；
 # 而不是一上来就跑满 80 个版本——全量构建会让 80 个任务同时去
 # android.googlesource.com 拉内核源码，对上游是实打实的压力，
 # 也容易把 Runner 时长烧在一个可能根本编不过的新提交上。
 # 确认新提交没问题后，再手动跑「构建内核」选全部版本。
+#
+# 为什么冒烟选 5.10 而不是 6.12：
+#   6.12 子版本最少（4 个），看似最省，但 SukiSU 主线与 6.12 的 LSM hook 签名
+#   不兼容（security_add_hooks 第三参数在 6.12 上是 const struct lsm_id *，
+#   SukiSU 仍按老签名传字符串），主线版本必然编不过，用它做冒烟只会永远飘红。
+#   5.10 是已实测可编的组合，作为「新提交还能不能编过」的信号才有意义。
 # =============================================================================
 name: Auto Trigger on SukiSU Update
 
@@ -25,9 +31,9 @@ on:
       build_scope:
         description: 检测到更新后要构建的范围
         type: choice
-        default: 仅 6.12 冒烟
+        default: 单版本冒烟
         options:
-          - 仅 6.12 冒烟
+          - 单版本冒烟
           - 全部版本
           - 不构建
       release_type:
@@ -133,74 +139,98 @@ jobs:
           git commit -m "chore(sha): 更新 SukiSU 最新提交号为 ${{ steps.get_sha.outputs.sha }}" || exit 0
           git push origin sha
 
-      - name: 触发「构建内核」工作流
+      - name: 触发构建工作流
         if: steps.compare.outputs.new_commit == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SCOPE: ${{ inputs.build_scope || '仅 6.12 冒烟' }}
+          SCOPE: ${{ inputs.build_scope || '单版本冒烟' }}
           RELEASE_TYPE: ${{ inputs.release_type || 'Release' }}
         run: |
           set -euo pipefail
 
-          # 默认走单版本冒烟；只有显式选择「全部版本」才展开完整矩阵
           case "$SCOPE" in
-            "全部版本")
-              BUILD_ALL=true
-              BUILD_A16=false
-              ;;
             "不构建")
               echo "本次只更新 sha 分支，不触发构建"
               exit 0
               ;;
-            *)  # 仅 6.12 冒烟
-              BUILD_ALL=false
-              BUILD_A16=true
+            "全部版本")
+              # 完整矩阵走「构建内核」(main.yml)
+              jq -n \
+                --arg ref "${{ github.ref_name }}" \
+                --arg release_type "$RELEASE_TYPE" \
+                '{
+                  ref: $ref,
+                  inputs: {
+                    release_type: $release_type,
+                    kernelsu_variant: "SukiSU",
+                    enable_susfs: "true",
+                    use_kpm: "enabled (开启)",
+                    droidspaces: "不启用",
+                    build_time: "",
+                    build_all: "true",
+                    export_susfs_patches: "true",
+                    build_a12_5_10: "false",
+                    build_a13_5_15: "false",
+                    build_a14_6_1: "false",
+                    build_a15_6_6: "false",
+                    build_a16_6_12: "false",
+                    use_zram: "false",
+                    use_bbg: "false",
+                    use_rekernel: "false",
+                    cve_2026_43499_patch: "false",
+                    droidspaces_ntsync: "false",
+                    use_bbr: "false",
+                    send_telegram: "true",
+                    use_release_cache: "false",
+                    manager_spoofed: "true",
+                    supp_op: "false"
+                  }
+                }' > /tmp/dispatch.json
+              TARGET_WF="main.yml"
+              ;;
+            *)
+              # 单版本冒烟走「Android 内核构建-自定义」(kernel-custom.yml)：
+              # 只有它支持精确到单个子版本，一次只编 1 个，几分钟就有结果。
+              # 5.10.66 是已实测可编的组合；只传 AnyKernel3 包，省掉三个 boot 镜像。
+              jq -n \
+                --arg ref "${{ github.ref_name }}" \
+                '{
+                  ref: $ref,
+                  inputs: {
+                    kernel_version: "5.10",
+                    kernelsu_variant: "SukiSU",
+                    enable_susfs: "true",
+                    use_kpm: "enabled (开启)",
+                    droidspaces: "不启用",
+                    artifact_upload_mode: "仅上传 AnyKernel3.zip",
+                    build_scope: "指定版本",
+                    os_patch_level: "66",
+                    build_time: "",
+                    use_zram: "false",
+                    use_bbg: "false",
+                    use_rekernel: "false",
+                    cve_2026_43499_patch: "false",
+                    supp_op: "false",
+                    droidspaces_ntsync: "false",
+                    use_bbr: "false",
+                    send_telegram: "true",
+                    use_release_cache: "false",
+                    manager_spoofed: "true"
+                  }
+                }' > /tmp/dispatch.json
+              TARGET_WF="kernel-custom.yml"
               ;;
           esac
 
-          echo "触发范围：$SCOPE（build_all=$BUILD_ALL, a16=$BUILD_A16）"
+          echo "触发范围：$SCOPE → $TARGET_WF"
 
           # 注意：REST 字段是 inputs（复数）。写成 input 会被 422 拒掉。
           # 这里直接构造 JSON 载荷，避免 -f 嵌套字段写法在不同 gh 版本上的差异。
-          jq -n \
-            --arg ref "${{ github.ref_name }}" \
-            --arg release_type "$RELEASE_TYPE" \
-            --arg build_all "$BUILD_ALL" \
-            --arg build_a16 "$BUILD_A16" \
-            '{
-              ref: $ref,
-              inputs: {
-                release_type: $release_type,
-                kernelsu_variant: "SukiSU",
-                enable_susfs: "true",
-                use_kpm: "enabled (开启)",
-                droidspaces: "不启用",
-                build_time: "",
-                build_all: $build_all,
-                export_susfs_patches: "true",
-                build_a12_5_10: "false",
-                build_a13_5_15: "false",
-                build_a14_6_1: "false",
-                build_a15_6_6: "false",
-                build_a16_6_12: $build_a16,
-                use_zram: "false",
-                use_bbg: "false",
-                use_rekernel: "false",
-                cve_2026_43499_patch: "false",
-                droidspaces_ntsync: "false",
-                use_bbr: "false",
-                send_telegram: "true",
-                use_release_cache: "false",
-                manager_spoofed: "true",
-                supp_op: "false"
-              }
-            }' > /tmp/dispatch.json
-
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            "repos/${{ github.repository }}/actions/workflows/main.yml/dispatches" \
+            "repos/${{ github.repository }}/actions/workflows/$TARGET_WF/dispatches" \
             --input /tmp/dispatch.json
 
-          echo "已触发「构建内核」工作流"
+          echo "已触发 $TARGET_WF"

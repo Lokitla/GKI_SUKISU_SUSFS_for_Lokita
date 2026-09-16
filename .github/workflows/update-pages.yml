@@ -5,7 +5,7 @@ on:
     - cron: '0 8 */3 * *'  # 每 3 天 UTC 8:00
   workflow_dispatch:
   push:
-    branches: [dev]
+    branches: [main]
     paths:
       - 'data/**'
       - 'web/**'
@@ -66,12 +66,14 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # 上游写死 ref: dev，但本仓库没有 dev 分支（只有 main / sha），checkout 直接失败。
+      # 改为跟随触发分支，仓库改名或换默认分支都不会再踩坑。
       - uses: actions/checkout@v7
         with:
-          ref: dev
+          ref: ${{ github.ref_name }}
 
       - name: Pull latest data
-        run: git pull origin dev
+        run: git pull origin ${{ github.ref_name }}
 
       - name: Copy data to web directory
         run: cp -r data/ web/data/
