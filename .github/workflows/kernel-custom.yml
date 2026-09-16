@@ -141,6 +141,16 @@ on:
         required: false
         type: boolean
         default: true
+      sukisu_commit:
+        description: "SukiSU 提交 hash：内核与管理器统一使用该 commit（留空则用 config/config 或最新）"
+        required: false
+        type: string
+        default: ""
+      susfs_commit:
+        description: "SUSFS 提交 hash：内核 SUSFS 修补使用该 commit（留空则取 config/config 或分支最新）"
+        required: false
+        type: string
+        default: ""
 jobs:
   resolve-version:
     runs-on: ubuntu-latest
@@ -332,10 +342,12 @@ jobs:
       use_bbr: ${{ inputs.use_bbr || false }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
-
+      sukisu_commit: ${{ inputs.sukisu_commit || '' }}
+      susfs_commit: ${{ inputs.susfs_commit || '' }}
   get-ksu-manager:
     uses: ./.github/workflows/get-manager.yml
     secrets: inherit
     with:
       kernelsu_variant: ${{ inputs.kernelsu_variant }}
       spoofed: ${{ inputs.manager_spoofed }}
+      sukisu_commit: ${{ inputs.sukisu_commit || '' }}

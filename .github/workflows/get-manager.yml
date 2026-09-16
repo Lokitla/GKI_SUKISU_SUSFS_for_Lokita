@@ -14,6 +14,11 @@ on:
         required: false
         type: boolean
         default: true
+      sukisu_commit:
+        description: "SukiSU 提交 hash：管理器与内核统一使用该 commit（留空则取 config/config 的 sukisu=，再留空则用最新）"
+        required: false
+        type: string
+        default: ""
     outputs:
       susVer:
         description: "The fetched SUSFS version number"
@@ -66,6 +71,28 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git curl jq
 
+      # 读取 config/config 里的自定义提交配置，使管理器的版本选取
+      # 与内核构建使用的 SukiSU 提交保持一致（此前管理器永远跟随最新提交）。
+      - name: 检出本仓库配置
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: config
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+
+      - name: 解析自定义提交配置
+        id: custom_cfg
+        run: |
+          ENABLED=false
+          COMMIT=""
+          if [ -f config/config ]; then
+            ENABLED=$(grep "^custom=" config/config | cut -d'=' -f2- | tr -d '\r' | xargs)
+            COMMIT=$(grep "^sukisu=" config/config | cut -d'=' -f2- | tr -d '\r' | xargs)
+          fi
+          echo "enabled=$ENABLED" >> "$GITHUB_OUTPUT"
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "自定义提交配置: enabled=$ENABLED sukisu=${COMMIT:-<未指定>}"
+
       - name: 获取 KSU & SUSFS 版本
         id: get_version
         run: |
@@ -94,6 +121,22 @@ jobs:
             echo "Unknown variant"
             exit 1
           fi
+
+          # 统一 SukiSU 提交：优先用输入项，其次 config/config 的 sukisu=
+          SUKISU_COMMIT="${{ inputs.sukisu_commit }}"
+          if [ -z "$SUKISU_COMMIT" ] && [ "${{ steps.custom_cfg.outputs.enabled }}" = "true" ]; then
+            SUKISU_COMMIT="${{ steps.custom_cfg.outputs.commit }}"
+          fi
+          SUKISU_COMMIT=$(echo "$SUKISU_COMMIT" | xargs)
+          if [ -n "$SUKISU_COMMIT" ] && [ "${{ inputs.kernelsu_variant }}" = "SukiSU" ]; then
+            echo "SukiSU 使用指定提交: $SUKISU_COMMIT"
+            git -C KernelSU fetch --no-tags origin "$SUKISU_COMMIT" >/dev/null 2>&1 || true
+            if ! git -C KernelSU checkout -q "$SUKISU_COMMIT"; then
+              echo "::error::无法切换到 SukiSU 提交 $SUKISU_COMMIT"
+              exit 1
+            fi
+          fi
+          echo "SUKISU_COMMIT=$SUKISU_COMMIT" >> "$GITHUB_ENV"
 
           cd KernelSU
 
@@ -242,6 +285,32 @@ jobs:
             RUNS_URL="https://api.github.com/repos/$REPO/actions/workflows/$FILENAME/runs?branch=$BRANCH&status=success&per_page=30"
           fi
 
+          # 指定了 SukiSU 提交时，直接定位该提交触发的 Manager 构建：
+          # Manager CI 的 head_sha 就是 SukiSU 的提交，因此可精确命中，
+          # 保证管理器与内核完全来自同一个 commit。
+          if [ -n "$SUKISU_COMMIT" ] && [ "${{ inputs.kernelsu_variant }}" = "SukiSU" ]; then
+            echo "按指定提交 $SUKISU_COMMIT 精确查找 Manager 构建..."
+            PINNED_RUNS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/$REPO/actions/workflows/$FILENAME/runs?head_sha=$SUKISU_COMMIT&status=success&per_page=5")
+            PINNED_ID=$(printf '%s' "$PINNED_RUNS" | jq -r '.workflow_runs[0].id // empty')
+            if [ -n "$PINNED_ID" ]; then
+              ARTIFACTS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                "https://api.github.com/repos/$REPO/actions/runs/$PINNED_ID/artifacts")
+              CANDIDATE_LIST=$(get_manager_artifacts "$ARTIFACTS")
+              if [ -n "$CANDIDATE_LIST" ]; then
+                DOWNLOAD_LIST="$CANDIDATE_LIST"
+                BEST_BUILD_ID="$PINNED_ID"
+                BEST_BRANCH="pinned"
+                echo "命中指定提交的 Manager 构建: $PINNED_ID"
+              else
+                echo "::warning::提交 $SUKISU_COMMIT 的构建 $PINNED_ID 中没有匹配的 Manager 产物，回退按版本查找"
+              fi
+            else
+              echo "::warning::提交 $SUKISU_COMMIT 没有成功的 Manager 构建，回退按版本查找（将取不高于该版本的最新产物）"
+            fi
+          fi
+
+          if [ -z "$DOWNLOAD_LIST" ]; then
           echo "开始查找不高于 KSU $TARGET_KSU_VERSION 的 Manager 产物..."
           for PAGE in $(seq 1 10); do
             echo "--------------------------------------------------"
@@ -288,6 +357,7 @@ jobs:
               fi
             done
           done
+          fi
 
           if [ -z "$DOWNLOAD_LIST" ]; then
             echo "未获取到 KSU 版本小于等于 $TARGET_KSU_VERSION 的 Manager artifact 下载地址列表。"

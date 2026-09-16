@@ -101,6 +101,16 @@ permissions:
         required: false
         type: boolean
         default: false
+      sukisu_commit:
+        description: "SukiSU 提交 hash：内核与管理器统一使用该 commit（留空则用 config/config 或最新）"
+        required: false
+        type: string
+        default: ""
+      susfs_commit:
+        description: "SUSFS 提交 hash：内核 SUSFS 修补使用该 commit（留空则取 config/config 或分支最新）"
+        required: false
+        type: string
+        default: ""
 jobs:
   build-kernel:
     name: ${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}-${{ inputs.ksu_variant }}
@@ -113,6 +123,24 @@ jobs:
     steps:
     - name: 检出代码仓库
       uses: actions/checkout@v7
+    - name: 应用自定义提交
+      if: ${{ inputs.sukisu_commit != '' || inputs.susfs_commit != '' }}
+      run: |
+        set -e
+        SUSFS_BRANCH="gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}"
+        SUSFS_BRANCH_ESC="${SUSFS_BRANCH//./\\.}"
+        echo "目标 SUSFS 分支键名: $SUSFS_BRANCH"
+        sed -i 's/^custom=.*/custom=true/' config/config
+        if [ -n "${{ inputs.sukisu_commit }}" ]; then
+          sed -i "s|^sukisu=.*|sukisu=${{ inputs.sukisu_commit }}|" config/config
+          echo "SukiSU 固定提交: ${{ inputs.sukisu_commit }}"
+        fi
+        if [ -n "${{ inputs.susfs_commit }}" ]; then
+          sed -i "s|^${SUSFS_BRANCH_ESC}=.*|${SUSFS_BRANCH}=${{ inputs.susfs_commit }}|" config/config
+          echo "SUSFS 固定提交: ${{ inputs.susfs_commit }}"
+        fi
+        echo "--- config/config 生效内容 ---"
+        grep -E "^(custom|sukisu|${SUSFS_BRANCH_ESC})=" config/config
     - name: 恢复 Release 缓存（可选）
       if: ${{ inputs.use_release_cache }}
       uses: ./.github/actions/cache-restore
