@@ -17,6 +17,10 @@ inputs:
   github_token:
     description: 'GitHub Token'
     required: true
+  cache_sign_key:
+    description: 'Optional HMAC key for cache integrity verification. Empty = skip.'
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -26,18 +30,22 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.github_token }}
         TARGET_REPO: "${{ github.repository }}"
+        # 安全：输入一律经 env 传入，run 块中不得出现 ${{ }}
+        CACHE_PATH: ${{ inputs.cache_path }}
+        CACHE_KEY: ${{ inputs.cache_key }}
+        CACHE_BUCKET: ${{ inputs.cache_bucket }}
+        CACHE_SIGN_KEY: ${{ inputs.cache_sign_key }}
       run: |
         set -euo pipefail
 
-        CACHE_PATH="${{ inputs.cache_path }}"
-        TAG_NAME="${{ inputs.cache_bucket }}"
-        CACHE_FILE="cache-${{ inputs.cache_key }}.tar.zst"
+        TAG_NAME="$CACHE_BUCKET"
+        CACHE_FILE="cache-$CACHE_KEY.tar.zst"
 
         echo "Checking if cache already exists..."
 
         # Check if cache already exists
         if curl -sL --fail "https://github.com/${TARGET_REPO}/releases/download/$TAG_NAME/$CACHE_FILE" -o /dev/null 2>&1; then
-          echo "Cache already exists for key: ${{ inputs.cache_key }}"
+          echo "Cache already exists for key: $CACHE_KEY"
           echo "Skipping upload."
           exit 0
         fi
@@ -63,12 +71,22 @@ runs:
           gh release create "$TAG_NAME" --title "Build Cache" --notes "Automated build cache storage" --repo "$TARGET_REPO" || true
         fi
 
+        # 生成 HMAC 签名并随归档一同上传；restore 端据此拒绝被篡改的缓存
+        UPLOADS="$CACHE_FILE"
+        if [ -n "${CACHE_SIGN_KEY:-}" ]; then
+          openssl dgst -sha256 -hmac "$CACHE_SIGN_KEY" -r "$CACHE_FILE" | awk '{print $1}' > "$CACHE_FILE.hmac"
+          echo "Signature created: $(cat "$CACHE_FILE.hmac")"
+          UPLOADS="$UPLOADS $CACHE_FILE.hmac"
+        else
+          echo "::warning::未配置 cache_sign_key，缓存未签名（restore 端将无法校验完整性）"
+        fi
+
         echo "Uploading cache..."
-        if timeout 10m gh release upload "$TAG_NAME" "$CACHE_FILE" --clobber --repo "$TARGET_REPO"; then
+        if timeout 10m gh release upload "$TAG_NAME" $UPLOADS --clobber --repo "$TARGET_REPO"; then
           echo "Cache uploaded successfully!"
-          rm -f "$CACHE_FILE"
+          rm -f "$CACHE_FILE" "$CACHE_FILE.hmac"
         else
           echo "Failed to upload cache"
-          rm -f "$CACHE_FILE"
+          rm -f "$CACHE_FILE" "$CACHE_FILE.hmac"
           exit 1
         fi

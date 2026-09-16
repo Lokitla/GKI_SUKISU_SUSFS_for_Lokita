@@ -1744,6 +1744,10 @@ stage_compile_kernel() {
     fi
     attempt=$((attempt + 1))
   done
+  # 导出给 collect_fail_log 写进 summary.txt（此前这两个变量从未赋值，
+  # 日志里永远显示「未知」）
+  export COMPILE_ATTEMPTS=$(( attempt > COMPILE_MAX_ATTEMPTS ? COMPILE_MAX_ATTEMPTS : attempt ))
+  export COMPILE_EXIT_CODE=$rc
   if [ "$rc" -ne 0 ]; then export COMPILE_FAILED=1; fi
   return $rc
 }
@@ -2153,16 +2157,30 @@ main() {
   fi
 
   local started=false
+  local failed_phase=""
   for p in "${PHASES[@]}"; do
     if [ "$mode" = "from" ]; then
       if [ "$p" = "$target" ]; then started=true; fi
       if [ "$started" != true ]; then continue; fi
     fi
-    "run_${p}" || {
+    if ! "run_${p}"; then
       echo "::error::阶段 $p 执行失败"
-      exit 1
-    }
+      failed_phase="$p"
+      break
+    fi
   done
+
+  # 失败收尾：compile_kernel 之后紧邻的 collect_fail_log 原本永远跑不到
+  # —— 上一阶段失败就 exit 1 了，导致 summary.txt / disk-usage.txt /
+  # ccache-stats.txt 从不生成，build-logs 只剩裸编译日志。
+  # 这里在退出前补跑一次，保证排障上下文完整。
+  if [ -n "$failed_phase" ]; then
+    if [ "$COMPILE_FAILED" = "1" ] && [ "$failed_phase" != "collect_fail_log" ]; then
+      echo "编译失败，补跑 collect_fail_log 收集排障信息..."
+      run_collect_fail_log || echo "::warning::collect_fail_log 补跑失败，忽略"
+    fi
+    exit 1
+  fi
 }
 
 main "$@"

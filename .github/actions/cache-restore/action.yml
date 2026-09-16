@@ -14,6 +14,10 @@ inputs:
     description: 'The tag name for the release (e.g., general-cache)'
     required: false
     default: 'general-cache'
+  cache_sign_key:
+    description: 'Optional HMAC key for cache integrity verification. Empty = skip.'
+    required: false
+    default: ''
 
 outputs:
   cache-hit:
@@ -28,34 +32,80 @@ runs:
       shell: bash
       env:
         TARGET_REPO: "${{ github.repository }}"
+        # 安全：输入一律经 env 传入，run 块中不得出现 ${{ }}
+        CACHE_PATH: ${{ inputs.cache_path }}
+        CACHE_KEY: ${{ inputs.cache_key }}
+        CACHE_BUCKET: ${{ inputs.cache_bucket }}
+        CACHE_SIGN_KEY: ${{ inputs.cache_sign_key }}
       run: |
         set -euo pipefail
 
         cd "$GITHUB_WORKSPACE"
 
-        TAG_NAME="${{ inputs.cache_bucket }}"
-        BASE_URL="https://github.com/${TARGET_REPO}/releases/download/$TAG_NAME"
+        BASE_URL="https://github.com/${TARGET_REPO}/releases/download/$CACHE_BUCKET"
 
-        echo "Searching for cache: ${{ inputs.cache_key }}"
+        echo "Searching for cache: $CACHE_KEY"
 
-        CACHE_FILE="cache-${{ inputs.cache_key }}.tar.zst"
+        CACHE_FILE="cache-$CACHE_KEY.tar.zst"
+
+        # 缓存不可用时不阻断构建，统一走这条出口
+        bail() {
+          echo "::warning::缓存恢复跳过: $1"
+          rm -f "$GITHUB_WORKSPACE/$CACHE_FILE" "$GITHUB_WORKSPACE/$CACHE_FILE.hmac"
+          echo "cache-hit=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        }
 
         echo "Downloading cache..."
-        if curl -sL --fail -o "$CACHE_FILE" "$BASE_URL/$CACHE_FILE"; then
-          if [ -s "$CACHE_FILE" ]; then
-            echo "Cache found! Extracting to ${{ inputs.cache_path }}..."
-            cd "$(dirname "${{ inputs.cache_path }}")"
-            tar -I zstd -xf "$GITHUB_WORKSPACE/$CACHE_FILE"
-            rm -f "$GITHUB_WORKSPACE/$CACHE_FILE"
-            echo "cache-hit=true" >> "$GITHUB_OUTPUT"
-            echo "Cache restored successfully!"
+        if ! curl -sL --fail -o "$CACHE_FILE" "$BASE_URL/$CACHE_FILE"; then
+          bail "未找到 key=$CACHE_KEY 的缓存"
+        fi
+        if [ ! -s "$CACHE_FILE" ]; then
+          bail "缓存文件为空"
+        fi
+
+        # --- 完整性校验（可选）：配置了 CACHE_SIGN_KEY 时验证 HMAC ---
+        # 只做路径校验挡不住"替换 Release 资产投毒"，HMAC 才是真正的防线：
+        # 攻击者没有签名密钥，改了 tar 也伪造不出匹配的 .hmac。
+        if [ -n "${CACHE_SIGN_KEY:-}" ]; then
+          if curl -sL --fail -o "$CACHE_FILE.hmac" "$BASE_URL/$CACHE_FILE.hmac"; then
+            EXPECT=$(tr -d ' \t\r\n' < "$CACHE_FILE.hmac" | awk '{print $1}')
+            ACTUAL=$(openssl dgst -sha256 -hmac "$CACHE_SIGN_KEY" -r "$CACHE_FILE" | awk '{print $1}')
+            if [ -z "$EXPECT" ] || [ "$EXPECT" != "$ACTUAL" ]; then
+              bail "签名校验失败（期望 $EXPECT，实际 $ACTUAL），归档可能已被篡改"
+            fi
+            echo "缓存签名校验通过"
           else
-            echo "Cache file is empty, skipping..."
-            rm -f "$CACHE_FILE"
-            echo "cache-hit=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::未找到签名文件 $CACHE_FILE.hmac，跳过签名校验"
           fi
         else
-          echo "No cache found for key: ${{ inputs.cache_key }}"
-          rm -f "$CACHE_FILE"
-          echo "cache-hit=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::未配置 cache_sign_key，跳过缓存签名校验（建议配置以防投毒）"
         fi
+        rm -f "$CACHE_FILE.hmac"
+
+        # --- 路径穿越校验 ---
+        # GNU tar 对 ".." 成员的处理随版本而异，不依赖其默认行为，显式拒绝。
+        CACHE_BASE=$(basename "$CACHE_PATH")
+        if ! tar -I zstd -tf "$CACHE_FILE" > /tmp/cache-members.txt 2>/dev/null; then
+          bail "归档无法解析，已损坏"
+        fi
+        if grep -E '^[[:space:]]*/|^\.\.(/|$)|(/\.\.(/|$))' /tmp/cache-members.txt >/dev/null 2>&1; then
+          echo "::error::发现越界成员:"
+          grep -E '^[[:space:]]*/|^\.\.(/|$)|(/\.\.(/|$))' /tmp/cache-members.txt | head -5
+          bail "归档含绝对路径或 .. 成员"
+        fi
+        # 白名单：save 端以 -C <parent> <basename> 打包，成员必然全部位于 CACHE_BASE 之下
+        # 用 awk 做字面量前缀匹配，避免 CACHE_BASE 含正则元字符
+        if ! awk -v base="$CACHE_BASE" '
+            { if ($0 != base && index($0, base "/") != 1) { bad = 1; if (n++ < 5) print "  越界: " $0 } }
+            END { exit bad ? 1 : 0 }' /tmp/cache-members.txt; then
+          bail "归档含越界成员（预期全部位于 $CACHE_BASE/ 之下）"
+        fi
+        rm -f /tmp/cache-members.txt
+
+        echo "Cache found! Extracting to $CACHE_PATH..."
+        cd "$(dirname "$CACHE_PATH")"
+        tar -I zstd -xf "$GITHUB_WORKSPACE/$CACHE_FILE" --no-same-owner
+        rm -f "$GITHUB_WORKSPACE/$CACHE_FILE"
+        echo "cache-hit=true" >> "$GITHUB_OUTPUT"
+        echo "Cache restored successfully!"

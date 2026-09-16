@@ -125,22 +125,44 @@ jobs:
       uses: actions/checkout@v7
     - name: 应用自定义提交
       if: ${{ inputs.sukisu_commit != '' || inputs.susfs_commit != '' }}
+      # 安全：所有外部输入一律经 env 传入，run 块中不得出现 ${{ }}。
+      # ${{ }} 在 shell 解析之前完成文本替换，直接内插会形成 Actions 注入面。
+      env:
+        SUKISU_COMMIT: ${{ inputs.sukisu_commit }}
+        SUSFS_COMMIT: ${{ inputs.susfs_commit }}
+        ANDROID_VERSION: ${{ inputs.android_version }}
+        KERNEL_VERSION: ${{ inputs.kernel_version }}
       run: |
-        set -e
-        SUSFS_BRANCH="gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}"
+        set -eu
+        SUSFS_BRANCH="gki-$ANDROID_VERSION-$KERNEL_VERSION"
         SUSFS_BRANCH_ESC="${SUSFS_BRANCH//./\\.}"
         echo "目标 SUSFS 分支键名: $SUSFS_BRANCH"
-        sed -i 's/^custom=.*/custom=true/' config/config
-        if [ -n "${{ inputs.sukisu_commit }}" ]; then
-          sed -i "s|^sukisu=.*|sukisu=${{ inputs.sukisu_commit }}|" config/config
-          echo "SukiSU 固定提交: ${{ inputs.sukisu_commit }}"
+        # 仅接受纯 40/64 位十六进制 commit hash，杜绝 sed 表达式注入
+        if [ -n "$SUKISU_COMMIT" ]; then
+          case "$SUKISU_COMMIT" in
+            *[!0-9a-fA-F]*|'') echo "::error::非法的 SukiSU commit: $SUKISU_COMMIT"; exit 1 ;;
+          esac
+          [ "${#SUKISU_COMMIT}" = "40" ] || [ "${#SUKISU_COMMIT}" = "64" ] || {
+            echo "::error::commit 长度必须为 40 或 64 位: $SUKISU_COMMIT"; exit 1; }
         fi
-        if [ -n "${{ inputs.susfs_commit }}" ]; then
-          sed -i "s|^${SUSFS_BRANCH_ESC}=.*|${SUSFS_BRANCH}=${{ inputs.susfs_commit }}|" config/config
-          echo "SUSFS 固定提交: ${{ inputs.susfs_commit }}"
+        if [ -n "$SUSFS_COMMIT" ]; then
+          case "$SUSFS_COMMIT" in
+            *[!0-9a-fA-F]*|'') echo "::error::非法的 SUSFS commit: $SUSFS_COMMIT"; exit 1 ;;
+          esac
+          [ "${#SUSFS_COMMIT}" = "40" ] || [ "${#SUSFS_COMMIT}" = "64" ] || {
+            echo "::error::commit 长度必须为 40 或 64 位: $SUSFS_COMMIT"; exit 1; }
+        fi
+        sed -i 's/^custom=.*/custom=true/' config/config
+        if [ -n "$SUKISU_COMMIT" ]; then
+          sed -i "s|^sukisu=.*|sukisu=$SUKISU_COMMIT|" config/config
+          echo "SukiSU 固定提交: $SUKISU_COMMIT"
+        fi
+        if [ -n "$SUSFS_COMMIT" ]; then
+          sed -i "s|^${SUSFS_BRANCH_ESC}=.*|${SUSFS_BRANCH}=$SUSFS_COMMIT|" config/config
+          echo "SUSFS 固定提交: $SUSFS_COMMIT"
         fi
         echo "--- config/config 生效内容 ---"
-        grep -E "^(custom|sukisu|${SUSFS_BRANCH_ESC})=" config/config
+        grep -E "^(custom|sukisu|${SUSFS_BRANCH_ESC})=" config/config || echo "(未匹配到，使用默认分支)"
     - name: 恢复 Release 缓存（可选）
       if: ${{ inputs.use_release_cache }}
       uses: ./.github/actions/cache-restore
@@ -148,6 +170,7 @@ jobs:
         cache_path: /home/runner/.ccache
         cache_key: ${{ github.ref_name }}-${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}
         cache_bucket: ccache-cache
+        cache_sign_key: ${{ secrets.CACHE_SIGN_KEY }}
     - name: 恢复 ccache 缓存
       uses: actions/cache@v5
       with:
@@ -206,6 +229,7 @@ jobs:
         cache_key: ${{ github.ref_name }}-${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}
         cache_bucket: ccache-cache
         github_token: ${{ secrets.GITHUB_TOKEN }}
+        cache_sign_key: ${{ secrets.CACHE_SIGN_KEY }}
     - name: 上传编译失败日志
       if: ${{ always() }}
       uses: actions/upload-artifact@v6
