@@ -5,21 +5,23 @@
 ---
 
 > [!WARNING]
-> **⚠️ Personal fork · Not an official release · Modified with AI assistance**
+> **⚠️ Personal derivative · Not an official release · AI-assisted rework · Do not disturb upstream**
 >
-> - This repository is a **personal fork** of [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS). Builds here are for the owner's own testing and are **not an official distribution channel**.
-> - Workflows, build scripts and docs in this repo were **modified with AI assistance** and have not been reviewed by the upstream author; behaviour may differ from upstream.
+> - This repository is a **personal derivative (fork)** of [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS). The vast majority of the core work — build matrix, scripts, patch adaptation — **was done by the upstream author**; this repo only integrates it for personal use. All credit belongs upstream.
+> - Workflows, build scripts and docs here were **modified with AI assistance** and have **not been reviewed, endorsed or contributed to by any upstream author**; behaviour may differ from upstream. The upstream authors take no responsibility for anything in this repository.
+> - Builds are for the owner's own testing and are **not an official distribution channel**; for official releases go to [zzh's original repo](https://github.com/zzh20188/GKI_KernelSU_SUSFS/releases).
 > - Flashing third-party kernels risks bricking, data loss and app integrity-check failures. Back up your stock boot image and proceed at your own risk.
-> - Please report issues here rather than to the upstream author.
+> - Please report issues **here** and never contact the upstream authors about them (no issues, emails or Coolapk DMs).
 
 ---
 
 **Automated GKI Kernel Builds | KernelSU + SUSFS Integrated**
 
-This repository is built on top of [zzh20188's GKI scaffolding](https://github.com/zzh20188/GKI_KernelSU_SUSFS),
-absorbing [ShirkNeko](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS)'s KPM image patching and local-CLI design,
-plus [coolzyd](https://github.com/coolzyd9107/GKI_SukiSU_Ultra_SUSFS)'s Release presentation style.
-All three pipelines are converged into a single
+This repository is **based on [zzh20188's GKI scaffolding](https://github.com/zzh20188/GKI_KernelSU_SUSFS)** (a fork
+with AI-assisted rework): using it as the main body, it ports [ShirkNeko](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS)'s
+KPM image patching and local-CLI design, and takes inspiration from
+[coolzyd](https://github.com/coolzyd9107/GKI_SukiSU_Ultra_SUSFS)'s Release presentation style.
+The build pipeline is converged into a single
 [`scripts/build_kernel.sh`](scripts/build_kernel.sh): GitHub Actions and the local
 `build.py` share that same 45-phase script, so there is no second implementation to drift.
 
@@ -28,9 +30,14 @@ Every build produces an AnyKernel3 flashable zip, boot images in three compressi
 formats, the KernelSU manager and the companion SUSFS module.
 
 [![Release](https://img.shields.io/github/v/release/Lokitla/GKI_SUKISU_SUSFS_for_Lokita?label=Release&style=flat-square&logo=github&logoColor=white&color=2ea44f)](https://github.com/Lokitla/GKI_SUKISU_SUSFS_for_Lokita/releases)
-[![Coolapk](https://img.shields.io/badge/Follow-Coolapk-3DDC84?style=flat-square&logo=android&logoColor=white)](http://www.coolapk.com/u/11253396)
+[![Upstream Author](https://img.shields.io/badge/%E2%9D%A4%EF%B8%8F%20Upstream%20Author-zzh20188%40Coolapk-3DDC84?style=flat-square&logo=android&logoColor=white)](http://www.coolapk.com/u/11253396)
 [![KernelSU](https://img.shields.io/badge/KernelSU-Supported-5AA300?style=flat-square)](https://kernelsu.org/)
 [![SUSFS](https://img.shields.io/badge/SUSFS-Integrated-E67E22?style=flat-square)](https://gitlab.com/simonpunk/susfs4ksu)
+
+> 🙏 The Coolapk link above is **the personal Coolapk page of zzh20188, the original upstream
+> author** — it is placed here solely as a token of respect and gratitude.
+> **It is not affiliated with this repository in any way**; please do not contact the author
+> about anything related to this repo (no issues, DMs or comments).
 
 English | [**简体中文**](README.md)
 
@@ -120,10 +127,11 @@ Wiki covers:
 
 ---
 
-## 🆕 Merged Capabilities
+## 🆕 Capabilities Added on Top of Upstream zzh
 
-The following features were merged from
-[ShirkNeko/GKI_KernelSU_SUSFS](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS):
+On top of [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS), this repository ports
+the following features from
+[ShirkNeko/GKI_KernelSU_SUSFS](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS), with additional adaptation:
 
 | Capability | Description | How to enable |
 |---|---|---|
@@ -419,12 +427,13 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 
 ## 🔗 Upstream sources & licences
 
-This repository is a fusion. The full list lives in [NOTICE](NOTICE); the main sources are:
+This repository is a **personal derivative** of its upstreams (a fork with AI-assisted rework);
+the core work comes from the upstream authors below. The full list lives in [NOTICE](NOTICE); the main sources are:
 
-| Project | What was absorbed | Licence |
+| Project | Upstream contribution | Licence |
 |---|---|---|
 | [WildKernels/GKI_KernelSU_SUSFS](https://github.com/WildKernels/GKI_KernelSU_SUSFS) | Common root of both zzh and ShirkNeko | bundled in repo |
-| [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) | Main build scaffolding | GPL-2.0 |
+| [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) | **Build scaffolding and the bulk of the code** (matrix, scripts, patch adaptation) | GPL-2.0 |
 | [ShirkNeko/GKI_KernelSU_SUSFS](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) | KPM image patching, local CLI design | not declared |
 | [coolzyd9107/GKI_SukiSU_Ultra_SUSFS](https://github.com/coolzyd9107/GKI_SukiSU_Ultra_SUSFS) | Release notes template | GPL-2.0 |
 | [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) | The KernelSU variant itself | GPL-3.0 |
@@ -445,6 +454,17 @@ here and it will be corrected immediately.
 
 ## 🙏 Acknowledgements
 
-Thanks to every upstream author for their open-source work — this repository merely
-reassembles their results into a shape that is convenient for personal use.
-Please report issues here and **do not disturb the upstream authors**.
+This repository exists entirely on the shoulders of the upstream authors — the build matrix, SUSFS
+adaptation, KPM patching and manager distribution are all their work, none of it was done by this
+repo's owner. All credit and respect belong to them:
+
+- **[zzh20188](https://github.com/zzh20188)** ([Coolapk page](http://www.coolapk.com/u/11253396), as a token of respect) — the foundation of this repo; the bulk of the build matrix and scripts is his work;
+- **[ShirkNeko](https://github.com/ShirkNeko)** — KPM image patching and local-CLI design;
+- **[coolzyd](https://github.com/coolzyd9107)** — Release presentation style;
+- and all contributors to [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra), [susfs4ksu](https://gitlab.com/simonpunk/susfs4ksu), [KernelSU](https://kernelsu.org/) and [AnyKernel3](https://github.com/WildKernels/AnyKernel3).
+
+What this repo's owner did (with AI assistance) was merely reassemble their results into a
+personally convenient shape.
+
+**For any issue with this repository, report it here — do not contact the upstream authors in any
+way.** They did not participate in this repo's modifications and should not be bothered by its problems.

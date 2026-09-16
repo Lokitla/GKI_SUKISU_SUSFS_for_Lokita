@@ -5,30 +5,34 @@
 ---
 
 > [!WARNING]
-> **⚠️ 自用仓库 · 非官方发布 · 由 AI 辅助修改**
+> **⚠️ 个人衍生仓库 · 非官方发布 · AI 辅助二次开发 · 请勿打扰上游**
 >
-> - 本仓库是 [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) 的**个人自用分支**，产物仅供本人测试，**不是官方发布渠道**。
-> - 仓库内的工作流、构建脚本与文档经过 **AI 辅助修改与二次开发**，未经上游作者审阅，行为可能与上游不一致。
+> - 本仓库是 [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) 的**个人自用衍生分支**。构建矩阵、脚本与补丁适配等**绝大多数核心工作由上游作者完成**，本仓库只是在此基础上做了自用整合，所有功劳归属上游。
+> - 仓库内的工作流、构建脚本与文档经过 **AI 辅助修改与二次开发**，**未经任何上游作者审阅、认可或参与**，行为可能与上游不一致；上游作者对本仓库的内容、质量与后果不承担任何责任。
+> - 产物仅供本人测试，**不是官方发布渠道**；想要官方版本请前往 [zzh 原仓库](https://github.com/zzh20188/GKI_KernelSU_SUSFS/releases)。
 > - 刷入第三方内核存在变砖、丢失数据、触发应用风控等风险；请自行备份原厂 Boot 镜像，风险自负。
-> - 遇到问题请在本仓库反馈，不要去打扰上游作者。
+> - 遇到问题请在本仓库反馈，**不要以任何方式打扰上游作者**（包括 Issue、邮件、酷安私信等）。
 
 ---
 
 **自动化构建 GKI 内核 | 集成 KernelSU + SUSFS**
 
-本仓库以 [zzh20188 的 GKI 构建基架](https://github.com/zzh20188/GKI_KernelSU_SUSFS) 为主体，
-吸收了 [ShirkNeko](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) 的 KPM 镜像修补与本地 CLI 设计、
-[coolzyd](https://github.com/coolzyd9107/GKI_SukiSU_Ultra_SUSFS) 的 Release 呈现方式，
-并把三套流程收敛到同一份 [`scripts/build_kernel.sh`](scripts/build_kernel.sh)：
+本仓库**基于 [zzh20188 的 GKI 构建基架](https://github.com/zzh20188/GKI_KernelSU_SUSFS) 二次开发**（fork）：
+以其为主体，移植了 [ShirkNeko](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) 的 KPM 镜像修补与本地 CLI 设计，
+参考了 [coolzyd](https://github.com/coolzyd9107/GKI_SukiSU_Ultra_SUSFS) 的 Release 呈现方式，
+并把构建流程收敛到同一份 [`scripts/build_kernel.sh`](scripts/build_kernel.sh)：
 GitHub Actions 与本地 `build.py` 共用这一份 45 阶段脚本，不存在两套逻辑分叉。
 
 覆盖 Android 12 / 13 / 14 / 15 / 16（内核 5.10 / 5.15 / 6.1 / 6.6 / 6.12），
 每次构建产出 AnyKernel3 刷机包、三种压缩格式的 boot 镜像、KernelSU 管理器与 SUSFS 配套模块。
 
 [![Release](https://img.shields.io/github/v/release/Lokitla/GKI_SUKISU_SUSFS_for_Lokita?label=Release&style=flat-square&logo=github&logoColor=white&color=2ea44f)](https://github.com/Lokitla/GKI_SUKISU_SUSFS_for_Lokita/releases)
-[![Coolapk](https://img.shields.io/badge/Follow-Coolapk-3DDC84?style=flat-square&logo=android&logoColor=white)](http://www.coolapk.com/u/11253396)
+[![上游原作者](https://img.shields.io/badge/%E2%9D%A4%EF%B8%8F%20%E4%B8%8A%E6%B8%B8%E5%8E%9F%E4%BD%9C%E8%80%85-zzh20188%40Coolapk-3DDC84?style=flat-square&logo=android&logoColor=white)](http://www.coolapk.com/u/11253396)
 [![KernelSU](https://img.shields.io/badge/KernelSU-Supported-5AA300?style=flat-square)](https://kernelsu.org/)
 [![SUSFS](https://img.shields.io/badge/SUSFS-Integrated-E67E22?style=flat-square)](https://gitlab.com/simonpunk/susfs4ksu)
+
+> 🙏 上面这个 Coolapk 链接是**上游原作者 zzh20188 的酷安主页**，放在这里仅是为了表达敬意与感谢；
+> **它与本仓库没有任何关系**——请勿因本仓库的任何问题（Issue、私信、评论）去打扰原作者。
 
 [**English**](README-EN.md) | 简体中文
 
@@ -153,9 +157,9 @@ Wiki 涵盖内容：
 
 ---
 
-## 🆕 融合新增能力
+## 🆕 相对上游 zzh 的新增能力
 
-本仓库在原有基础上，合并了 [ShirkNeko/GKI_KernelSU_SUSFS](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) 的以下能力：
+在 [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) 的基础上，本仓库移植了 [ShirkNeko/GKI_KernelSU_SUSFS](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) 的以下能力，并做了适配整理：
 
 | 能力 | 说明 | 开启方式 |
 |---|---|---|
@@ -468,8 +472,8 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 | `scripts/susfs_fixes/apply.sh` | SUSFS 补丁的适配与冲突修复 |
 | `scripts/telegram_notify.py` | Telegram 通知推送 |
 | `scripts/gki_fetch.py` 等 | 从 Google 拉取 GKI 版本数据，供 `update-pages.yml` 使用 |
-| `tools/migration/` | 融合时用过的一次性脚本，仅作过程留档，**不参与构建** |
-| `FUSION.md` | 三个上游仓库的比对与融合记录 |
+| `tools/migration/` | 迁移时用过的一次性脚本，仅作过程留档，**不参与构建** |
+| `FUSION.md` | 三个上游仓库的比对与迁移记录 |
 
 > 改构建行为请改 `scripts/build_kernel.sh`，不要在 `build.yml` 里重写 shell ——
 > 否则本地与云端会立刻分叉。
@@ -478,12 +482,12 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 
 ## 🔗 上游来源与许可证
 
-本仓库是融合产物，完整清单见 [NOTICE](NOTICE)。主要来源：
+本仓库是基于上游的**个人衍生项目**（fork + AI 辅助二次开发），核心工作来自以下上游作者，完整清单见 [NOTICE](NOTICE)。主要来源：
 
-| 项目 | 吸收了什么 | 许可证 |
+| 项目 | 上游贡献 | 许可证 |
 |---|---|---|
 | [WildKernels/GKI_KernelSU_SUSFS](https://github.com/WildKernels/GKI_KernelSU_SUSFS) | zzh 与 ShirkNeko 的共同原始上游 | 仓库内附 |
-| [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) | 构建基座主干 | GPL-2.0 |
+| [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) | **构建基座与绝大部分代码**（矩阵、脚本、补丁适配） | GPL-2.0 |
 | [ShirkNeko/GKI_KernelSU_SUSFS](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) | KPM 镜像修补、本地 CLI 设计 | 未声明 |
 | [coolzyd9107/GKI_SukiSU_Ultra_SUSFS](https://github.com/coolzyd9107/GKI_SukiSU_Ultra_SUSFS) | Release 说明模板 | GPL-2.0 |
 | [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) | KernelSU 变体本体 | GPL-3.0 |
@@ -502,5 +506,13 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 
 ## 🙏 致谢
 
-感谢所有上游作者的开源工作——本仓库只是把他们的成果拼装成自己用着顺手的样子。
-有任何问题请在本仓库反馈，**不要去打扰上游作者**。
+本仓库能存在，完全站在上游作者们的肩膀上——内核构建矩阵、SUSFS 适配、KPM 修补、管理器分发，这些硬核工作没有一样是本仓库作者完成的，所有功劳与敬意归于他们：
+
+- **[zzh20188](https://github.com/zzh20188)**（[酷安主页](http://www.coolapk.com/u/11253396)，仅作致敬）—— 本仓库的基座，构建矩阵与脚本的绝大部分工作出自他手；
+- **[ShirkNeko](https://github.com/ShirkNeko)** —— KPM 镜像修补与本地 CLI 设计；
+- **[coolzyd](https://github.com/coolzyd9107)** —— Release 呈现方式；
+- 以及 [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra)、[susfs4ksu](https://gitlab.com/simonpunk/susfs4ksu)、[KernelSU](https://kernelsu.org/)、[AnyKernel3](https://github.com/WildKernels/AnyKernel3) 等项目的所有贡献者。
+
+本仓库作者（借助 AI）所做的只是把上述成果拼装成自己用着顺手的样子。
+
+**遇到本仓库的任何问题，请在本仓库反馈，不要以任何方式打扰上游作者**——他们没有参与本仓库的修改，也不应为本仓库的问题买单。
