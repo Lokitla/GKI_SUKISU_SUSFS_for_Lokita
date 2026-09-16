@@ -180,18 +180,18 @@ compares it against the value recorded on this repository's `sha` branch:
 2. No new commit → do nothing, no runner minutes burned;
 3. Commit SHA unavailable (API rate limit) → fail fast instead of building with an empty value.
 
-**By default only Android 16 (6.12) is built as a smoke test**, not all 80 versions at once.
-The reason is practical: a full run means 80 jobs pulling kernel source from
-`android.googlesource.com` simultaneously — real load on upstream, and a good way to burn
-runner minutes on a commit that may not even compile. Once a new commit looks healthy, run
-**构建内核** manually with the full matrix.
+**By default only the 4 sub-levels of Android 16 (6.12) are built as a smoke test**, not all
+80 versions at once. The reason is practical: a full run means 80 jobs pulling kernel source
+from `android.googlesource.com` simultaneously — real load on upstream, and a good way to
+burn runner minutes on a commit that may not even compile. Once a new commit looks healthy,
+run **构建内核** manually with the full matrix.
 
 Manual runs accept three inputs:
 
 | Input | Description | Default |
 |---|---|---|
 | `force` | Trigger even when no new commit was detected | false |
-| `build_scope` | `单版本验证` (single) / `全部版本` (all) / `不构建` (none) | `单版本验证` |
+| `build_scope` | `仅 6.12 冒烟` (6.12 only) / `全部版本` (all) / `不构建` (none) | `仅 6.12 冒烟` |
 | `release_type` | `Release` / `Pre-Release` / `Actions` | `Release` |
 
 > Requires **Settings → Actions → Workflow permissions** to be `Read and write`,

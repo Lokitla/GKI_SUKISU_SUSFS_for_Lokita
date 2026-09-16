@@ -25,9 +25,9 @@ on:
       build_scope:
         description: 检测到更新后要构建的范围
         type: choice
-        default: 单版本验证
+        default: 仅 6.12 冒烟
         options:
-          - 单版本验证
+          - 仅 6.12 冒烟
           - 全部版本
           - 不构建
       release_type:
@@ -137,7 +137,7 @@ jobs:
         if: steps.compare.outputs.new_commit == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SCOPE: ${{ inputs.build_scope || '单版本验证' }}
+          SCOPE: ${{ inputs.build_scope || '仅 6.12 冒烟' }}
           RELEASE_TYPE: ${{ inputs.release_type || 'Release' }}
         run: |
           set -euo pipefail
@@ -152,7 +152,7 @@ jobs:
               echo "本次只更新 sha 分支，不触发构建"
               exit 0
               ;;
-            *)  # 单版本验证
+            *)  # 仅 6.12 冒烟
               BUILD_ALL=false
               BUILD_A16=true
               ;;
