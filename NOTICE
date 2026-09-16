@@ -40,9 +40,13 @@ GKI_SUKISU_SUSFS_for_Lokita
 
   ShirkNeko/GKI_KernelSU_SUSFS
     用途：KPM 镜像修补流程、本地构建 CLI 设计参考
-    许可：该仓库未附带许可证文件。按其未声明许可的默认含义，
-          其中代码的再分发权利并未显式授予。本仓库仅吸收其构建思路，
-          并在本文件中如实标注来源；若作者提出异议，将立即移除相关内容。
+    许可：该仓库本身未附带许可证文件（GitHub 显示无许可）。
+          但已核实：它是 WildKernels/GKI_KernelSU_SUSFS 的 fork（GitHub API 的
+          parent 字段确认），而 WildKernels 的许可为 GPL-3.0-or-later。依据 GPL 的
+          传染性，作为其衍生作品的该仓库代码在许可上应被 GPL-3.0-or-later 覆盖，
+          本仓库据此按 GPL-3.0-or-later 使用移植自它的 KPM 镜像修补实现。
+          本仓库仍如实标注来源；若作者提出异议或对许可另有说明，将立即调整或
+          移除相关内容。
 
 [内核与 Root 组件]
 

@@ -877,6 +877,27 @@ jobs:
 
           </details>
 
+          <details>
+          <summary>源码与许可（GPL 合规声明）</summary>
+
+          本次发布的内核镜像与刷机包由下列开源项目构成，均遵循 GPL 及其兼容许可。
+          依据许可要求，对应的完整源码可从以下来源获取：
+
+          | 组件 | 获取方式 | 许可 |
+          |:---|:---|:---|
+          | 本仓库（构建脚本 / 补丁 / 配置） | ${{ github.server_url }}/${{ github.repository }} | GPL-2.0 |
+          | GKI 内核源码 | AOSP \`kernel/common\`（版本与补丁级别见文件名） | GPL-2.0（含 Linux syscall 例外） |
+          | $KSU_NAME | $KSU_URL | GPL-3.0 |
+          | SUSFS | 见上方「上游提交信息」中的 commit 链接 | GPL-3.0 |
+          | AnyKernel3 刷机包模板 | https://github.com/WildKernels/AnyKernel3 | BSD-3-Clause 风格（内含 magiskboot / magiskpolicy 为 GPL-3.0+） |
+          | KernelSU 管理器 | $KSU_URL 的官方发布页 | 随上游 |
+
+          - 完整归属与许可证清单见 [NOTICE](${{ github.server_url }}/${{ github.repository }}/blob/main/NOTICE)。
+          - 二次分发本发布中的任何二进制文件，需同样遵守上述许可：保留声明、同许可分发，并向接收者提供源码获取方式。
+          - 若上述链接失效，可在本仓库提 Issue 索取对应源码。
+
+          </details>
+
           ---
 
           推荐模块：https://github.com/sidex15/ksu_module_susfs
