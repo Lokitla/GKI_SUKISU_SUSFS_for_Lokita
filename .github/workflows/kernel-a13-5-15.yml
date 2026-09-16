@@ -69,12 +69,12 @@ on:
         description: "启用 ZRAM 增强算法"
         required: true
         type: boolean
-        default: true
+        default: false
       use_bbg:
         description: "启用 BBG 防格机"
         required: true
         type: boolean
-        default: true
+        default: false
       use_rekernel:
         description: "启用 Re-Kernel 驱动"
         required: false
@@ -84,7 +84,7 @@ on:
         description: "应用 CVE-2026-43499 rtmutex 修复链"
         required: false
         type: boolean
-        default: true
+        default: false
       droidspaces_ntsync:
         description: "启用 NTSync 支持（需先启用 Droidspaces）"
         required: false
@@ -143,7 +143,7 @@ on:
       cve_2026_43499_patch:
         required: false
         type: boolean
-        default: true
+        default: false
       enable_susfs:
         description: "集成 SUSFS"
         required: false

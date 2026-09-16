@@ -75,22 +75,23 @@ The following features were merged from
 | **Split manager artifacts** | The normal and Spoofed managers are uploaded as two separate artifacts instead of one combined archive | Always on |
 | **Standalone SUSFS switch** | The three-state "KernelSU / SUSFS mode" picker is now a simple "Integrate SUSFS" checkbox (plain GKI is no longer offered) | Actions: `enable_susfs` |
 
-### Defaults aligned with ShirkNeko's recommended setup
+Defaults below are aligned with the actual values in `build-kernels.yml` / `kernel-build.yml`
+on the **main branch of [ShirkNeko/GKI_KernelSU_SUSFS](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS)**
+(note: not any private fork):
 
-Upstream zzh ships everything disabled. Here each option is aligned with ShirkNeko's
-"SukiSU + SUSFS + KPM + LZ4KD + BBG + GhostLock CVE" recommendation:
-
-| Option | Old default | New default |
+| Option | This fork | ShirkNeko upstream |
 |---|---|---|
-| KernelSU variant | `ReSukiSU` | **`SukiSU`** |
-| Integrate SUSFS | Off (same) | **On** |
-| KPM | `disabled` | **`enabled` (with image patching)** |
-| ZRAM (LZ4KD) | Off | **On** |
-| BBG security patch | Off | **On** |
-| CVE-2026-43499 fix | Off | **On** |
-| Telegram notification | Off | **On** (skipped when secrets are missing) |
-| Spoofed manager | — | **On** |
-| Release type (Build kernel) | `Actions` (no release) | **`Release`** |
+| KernelSU variant | **`SukiSU`** | `Stable` (no variant picker) |
+| Integrate SUSFS | **On** | built in, no separate switch |
+| KPM | **`enabled`** (with image patching) | `true` |
+| ZRAM (LZ4KD) | **Off** | `false` |
+| BBG security patch | **Off** | `false` |
+| CVE-2026-43499 fix | **Off** | not offered upstream (kept here as an option) |
+| BBR congestion control | Off | `false` |
+| OnePlus 8E support | Off | `false` |
+| Telegram notification | **On** | `true` (skipped when secrets are missing) |
+| Spoofed manager | **On** | `true` |
+| Release type (Build kernel) | **`Release`** | `make_release: true` |
 
 > **About releases:** upstream hard-coded the "create release" job to run only in `zzh20188/GKI_KernelSU_SUSFS`, so a fork could never publish one. That restriction has been removed here, and publishing is now the default: `Release type` in the **Build kernel** workflow defaults to `Release`. Pick `Actions` if you only want artifacts without creating a release.
 
@@ -121,7 +122,7 @@ GhostLock is a pair of high-risk Linux kernel vulnerabilities tracked as `CVE-20
 
 The vulnerability cannot be triggered directly over the network. However, a malicious application, untrusted code in a shared environment, or an attacker who already gained code execution through another vulnerability can use GhostLock as the next step. Extra care should therefore be taken with applications, modules, and scripts from unknown sources.
 
-This project can check and apply the complete fix when building kernels 5.10, 5.15, 6.1, 6.6, and 6.12. The option is **enabled by default** (aligned with ShirkNeko's recommended setup). Uncheck `CVE-2026-43499 rtmutex fix chain` when starting a build if you do not want GhostLock protection. Both vulnerability fixes must be present together, and the workflow handles this automatically. Kernels that already contain the complete fix are not patched again.
+This project can check and apply the complete fix when building kernels 5.10, 5.15, 6.1, 6.6, and 6.12. The option is **disabled by default** (ShirkNeko upstream does not carry this fix). Enable `CVE-2026-43499 rtmutex fix chain` when starting a build to include GhostLock protection. Both vulnerability fixes must be present together, and the workflow handles this automatically. Kernels that already contain the complete fix are not patched again.
 
 The fix has passed a [full build validation covering 84 kernel versions](https://github.com/zzh20188/GKI_KernelSU_SUSFS/actions/runs/29509099128). For vulnerability details, affected systems, public exploits, and mitigation guidance, read CIQ's article: [GhostLock Mitigation](https://kb.ciq.com/article/rocky-linux/rl-ghostlock-mitigation).
 

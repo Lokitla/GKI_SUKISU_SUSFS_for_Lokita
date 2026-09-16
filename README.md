@@ -113,19 +113,22 @@ Wiki 涵盖内容：
 
 ### 默认值已对齐 ShirkNeko 推荐配置
 
-原 zzh 上游默认全是关闭，这里逐项对齐 ShirkNeko 那套「SukiSU + SUSFS + KPM + LZ4KD + BBG + GhostLock CVE」推荐组合：
+默认值对齐 [ShirkNeko/GKI_KernelSU_SUSFS](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) 原仓库 main 分支
+`build-kernels.yml` / `kernel-build.yml` 的实际配置（注意：**不是**任何私人 fork）：
 
-| 选项 | 原默认 | 现默认 |
+| 选项 | 本分支默认 | ShirkNeko 原仓库 |
 |---|---|---|
-| KernelSU 变体 | `ReSukiSU` | **`SukiSU`** |
-| 集成 SUSFS | 关闭（等同） | **开启** |
-| KPM | `disabled` | **`enabled`（含镜像修补）** |
-| ZRAM (LZ4KD) | 关闭 | **开启** |
-| BBG 安全补丁 | 关闭 | **开启** |
-| CVE-2026-43499 修复 | 关闭 | **开启** |
-| Telegram 通知 | 关闭 | **开启**（未配 secrets 则自动跳过） |
-| Spoofed 管理器 | — | **开启** |
-| 发布类型（构建内核） | `Actions`（不发 Release） | **`Release`** |
+| KernelSU 变体 | **`SukiSU`** | `Stable(标准)`（无变体选项） |
+| 集成 SUSFS | **开启** | 内置，无独立开关 |
+| KPM | **`enabled`（含镜像修补）** | `true` |
+| ZRAM (LZ4KD) | **关闭** | `false` |
+| BBG 安全补丁 | **关闭** | `false` |
+| CVE-2026-43499 修复 | **关闭** | 无此选项（本分支保留为可选） |
+| BBR 拥塞控制 | 关闭 | `false` |
+| 一加 8E 支持 | 关闭 | `false` |
+| Telegram 通知 | **开启** | `true`（未配 secrets 则自动跳过） |
+| Spoofed 管理器 | **开启** | `true` |
+| 发布类型（构建内核） | **`Release`** | `make_release: true` |
 
 > **关于 Release：** 原上游把「创建 Release」这一步硬编码成只在 `zzh20188/GKI_KernelSU_SUSFS` 仓库执行，
 > fork 后永远发不出来。本分支已去掉该限制，并把默认改成发布：在 **构建内核** 里 `发布类型` 现在默认为 `Release`，
@@ -158,7 +161,7 @@ GhostLock 是影响 Linux 内核的一组高风险漏洞，包括 `CVE-2026-4349
 
 该漏洞不能直接从网络远程触发，但恶意应用、共享运行环境中的不可信程序，或者已经通过其他漏洞取得代码执行能力的攻击者，都可以进一步利用它。因此，安装来源不明的应用、模块或脚本时尤其需要注意。
 
-本项目支持在构建 5.10、5.15、6.1、6.6 和 6.12 内核时检查并应用完整修复。该选项默认开启（对齐 ShirkNeko 的推荐配置），不需要 GhostLock 防护时取消勾选 `CVE-2026-43499 rtmutex 修复链` 即可。两个漏洞的修复必须同时存在，工作流会自动处理这一点；已经包含完整修复的内核不会重复打补丁。
+本项目支持在构建 5.10、5.15、6.1、6.6 和 6.12 内核时检查并应用完整修复。该选项默认关闭（ShirkNeko 原仓库没有携带该修复），如需加入 GhostLock 防护，请在触发构建时手动开启 `CVE-2026-43499 rtmutex 修复链`。两个漏洞的修复必须同时存在，工作流会自动处理这一点；已经包含完整修复的内核不会重复打补丁。
 
 该修复已完成 [84 个内核版本的全量构建验证](https://github.com/zzh20188/GKI_KernelSU_SUSFS/actions/runs/29509099128)。如果想了解漏洞原理、受影响范围、公开利用和缓解措施，请阅读 CIQ 的详细文章：[GhostLock Mitigation](https://kb.ciq.com/article/rocky-linux/rl-ghostlock-mitigation)。
 

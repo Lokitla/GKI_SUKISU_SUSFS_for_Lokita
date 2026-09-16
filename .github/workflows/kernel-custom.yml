@@ -94,12 +94,12 @@ on:
         description: "启用 ZRAM 增强算法"
         required: true
         type: boolean
-        default: true
+        default: false
       use_bbg:
         description: "启用 BBG 防格机"
         required: true
         type: boolean
-        default: true
+        default: false
       use_rekernel:
         description: "启用 Re-Kernel 驱动"
         required: false
@@ -109,7 +109,7 @@ on:
         description: "应用 CVE-2026-43499 rtmutex 修复链"
         required: false
         type: boolean
-        default: true
+        default: false
       supp_op:
         description: "启用一加 8E 支持（非一加勿开）"
         required: false
