@@ -490,7 +490,7 @@ stage_apply_stock_config() {
 
   if [ ! -f "$STOCK_SRC" ]; then
     echo "未检测到 $STOCK_SRC，跳过 Stock Config 伪装。"
-    exit 0
+    return 0
   fi
 
   mkdir -p "$(dirname "$STOCK_DST")"
@@ -745,7 +745,8 @@ stage_config_sukisu_manager() {
 
   if [ ! -f "$KBUILD_FILE" ]; then
     echo "未找到 $KBUILD_FILE，跳过 SukiSU 版本标识定制"
-    exit 0
+    cd "$_pwd"
+    return 0
   fi
 
   GIT_HASH=$(git rev-parse --short=8 HEAD)
@@ -978,7 +979,8 @@ stage_integrate_droidspaces() {
       ;;
     *)
       echo "::warning::Droidspaces: 未适配的内核版本 $KERNEL_VER，跳过补丁"
-      exit 0
+      cd "$_pwd"
+      return 0
       ;;
   esac
   if ! patch -p1 --forward < "$PATCH_FILE"; then
@@ -1125,7 +1127,8 @@ stage_inject_ntsync() {
       ;;
     *)
       echo "::warning::NTSync: 未适配 ${ANDROID_VERSION} / ${KERNEL_VERSION}，跳过补丁"
-      exit 0
+      cd "$_pwd"
+      return 0
       ;;
   esac
 
@@ -1765,11 +1768,30 @@ stage_patch_kpm_image() {
 
   cd "$image_dir"
   echo "在 $image_dir 执行 KPM 镜像修补"
+
+  if [ ! -s Image ]; then
+    echo "::warning::Image 不存在或为空，跳过 KPM 修补"
+    cd "$_pwd"
+    return 0
+  fi
+  orig_size=$(stat -c %s Image)
+
   if curl -LSs "$KPM_PATCH_URL" -o patch && chmod 777 patch; then
     ./patch || echo "::warning::KPM 修补脚本返回非零，请查看上方输出"
     if [ -f oImage ]; then
-      mv oImage Image
-      echo "已用修补产物 oImage 替换 Image"
+      # 安全性校验：修补产物必须与原始 Image 体积相当。
+      # patch 工具失败时会产出一个很小的残缺 oImage，一旦直接替换，
+      # 后续打包出的 AnyKernel3 里就会是一个几百 KB 的假内核。
+      new_size=$(stat -c %s oImage)
+      if [ "$new_size" -lt $((orig_size * 80 / 100)) ]; then
+        echo "::warning::oImage 体积异常（原始 ${orig_size} 字节 -> 修补后 ${new_size} 字节），判定为修补失败，保留原始 Image"
+        rm -f oImage
+      else
+        mv oImage Image
+        echo "已用修补产物 oImage 替换 Image（${orig_size} -> ${new_size} 字节）"
+      fi
+    else
+      echo "::warning::未生成 oImage，KPM 修补未生效，保留原始 Image"
     fi
   else
     echo "::warning::下载 KPM 修补工具失败，跳过（不影响其余产物）"
@@ -1791,6 +1813,21 @@ stage_prepare_boot() {
   else
     SRC_DIR="$KERNEL_ROOT/bazel-bin/common/kernel_aarch64"
   fi
+
+  # 兜底校验：走到这一步时 Image 必须已编译出来且体积合理。
+  # 曾经因为上游阶段误用 exit 0 提前"成功"退出，编译一次都没跑却照样打包，
+  # 产出一个只含 AnyKernel3 模板的空壳刷机包，因此这里做硬性体积校验。
+  if [ ! -s "$SRC_DIR/Image" ]; then
+    echo "::error::未找到内核镜像: $SRC_DIR/Image（编译可能并未真正执行）"
+    return 1
+  fi
+  IMAGE_SIZE=$(stat -c %s "$SRC_DIR/Image")
+  MIN_IMAGE_SIZE=$((10 * 1024 * 1024))
+  if [ "$IMAGE_SIZE" -lt "$MIN_IMAGE_SIZE" ]; then
+    echo "::error::内核镜像体积异常: ${IMAGE_SIZE} 字节（预期大于 10MB），拒绝打包"
+    return 1
+  fi
+  echo "内核镜像校验通过: ${IMAGE_SIZE} 字节"
 
   cp "$SRC_DIR/Image" ./bootimgs/
   cp "$SRC_DIR/Image.lz4" ./bootimgs/
