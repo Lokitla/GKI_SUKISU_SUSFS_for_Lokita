@@ -480,7 +480,10 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 | [WildKernels/AnyKernel3](https://github.com/WildKernels/AnyKernel3) | 刷机包模板 | 仓库内附 |
 
 **本仓库主体采用 GPL-2.0**，与主要上游保持一致；其中本仓库新增的脚本与文档部分
-按 GPL-2.0-or-later 分发，以便与 GPL-3.0 组件共存。完整正文见 [LICENSE](LICENSE)。
+按 GPL-2.0-or-later 分发，以便与 GPL-3.0 组件共存。
+
+[LICENSE](LICENSE) 保持 GPL-2.0 原文不做改动（改动会让 GitHub 识别不出许可证），
+归属与兼容性说明全部写在 [NOTICE](NOTICE) 里。
 
 如果你是上游作者，认为归属描述有误，请在本仓库提 Issue，我会立即更正。
 

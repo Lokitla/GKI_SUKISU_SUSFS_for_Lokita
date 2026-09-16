@@ -421,7 +421,10 @@ This repository is a fusion. The full list lives in [NOTICE](NOTICE); the main s
 
 **This repository is GPL-2.0 as a whole**, matching its primary upstreams. The scripts and
 docs newly added here are distributed under GPL-2.0-or-later so they can coexist with the
-GPL-3.0 components. Full text: [LICENSE](LICENSE).
+GPL-3.0 components.
+
+[LICENSE](LICENSE) is kept as the verbatim GPL-2.0 text (editing it breaks GitHub's licence
+detection); attribution and compatibility notes all live in [NOTICE](NOTICE).
 
 If you are an upstream author and believe any attribution is wrong, please open an issue
 here and it will be corrected immediately.

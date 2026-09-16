@@ -11,6 +11,9 @@ GKI_SUKISU_SUSFS_for_Lokita
 本仓库主体采用 GNU General Public License v2.0（GPL-2.0），完整文本见 LICENSE。
 该选择用于与主要上游 zzh20188/GKI_KernelSU_SUSFS 保持一致。
 
+注意：LICENSE 文件保持 GPL-2.0 原文、不做任何增删改，以便 GitHub 的许可证
+识别工具能正确判定；所有补充说明都放在本文件（NOTICE）与 README 中。
+
 构建产物（内核镜像、AnyKernel3 刷机包、boot 镜像）由下列上游代码编译而来，
 其分发行受各自许可证约束，且受 Linux 内核 GPL-2.0 的衍生作品条款约束。
 
