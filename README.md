@@ -86,6 +86,10 @@ GitHub Actions 与本地 `build.py` 共用这一份 45 阶段脚本，不存在�
 
 **刷机只需要 AnyKernel3 那个包**，里面的 `Image` 由 `anykernel.sh` 在设备上现场处理。
 
+> 产物上传模式（`ARTIFACT_UPLOAD_MODE`）：除「上传全部」外，还可选「仅 AnyKernel3」——
+> 只上传刷机包、不上传三个 boot 镜像，适合只需要刷机包的场景，更省 Release 体积。
+> （`main.yml` 默认走「上传全部」全矩阵；`kernel-custom.yml` 默认走「仅 AnyKernel3」。）
+
 三个 boot 镜像的区别在于内核部分的压缩方式，供 `fastboot flash boot` 直接刷入时使用：
 
 | 文件 | 内核压缩 | 适用 |
@@ -168,7 +172,7 @@ Wiki 涵盖内容：
 | **Telegram 通知** | 构建完成后推送消息与产物校验值到 TG | Actions: `send_telegram` |
 | **Release 缓存** | 用 GitHub Release 存 ccache，突破 `actions/cache` 的容量与过期限制 | Actions: `use_release_cache` |
 | **Spoofed 管理器开关** | 可单独控制是否一并拉取伪装官方包名的 SukiSU 管理器 APK | Actions: `manager_spoofed` |
-| **KPM 镜像修补** | 编译完成后对 `Image` 打 KPM 补丁（移植自 ShirkNeko 的 `patch_kpm_image`），仅 5.x 有效，6.6 自动跳过 | Actions: `use_kpm` 选 `enabled` / `patched` |
+| **KPM 镜像修补** | 编译完成后对 `Image` 打 KPM 补丁（移植自 ShirkNeko 的 `patch_kpm_image`），5.x 与 6.1 有效，6.6 自动跳过 | Actions: `use_kpm` 选 `enabled` / `patched` |
 | **管理器拆分为两个产物** | 普通管理器与 Spoofed 管理器各自成为独立产物，不再混在一个压缩包里 | 默认生效 |
 | **SUSFS 独立开关** | 原「KernelSU / SUSFS 模式」三态选择简化为「集成 SUSFS」勾选框（不再提供纯净 GKI） | Actions: `enable_susfs` |
 
@@ -218,8 +222,11 @@ Wiki 涵盖内容：
 2. 无新提交 → 什么都不做，不消耗 Runner 时长；
 3. 拿不到提交号（API 限流）→ 直接失败退出，不会带着空值去构建。
 
-**默认跑「全部版本」**：5.10 + 5.15 + 6.1 + 6.6 的全矩阵，共
+**默认跑「全部版本」**：5.10 + 5.15 + 6.1 + 6.6 的默认矩阵，共约
 **22 + 20 + 23 + 15 = 80 个内核版本**（与上游 zzh 每次 Release 的数量一致）。
+> 注：以上仅含默认启用的 5.10–6.6 矩阵；勾选 `include_612` 会再纳入 6.12 的 4 个版本。
+> `data/` 目录下共 **126 条**版本定义（5.10=36 / 5.15=35 / 6.1=32 / 6.6=16 / 6.12=7），
+> 本地 `build.py --all` 即基于此全集构建。
 构建配置固定为 **KPM `patched`（开启并修补）+ ZRAM (LZ4KD) 开启**，其余增强项（BBG / Re-Kernel / BBR 等）关闭。
 想省时间时手动选「单版本冒烟」，只编 5.10.66 一个。
 

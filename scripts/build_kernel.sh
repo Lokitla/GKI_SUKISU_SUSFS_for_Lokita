@@ -51,7 +51,8 @@ esac
 # [融合] KPM 镜像修补工具，移植自 ShirkNeko/GKI_KernelSU_SUSFS (scripts/config.py)
 # ShirkNeko/SukiSU_patch 已改名为 SukiSU-Ultra/SukiSU_patch，旧路径目前靠 301 跳转苟活，
 # 直接指向新名字，免得哪天跳转撤掉就整片构建一起挂。
-: "${KPM_PATCH_URL:=https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux}"
+# P1-2 修复：供应链固定到具体 commit（防上游接管）。定期 bump 到此仓库最新稳定 commit。
+: "${KPM_PATCH_URL:=https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/547ae94bcaec53d030398f857950c64662043a5d/kpm/patch_linux}"
 : "${WORKSPACE:=$(pwd)}"
 : "${COMPILE_TIMEOUT_MINUTES:=30}"
 : "${COMPILE_MAX_ATTEMPTS:=3}"
@@ -266,7 +267,7 @@ stage_install_deps() {
   log_stage "install_deps" "安装编译依赖"
   local _pwd="$PWD"
   sudo apt-get update
-  sudo apt-get install -y ccache python3 git curl build-essential libssl-dev bison flex libelf-dev dwarves
+  sudo apt-get install -y ccache python3 git curl build-essential libssl-dev bison flex libelf-dev dwarves lz4
 
   cd "$_pwd"
 }
@@ -310,7 +311,15 @@ run_download_toolchain() {
 stage_gen_sign_key() {
   log_stage "gen_sign_key" "生成签名密钥"
   local _pwd="$PWD"
-  openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 > $BOOT_SIGN_KEY_PATH
+  # P2-5 修复：复用已有密钥以保证 boot 签名可复现，仅在缺失时生成；公钥归档便于审计
+  if [ -s "$BOOT_SIGN_KEY_PATH" ]; then
+    echo "复用已有签名密钥: $BOOT_SIGN_KEY_PATH"
+  else
+    openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 > "$BOOT_SIGN_KEY_PATH"
+    echo "已生成新签名密钥: $BOOT_SIGN_KEY_PATH"
+  fi
+  mkdir -p "$WORKSPACE/build-logs"
+  openssl rsa -in "$BOOT_SIGN_KEY_PATH" -pubout -out "$WORKSPACE/build-logs/boot_sign_key.pub" 2>/dev/null || true
 
   cd "$_pwd"
 }
@@ -405,6 +414,30 @@ stage_sync_kernel_source() {
   local _pwd="$PWD"
   cd ${KERNEL_ROOT}
   FORMATTED_BRANCH="${ANDROID_VERSION}-${KERNEL_VERSION}-${OS_PATCH_LEVEL}"
+  # P1-4 调研结论（2026-09）：AOSP common 内核确有 -lts 后缀分支（如 android14-6.1-lts，
+  # 由 android14-6.1 定期合并上游 LTS 而来），当前 FORMATTED_BRANCH 拼接正确，LTS 可正常 sync。
+  # 故 sync 无需特判/映射，保留现有逻辑。
+  # P2-8：LTS 时 SUB_LEVEL 为字面量 X，此处从 data json 解析真实 lts 版本号替换之，
+  # 使产物名（如 android14-6.1.177-lts-AnyKernel3.zip）可读可分发。
+  if [ "${OS_PATCH_LEVEL}" = "lts" ]; then
+    LTS_JSON="$WORKSPACE/data/${ANDROID_VERSION}/${KERNEL_VERSION}.json"
+    if [ -f "$LTS_JSON" ]; then
+      LTS_FULL=$(python3 -c "import json,sys
+try:
+    print(json.load(open('$LTS_JSON')).get('lts',''))
+except Exception:
+    pass" 2>/dev/null)
+      if [ -n "$LTS_FULL" ]; then
+        SUB_LEVEL="${LTS_FULL##*.}"
+        export SUB_LEVEL
+        echo "LTS 真实版本: ${LTS_FULL}（sub level ${SUB_LEVEL}）"
+      else
+        echo "::warning::data json 未含 lts 字段，LTS 产物名保留字面量 X"
+      fi
+    else
+      echo "::warning::未找到 $LTS_JSON，LTS 产物名保留字面量 X"
+    fi
+  fi
   MAX_ATTEMPTS=3
   RETRY_DELAY=15
   SYNC_TIMEOUT=15m
@@ -726,7 +759,10 @@ stage_add_kernelsu() {
   case "${KSU_VARIANT}" in
     "Official")
       echo "添加 KernelSU 官方版..."
-      curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash $BRANCH
+      # P1-2 修复：供应链固定到具体 commit（防上游接管），下载后显式校验再执行
+      KSU_SETUP="https://raw.githubusercontent.com/tiann/KernelSU/3a7ac9dc0dc8c0b573fd4eb4836fd0860ef4242e/kernel/setup.sh"
+      if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 KernelSU 官方 setup.sh 失败"; return 1; fi
+      bash /tmp/ksu_setup.sh $BRANCH || { echo "::error::KernelSU 官方 setup.sh 执行失败"; return 1; }
 
       cd KernelSU
       KSU_GIT_VERSION=$(git rev-list --count HEAD)
@@ -740,15 +776,24 @@ stage_add_kernelsu() {
       ;;
     "Next")
       echo "添加 KernelSU-Next..."
-      curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/refs/heads/dev/kernel/setup.sh" | bash -s dev_susfs
+      # P1-2 修复：供应链固定到具体 commit，下载后显式校验再执行
+      KSU_SETUP="https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/f9a69951d3b6db7f0904688da08658da646b2368/kernel/setup.sh"
+      if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 KernelSU-Next setup.sh 失败"; return 1; fi
+      bash /tmp/ksu_setup.sh -s dev_susfs || { echo "::error::KernelSU-Next setup.sh 执行失败"; return 1; }
       ;;
     "SukiSU")
       echo "添加 ${KSU_VARIANT}..."
-      curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash $BRANCH
+      # P1-2 修复：供应链固定到具体 commit，下载后显式校验再执行
+      KSU_SETUP="https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/7755cdb36f63945f286d7b1cab662b42b18f2789/kernel/setup.sh"
+      if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 SukiSU setup.sh 失败"; return 1; fi
+      bash /tmp/ksu_setup.sh $BRANCH || { echo "::error::SukiSU setup.sh 执行失败"; return 1; }
       ;;
     "ReSukiSU")
       echo "添加 ReSukiSU..."
-      curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash $BRANCH
+      # P1-2 修复：供应链固定到具体 commit，下载后显式校验再执行
+      KSU_SETUP="https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/6d674e50a022a85076dcfe4498af9a8bfead2cf9/kernel/setup.sh"
+      if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 ReSukiSU setup.sh 失败"; return 1; fi
+      bash /tmp/ksu_setup.sh $BRANCH || { echo "::error::ReSukiSU setup.sh 执行失败"; return 1; }
       ;;
     *)
       if [ -z "$LEGACY_SUKISU_CONFIG" ]; then
@@ -756,7 +801,10 @@ stage_add_kernelsu() {
         exit 1
       fi
       echo "添加 ${KSU_VARIANT}..."
-      curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash $BRANCH
+      # P1-2 修复：供应链固定到具体 commit，下载后显式校验再执行
+      KSU_SETUP="https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/7755cdb36f63945f286d7b1cab662b42b18f2789/kernel/setup.sh"
+      if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 SukiSU setup.sh 失败"; return 1; fi
+      bash /tmp/ksu_setup.sh $BRANCH || { echo "::error::SukiSU setup.sh 执行失败"; return 1; }
       ;;
   esac
 
@@ -1179,11 +1227,12 @@ stage_inject_ntsync() {
   esac
 
   echo "自动选择 NTSync 补丁: ${NTSYNC_PATCH}.patch"
-  wget -q "https://raw.githubusercontent.com/Goldzxcbug/Droidspaces_Kernel_patch/refs/heads/main/NTsync/ntsync_base.patch"
-  wget -q "https://raw.githubusercontent.com/Goldzxcbug/Droidspaces_Kernel_patch/refs/heads/main/NTsync/${NTSYNC_PATCH}.patch"
+  wget -q -O ntsync_base.patch "https://raw.githubusercontent.com/Goldzxcbug/Droidspaces_Kernel_patch/refs/heads/main/NTsync/ntsync_base.patch" || { echo "::error::下载 ntsync_base.patch 失败"; exit 1; }
+  wget -q -O "${NTSYNC_PATCH}.patch" "https://raw.githubusercontent.com/Goldzxcbug/Droidspaces_Kernel_patch/refs/heads/main/NTsync/${NTSYNC_PATCH}.patch" || { echo "::error::下载 ${NTSYNC_PATCH}.patch 失败"; exit 1; }
 
-  patch -p1 < "ntsync_base.patch"
-  patch -p1 < "${NTSYNC_PATCH}.patch"
+  # P2-2 修复：补丁来自未钉版本的 main 分支，下载/应用失败必须显式报错而非静默跳过
+  patch -p1 --forward < "ntsync_base.patch" || { echo "::error::应用 ntsync_base.patch 失败"; exit 1; }
+  patch -p1 --forward < "${NTSYNC_PATCH}.patch" || { echo "::error::应用 ${NTSYNC_PATCH}.patch 失败"; exit 1; }
 
   cd ..
 
@@ -1389,9 +1438,21 @@ stage_add_bbg() {
   log_stage "add_bbg" "添加 BBG 防格机补丁"
   local _pwd="$PWD"
   cd ${KERNEL_ROOT}
-  wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
+  # P2-10 修复：下载/执行失败必须显式报错；Kconfig 修改前备份，失败/未命中即回滚提示
+  BBG_SETUP="https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh"
+  if ! wget -q -O /tmp/bbg_setup.sh "$BBG_SETUP"; then
+    echo "::error::下载 BBG setup.sh 失败"; return 1
+  fi
+  if ! bash /tmp/bbg_setup.sh; then
+    echo "::error::BBG setup.sh 执行失败"; return 1
+  fi
   echo "CONFIG_BBG=y" >> common/arch/arm64/configs/gki_defconfig
-  sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' common/security/Kconfig
+  cp common/security/Kconfig /tmp/security.Kconfig.bak
+  if ! sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' common/security/Kconfig; then
+    echo "::warning::BBG 修改 security/Kconfig 失败，已回滚"; cp /tmp/security.Kconfig.bak common/security/Kconfig
+  elif ! grep -q "baseband_guard" common/security/Kconfig; then
+    echo "::warning::BBG 未匹配到 config LSM 段，security/Kconfig 可能未被修改（备份见 /tmp/security.Kconfig.bak）"
+  fi
 
   cd "$_pwd"
 }
@@ -1562,6 +1623,16 @@ run_config_susfs() {
 stage_config_kernel_name() {
   log_stage "config_kernel_name" "配置内核名称"
   local _pwd="$PWD"
+  # P1-1 修复：VERSION 会被直接内插进 perl/sed 程序文本，必须先白名单校验，
+  # 否则含 ' " | $ / 等字符可逃逸引号执行任意命令（与已修 P0-1 同类注入面）。
+  # 校验提前到 cd 之前，失败即返回，不污染后续阶段的 cwd。
+  local VERSION_INPUT
+  VERSION_INPUT=$(echo "${VERSION:-}" | tr -d '[:space:]')
+  if [ -n "$VERSION_INPUT" ]; then
+    case "$VERSION_INPUT" in
+      *[!A-Za-z0-9._-]*) echo "::error::VERSION 含非法字符，仅允许字母数字及 . _ -"; cd "$_pwd"; return 1 ;;
+    esac
+  fi
   cd ${KERNEL_ROOT}
   if [ -f "build/build.sh" ]; then
     sed -i 's/-dirty//' ./common/scripts/setlocalversion
@@ -1572,7 +1643,6 @@ stage_config_kernel_name() {
     sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" ./build/kernel/kleaf/impl/stamp.bzl
   fi
 
-  VERSION_INPUT=$(echo "${VERSION}" | tr -d '[:space:]')
   if [ -n "$VERSION_INPUT" ]; then
     CLEAN_VERSION=$(echo "$VERSION_INPUT" | sed -E 's/^[0-9]+\.[0-9]+\.[0-9]+//')
     perl -i -0777 -pe 's/(.*)echo "\$\{KERNELVERSION\}\$\{file_localversion\}\$\{config_localversion\}\$\{LOCALVERSION\}\$\{scm_version\}"/$1echo "\$\{KERNELVERSION\}'"${CLEAN_VERSION}"'"/s' ./common/scripts/setlocalversion 2>/dev/null || true
@@ -1607,7 +1677,10 @@ run_config_kernel_name() { stage_config_kernel_name "$@"; }
 stage_set_build_time() {
   log_stage "set_build_time" "设置自定义构建时间"
   local _pwd="$PWD"
-  set -euo pipefail
+  # P2-3 修复：原函数内 `set -euo pipefail` 的 -u 会泄漏到后续所有阶段
+  # （函数不创建子 shell），导致任一未绑定变量在编译后阶段莫名失败。
+  # 改为与脚本顶层一致的 -eo pipefail，去掉 -u。
+  set -eo pipefail
 
   local input_time="${BUILD_TIME:-}"
   if [[ -n "$input_time" && "$input_time" != "N" && "$input_time" != "n" ]]; then
@@ -1695,7 +1768,14 @@ compile_kernel_once() {
         find "$KERNEL_ROOT/out" -maxdepth 3 -name Image -o -maxdepth 3 -name Image.lz4 2>/dev/null | head
         exit 1
       }
-      strings "out/${ANDROID_VERSION}-${KERNEL_VERSION}/dist/Image" | grep 'Linux version'
+      # P1-5 修复：strings|grep 原本是阶段末条命令，在 set -ex 下若镜像中恰好
+      # 不含连续字符串 'Linux version'（极少见，如镜像被定制），grep 返回 1 会令
+      # 整个阶段被判失败 → 误报构建失败。改为显式校验，成功判定仍交给 build.sh 退出码。
+      if strings "out/${ANDROID_VERSION}-${KERNEL_VERSION}/dist/Image" | grep -q 'Linux version'; then
+        echo "内核版本字符串校验通过"
+      else
+        echo "::warning::dist/Image 中未找到 'Linux version' 字符串，构建仍按 build.sh 退出码判定（若镜像被定制请人工确认）"
+      fi
     else
       # 提取 gki_defconfig 修改到 fragment，避免 bazel trim 检查失败
       FRAG="common/arch/arm64/configs/ksu.fragment"
@@ -1713,7 +1793,12 @@ compile_kernel_once() {
         LTO_FLAG="--lto=none"
       fi
       tools/bazel build --disk_cache=/home/runner/.cache/bazel --config=fast $LTO_FLAG $FRAG_FLAG //common:kernel_aarch64_dist || exit 1
-      strings ./bazel-bin/common/kernel_aarch64/Image | grep 'Linux version'
+      # P1-5 修复：同上，strings|grep 不当成功闸门，改为显式校验不误报。
+      if strings ./bazel-bin/common/kernel_aarch64/Image | grep -q 'Linux version'; then
+        echo "内核版本字符串校验通过"
+      else
+        echo "::warning::bazel Image 中未找到 'Linux version' 字符串，构建仍按 bazel 退出码判定（若镜像被定制请人工确认）"
+      fi
     fi
 
     echo "当前 KSU 最新提交日期: ${KSU_LATEST_COMMIT_DATE}"
@@ -1837,9 +1922,18 @@ stage_patch_kpm_image() {
   fi
   orig_size=$(stat -c %s Image)
 
-  if curl -LSs "$KPM_PATCH_URL" -o patch && chmod 777 patch; then
-    ./patch || echo "::warning::KPM 修补脚本返回非零，请查看上方输出"
-    if [ -f oImage ]; then
+  # P1-2 修复：下载后显式校验，chmod 755（原 777 过度放权），可选 sha256 比对
+  if ! curl -LSsf "$KPM_PATCH_URL" -o patch; then
+    echo "::warning::下载 KPM 修补工具失败，跳过（不影响其余产物）"
+  else
+    chmod 755 patch
+    KPM_SHA=$(sha256sum patch | awk '{print $1}')
+    echo "KPM 修补工具 sha256: $KPM_SHA"
+    if [ -n "${EXPECTED_KPM_PATCH_SHA256:-}" ] && [ "$KPM_SHA" != "$EXPECTED_KPM_PATCH_SHA256" ]; then
+      echo "::error::KPM 修补工具 sha256 不匹配（期望 $EXPECTED_KPM_PATCH_SHA256，实际 $KPM_SHA），拒绝执行"
+    elif ! ./patch; then
+      echo "::warning::KPM 修补脚本返回非零，请查看上方输出"
+    elif [ -f oImage ]; then
       # 安全性校验：修补产物必须与原始 Image 体积相当。
       # patch 工具失败时会产出一个很小的残缺 oImage，一旦直接替换，
       # 后续打包出的 AnyKernel3 里就会是一个几百 KB 的假内核。
@@ -1854,8 +1948,6 @@ stage_patch_kpm_image() {
     else
       echo "::warning::未生成 oImage，KPM 修补未生效，保留原始 Image"
     fi
-  else
-    echo "::warning::下载 KPM 修补工具失败，跳过（不影响其余产物）"
   fi
   rm -f patch
 

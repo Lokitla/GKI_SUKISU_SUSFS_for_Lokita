@@ -158,7 +158,9 @@ jobs:
           echo "SukiSU 固定提交: $SUKISU_COMMIT"
         fi
         if [ -n "$SUSFS_COMMIT" ]; then
-          sed -i "s|^${SUSFS_BRANCH_ESC}=.*|${SUSFS_BRANCH}=$SUSFS_COMMIT|" config/config
+          # P2-4 修复：替换侧转义 &，避免 SUSFS_BRANCH 含 & 时被 sed 当作整匹配引用
+          SUSFS_BRANCH_REPL="${SUSFS_BRANCH//&/\&}"
+          sed -i "s|^${SUSFS_BRANCH_ESC}=.*|${SUSFS_BRANCH_REPL}=$SUSFS_COMMIT|" config/config
           echo "SUSFS 固定提交: $SUSFS_COMMIT"
         fi
         echo "--- config/config 生效内容 ---"

@@ -1,7 +1,7 @@
 name: GetManager
 permissions:
-  contents: write  # Allow writing to repository contents (for pushing tags)
-  actions: read   # Allows triggering actions
+  contents: read   # 仅读取仓库内容（下载管理器 APK，本作业不推送 tag）
+  actions: read    # 允许读取 actions 产物
 
 on:
   workflow_call: # This allows this workflow to be called from another workflow

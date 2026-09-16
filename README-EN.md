@@ -91,6 +91,10 @@ In `上传全部` (upload everything) mode, each kernel version is split into tw
 
 **Flashing only needs the AnyKernel3 package** — its `Image` is handled on-device by `anykernel.sh`.
 
+> Artifact upload mode (`ARTIFACT_UPLOAD_MODE`): besides `上传全部` (upload everything), you can pick `仅 AnyKernel3` (AnyKernel3 only) —
+> it uploads just the flashable zip and skips the three boot images, which saves Release space when only the flashable package is needed.
+> (`main.yml` defaults to upload-everything for the full matrix; `kernel-custom.yml` defaults to AnyKernel3 only.)
+
 The three boot images differ only in how the kernel payload is compressed; they are meant
 for `fastboot flash boot`:
 
@@ -140,7 +144,7 @@ the following features from
 | **Telegram notification** | Push build results and checksums to Telegram | Actions: `send_telegram` |
 | **Release cache** | Store ccache in GitHub Releases, bypassing `actions/cache` size and expiry limits | Actions: `use_release_cache` |
 | **Spoofed manager toggle** | Choose whether to also fetch the SukiSU manager APK disguised as the official KernelSU package name | Actions: `manager_spoofed` |
-| **KPM image patching** | Patch `Image` after compilation so KPM modules can load (ported from ShirkNeko's `patch_kpm_image`); 5.x only, skipped on 6.6 | Actions: `use_kpm` → `enabled` / `patched` |
+| **KPM image patching** | Patch `Image` after compilation so KPM modules can load (ported from ShirkNeko's `patch_kpm_image`); 5.x and 6.1, skipped on 6.6 | Actions: `use_kpm` → `enabled` / `patched` |
 | **Split manager artifacts** | The normal and Spoofed managers are uploaded as two separate artifacts instead of one combined archive | Always on |
 | **Standalone SUSFS switch** | The three-state "KernelSU / SUSFS mode" picker is now a simple "Integrate SUSFS" checkbox (plain GKI is no longer offered) | Actions: `enable_susfs` |
 
@@ -190,6 +194,9 @@ compares it against the value recorded on this repository's `sha` branch:
 
 **By default the full matrix runs**: 5.10 + 5.15 + 6.1 + 6.6 —
 **22 + 20 + 23 + 15 = 80 kernel versions**, matching what upstream zzh publishes per Release.
+> Note: the above covers only the default-enabled 5.10–6.6 matrix; ticking `include_612` adds 6.12's 4 versions.
+> The `data/` directory holds **126** version definitions in total (5.10=36 / 5.15=35 / 6.1=32 / 6.6=16 / 6.12=7);
+> a local `build.py --all` builds from this full set.
 The build config is fixed at **KPM `patched` (on + patched) + ZRAM (LZ4KD) on**, with the other
 enhancements (BBG / Re-Kernel / BBR, etc.) off.
 Pick `单版本冒烟` for a quick run that builds just 5.10.66.

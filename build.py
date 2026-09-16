@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parent
 SCRIPT = ROOT / "scripts" / "build_kernel.sh"
 DATA_DIR = ROOT / "data"
 
-KSU_VARIANTS = ["SukiSU", "SukiSU(40726)", "SukiSU(40548)", "ReSukiSU", "Official"]
+KSU_VARIANTS = ["SukiSU", "SukiSU(40726)", "SukiSU(40548)", "ReSukiSU", "Official", "Next"]
 DROIDSPACES_CHOICES = ["不启用", "678", "123", "345"]
 ARTIFACT_MODES = ["上传全部", "仅 AnyKernel3"]
 # CLI 的 KPM 取值 → 与 Actions 下拉选项完全一致的文案，避免两边各说各话
