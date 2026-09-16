@@ -253,8 +253,12 @@ jobs:
       if: inputs.artifact_upload_mode != '上传全部'
       uses: actions/upload-artifact@v6
       with:
+        # A-1 闭环：stage_prepare_anykernel3 生成的 zip 落在 workspace 根（../$_zip），
+        # 不在 AnyKernel3/ 目录内。上传「上传全部」分支已用 '*AnyKernel3.zip' 收集，
+        # 此处必须一致，否则 zip 生成后被静默丢弃，用户仍拿不到可刷包。
         name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}-AnyKernel3
-        path: AnyKernel3/*
+        path: '*AnyKernel3.zip'
+        if-no-files-found: warn
         compression-level: 9
     # 「上传全部」拆成两个产物：刷入包(~17MB)与启动镜像(~50MB)分开，
     # 避免下载一个 70MB 的压缩包只为拿 AnyKernel3.zip

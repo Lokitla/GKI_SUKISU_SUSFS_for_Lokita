@@ -1907,7 +1907,8 @@ rebuild_image_lz4() {
   # kbuild 用 -C objtree 重新执行 make，.cmd 里的相对路径锚在 objtree 上
   cmdfile="${kernel_root}/out/${ANDROID_VERSION}-${KERNEL_VERSION}/arch/arm64/boot/.Image.lz4.cmd"
   if [ ! -s "$cmdfile" ]; then
-    cmdfile=$(find "$kernel_root/out" -name '.Image.lz4.cmd' -print -quit 2>/dev/null)
+    # 限定到当前版本子目录，避免多 Android/Kernel 版本 out/ 共存时命中其他分支的 .cmd
+    cmdfile=$(find "$kernel_root/out/${ANDROID_VERSION}-${KERNEL_VERSION}" -name '.Image.lz4.cmd' -print -quit 2>/dev/null)
   fi
 
   if [ -n "$cmdfile" ] && [ -s "$cmdfile" ]; then
@@ -1996,10 +1997,10 @@ stage_prepare_boot() {
   # Image.lz4 必须与"最终" Image 对应：KPM 镜像修补会替换 Image，
   # 沿用编译期产出的 lz4 会把未打补丁的内核打进 boot-lz4.img。
   # 重建失败（含找不到 lz4、校验不过）时不产出 lz4 镜像，宁缺勿错。
-  LZ4_KERNEL_READY=0
+  export LZ4_KERNEL_READY=0
   if rebuild_image_lz4 "$PWD/Image" "$PWD/Image.lz4" "$KERNEL_ROOT"; then
     cp ./Image.lz4 ./bootimgs/
-    LZ4_KERNEL_READY=1
+    export LZ4_KERNEL_READY=1
   else
     echo "::warning::本次不打包 boot-lz4.img：错误的 lz4 会让刷机者拿到旧内核"
     rm -f ./Image.lz4 ./bootimgs/Image.lz4
@@ -2016,7 +2017,8 @@ stage_make_anykernel3() {
   cd "$ANYKERNEL3"
   ZIP_NAME="$(anykernel3_zip_name)"
   mv ../Image ./Image
-  zip -r "../$ZIP_NAME" ./*
+  # B-4：用 . 而非 ./*，否则以 . 开头的隐藏条目会被通配符漏掉；顺带排除 .git*
+  zip -r "../$ZIP_NAME" . -x '*.git*'
 
   cd "$_pwd"
 }
@@ -2040,7 +2042,8 @@ stage_prepare_anykernel3() {
   # 却没有任何一步打包，结果是一个刷机包都不产出。这里补上打包。
   local _zip
   _zip="$(anykernel3_zip_name)"
-  ( cd "$ANYKERNEL3" && zip -r "../$_zip" ./* )
+  # B-4：用 . 而非 ./*，否则以 . 开头的隐藏条目会被通配符漏掉；顺带排除 .git*
+  ( cd "$ANYKERNEL3" && zip -r "../$_zip" . -x '*.git*' )
   if [ ! -s "$_zip" ]; then
     echo "::error::AnyKernel3 刷机包生成失败或为空: $_zip"
     cd "$_pwd"

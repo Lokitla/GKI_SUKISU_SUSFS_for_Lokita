@@ -846,7 +846,7 @@ jobs:
 
           | 文件类型 | 用途 |
           |:---|:---|
-          | \`*_kernel-*-AnyKernel3.zip\` | AnyKernel3 内核刷入包（与目录名前缀一致，后缀为 -AnyKernel3.zip） |
+          | \`*-AnyKernel3.zip\` | AnyKernel3 内核刷入包（文件名形如 android14-6.1.124-2025-02-AnyKernel3.zip，后缀固定为 -AnyKernel3.zip，不含 _kernel-） |
           | \`boot.img\` / \`boot-gz.img\` / \`boot-lz4.img\` | 可直接刷入的 boot 镜像（boot-lz4 仅在 Image.lz4 重建成功时产出，否则仅有前两者） |
           | \`*.apk\` | KernelSU 管理器 |
           | \`susfs-*.zip\` | SUSFS 配套模块 |
