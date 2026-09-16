@@ -222,8 +222,14 @@ jobs:
               printf '%s' "$artifacts" | jq -r --argjson sp "$JQ_SPOOFED" \
                 '.artifacts[] | select(.name == "Manager-release" or ($sp and .name == "Spoofed-Manager-release")) | "\(.name)\t\(.archive_download_url)"'
             else
+              # 排除 -gradle / -mappings 中间产物：它们与最终 APK 同名同尺寸，
+              # 一并下载会让最终产物里混入未签名的中间 APK（每个变体多出一个）。
               printf '%s' "$artifacts" | jq -r --arg needle "$KSUM" --argjson sp "$JQ_SPOOFED" \
-                '.artifacts[] | select((.name | ascii_downcase) | contains($needle)) | select($sp or ((.name | ascii_downcase) | contains("spoofed") | not)) | "\(.name)\t\(.archive_download_url)"'
+                '.artifacts[]
+                 | select((.name | ascii_downcase) | contains($needle))
+                 | select((.name | ascii_downcase) | (endswith("gradle") or endswith("mappings")) | not)
+                 | select($sp or ((.name | ascii_downcase) | contains("spoofed") | not))
+                 | "\(.name)\t\(.archive_download_url)"'
             fi
           }
 
@@ -387,6 +393,16 @@ jobs:
           ls -1 manager-out || true
           echo "--- Spoofed 管理器 ---"
           ls -1 manager-out-spoofed || true
+
+          # 每个变体预期只应有 1 个 APK；多出来说明上游又新增了同名的中间产物，
+          # 这类 APK 通常是未正式签名的，不能混进刷机包。
+          for d in manager-out manager-out-spoofed; do
+            cnt=$(find "$d" -type f -name "*.apk" | wc -l)
+            if [ "$cnt" -gt 1 ]; then
+              echo "::warning::$d 中发现 $cnt 个 APK（预期 1 个），请检查上游 Manager 产物是否新增了中间产物："
+              find "$d" -type f -name "*.apk" -printf "  %p\n"
+            fi
+          done
 
       - name: 上传管理器 APK
         if: steps.add_KSU.outcome == 'success'
