@@ -160,34 +160,47 @@ jobs:
 
           echo "触发范围：$SCOPE（build_all=$BUILD_ALL, a16=$BUILD_A16）"
 
+          # 注意：REST 字段是 inputs（复数）。写成 input 会被 422 拒掉。
+          # 这里直接构造 JSON 载荷，避免 -f 嵌套字段写法在不同 gh 版本上的差异。
+          jq -n \
+            --arg ref "${{ github.ref_name }}" \
+            --arg release_type "$RELEASE_TYPE" \
+            --arg build_all "$BUILD_ALL" \
+            --arg build_a16 "$BUILD_A16" \
+            '{
+              ref: $ref,
+              inputs: {
+                release_type: $release_type,
+                kernelsu_variant: "SukiSU",
+                enable_susfs: "true",
+                use_kpm: "enabled (开启)",
+                droidspaces: "不启用",
+                build_time: "",
+                build_all: $build_all,
+                export_susfs_patches: "true",
+                build_a12_5_10: "false",
+                build_a13_5_15: "false",
+                build_a14_6_1: "false",
+                build_a15_6_6: "false",
+                build_a16_6_12: $build_a16,
+                use_zram: "false",
+                use_bbg: "false",
+                use_rekernel: "false",
+                cve_2026_43499_patch: "false",
+                droidspaces_ntsync: "false",
+                use_bbr: "false",
+                send_telegram: "true",
+                use_release_cache: "false",
+                manager_spoofed: "true",
+                supp_op: "false"
+              }
+            }' > /tmp/dispatch.json
+
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "repos/${{ github.repository }}/actions/workflows/main.yml/dispatches" \
-            -f "ref=${{ github.ref_name }}" \
-            -f "input[release_type]=$RELEASE_TYPE" \
-            -f "input[kernelsu_variant]=SukiSU" \
-            -f "input[enable_susfs]=true" \
-            -f "input[use_kpm]=enabled (开启)" \
-            -f "input[droidspaces]=不启用" \
-            -f "input[build_time]=" \
-            -f "input[build_all]=$BUILD_ALL" \
-            -f "input[export_susfs_patches]=true" \
-            -f "input[build_a12_5_10]=false" \
-            -f "input[build_a13_5_15]=false" \
-            -f "input[build_a14_6_1]=false" \
-            -f "input[build_a15_6_6]=false" \
-            -f "input[build_a16_6_12]=$BUILD_A16" \
-            -f "input[use_zram]=false" \
-            -f "input[use_bbg]=false" \
-            -f "input[use_rekernel]=false" \
-            -f "input[cve_2026_43499_patch]=false" \
-            -f "input[droidspaces_ntsync]=false" \
-            -f "input[use_bbr]=false" \
-            -f "input[send_telegram]=true" \
-            -f "input[use_release_cache]=false" \
-            -f "input[manager_spoofed]=true" \
-            -f "input[supp_op]=false"
+            --input /tmp/dispatch.json
 
           echo "已触发「构建内核」工作流"
