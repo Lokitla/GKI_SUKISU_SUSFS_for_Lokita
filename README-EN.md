@@ -180,28 +180,29 @@ compares it against the value recorded on this repository's `sha` branch:
 2. No new commit → do nothing, no runner minutes burned;
 3. Commit SHA unavailable (API rate limit) → fail fast instead of building with an empty value.
 
-**By default a single 5.10 sub-level is built as a smoke test** (via the
-Android 内核构建-自定义 workflow — exactly one build), not all 80 versions at once.
-Two reasons: a full run means 80 jobs pulling kernel source from `android.googlesource.com`
-simultaneously, which is real load on upstream; and it is a good way to burn runner minutes
-on a commit that may not even compile. Once the smoke test passes, run **构建内核**
-manually with the full matrix.
+**By default the full matrix runs**: 5.10 + 5.15 + 6.1 + 6.6 —
+**22 + 20 + 23 + 15 = 80 kernel versions**, matching what upstream zzh publishes per Release.
+Pick `单版本冒烟` for a quick run that builds just 5.10.66.
 
-> The smoke target is deliberately 5.10 rather than 6.12 (which has the fewest sub-levels):
-> **current SukiSU mainline does not compile on 6.12** — `security_add_hooks` takes a
-> `const struct lsm_id *` on 6.12 while SukiSU still passes a string — so a 6.12 smoke test
-> would be permanently red. For 6.12, use the legacy SukiSU variants (40726 / 40548).
+**6.12 is excluded by default**: current SukiSU mainline does not compile on 6.12 —
+`security_add_hooks` takes a `const struct lsm_id *` on 6.12 while SukiSU still passes a
+string (`hook/lsm_hook.c:191`), and disabling KPM does not help either. This is an upstream
+issue; enable it again by ticking `include_612` once SukiSU fixes it or if you switch to the
+legacy variants (40726 / 40548) — no code change needed.
 
-Manual runs accept three inputs:
+Manual runs accept these inputs:
 
 | Input | Description | Default |
 |---|---|---|
 | `force` | Trigger even when no new commit was detected | false |
-| `build_scope` | `单版本冒烟` (single) / `全部版本` (all) / `不构建` (none) | `单版本冒烟` |
+| `build_scope` | `全部版本` (all) / `单版本冒烟` (single) / `不构建` (none) | `全部版本` |
+| `include_612` | Include the 4 Android 16 (6.12) versions too (incompatible with current SukiSU) | false |
 | `release_type` | `Release` / `Pre-Release` / `Actions` | `Release` |
 
-> `单版本冒烟` dispatches `kernel-custom.yml`; only `全部版本` dispatches `main.yml` with
-> the full matrix.
+> `全部版本` dispatches `main.yml` with the full matrix; `单版本冒烟` dispatches
+> `kernel-custom.yml` and builds only 5.10.66.
+>
+> A full 80-version run takes a while (20 concurrent jobs → roughly 4 waves). That is normal.
 
 > Requires **Settings → Actions → Workflow permissions** to be `Read and write`,
 > otherwise the push back to the `sha` branch is rejected with a 403 for `github-actions[bot]`.

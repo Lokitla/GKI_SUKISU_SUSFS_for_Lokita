@@ -4,17 +4,16 @@
 # 流程：拉取 SukiSU-Ultra/main 最新提交号 → 与 sha 分支记录的旧值比对 →
 #       有更新则回写 sha 分支，并按 build_scope 触发构建。
 #
-# 关于默认范围：默认是「单版本冒烟」，走 kernel-custom 只编 5.10 的一个子版本；
-# 而不是一上来就跑满 80 个版本——全量构建会让 80 个任务同时去
-# android.googlesource.com 拉内核源码，对上游是实打实的压力，
-# 也容易把 Runner 时长烧在一个可能根本编不过的新提交上。
-# 确认新提交没问题后，再手动跑「构建内核」选全部版本。
+# 关于默认范围：默认跑「全部版本」，即 5.10 / 5.15 / 6.1 / 6.6 的全矩阵
+# （22 + 20 + 23 + 15 = 80 个内核版本，与上游 zzh 每次 Release 的数量一致）。
+# 想省时间时手动选「单版本冒烟」，只编 5.10.66 一个。
 #
-# 为什么冒烟选 5.10 而不是 6.12：
-#   6.12 子版本最少（4 个），看似最省，但 SukiSU 主线与 6.12 的 LSM hook 签名
-#   不兼容（security_add_hooks 第三参数在 6.12 上是 const struct lsm_id *，
-#   SukiSU 仍按老签名传字符串），主线版本必然编不过，用它做冒烟只会永远飘红。
-#   5.10 是已实测可编的组合，作为「新提交还能不能编过」的信号才有意义。
+# 为什么默认排除 6.12：
+#   SukiSU 主线与 6.12 的 LSM hook 签名不兼容 —— security_add_hooks 的第三参数
+#   在 6.12 上是 const struct lsm_id *，SukiSU 仍按老签名传字符串
+#   (hook/lsm_hook.c:191)，关掉 KPM 也一样编不过。属于上游问题，等 SukiSU 修
+#   或改用老版本变体（40726 / 40548）再开。恢复方式：把 include_612 勾上即可，
+#   不需要改代码。
 # =============================================================================
 name: Auto Trigger on SukiSU Update
 
@@ -31,11 +30,15 @@ on:
       build_scope:
         description: 检测到更新后要构建的范围
         type: choice
-        default: 单版本冒烟
+        default: 全部版本
         options:
-          - 单版本冒烟
           - 全部版本
+          - 单版本冒烟
           - 不构建
+      include_612:
+        description: 一并把 Android 16 (6.12) 的 4 个版本纳入（当前与最新 SukiSU 不兼容，默认跳过）
+        type: boolean
+        default: false
       release_type:
         description: 构建完成后的发布方式
         type: choice
@@ -143,8 +146,9 @@ jobs:
         if: steps.compare.outputs.new_commit == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SCOPE: ${{ inputs.build_scope || '单版本冒烟' }}
+          SCOPE: ${{ inputs.build_scope || '全部版本' }}
           RELEASE_TYPE: ${{ inputs.release_type || 'Release' }}
+          INCLUDE_612: ${{ inputs.include_612 || 'false' }}
         run: |
           set -euo pipefail
 
@@ -154,10 +158,14 @@ jobs:
               exit 0
               ;;
             "全部版本")
-              # 完整矩阵走「构建内核」(main.yml)
+              # 完整矩阵走「构建内核」(main.yml)。
+              # 不用 build_all=true 而是逐个显式开启：build_all 会把 6.12 一起拉进来，
+              # 而 6.12 与最新 SukiSU 不兼容（见文件头注释），得能单独关掉。
+              # 5.10(22) + 5.15(20) + 6.1(23) + 6.6(15) = 80 个版本。
               jq -n \
                 --arg ref "${{ github.ref_name }}" \
                 --arg release_type "$RELEASE_TYPE" \
+                --arg build_a16 "$INCLUDE_612" \
                 '{
                   ref: $ref,
                   inputs: {
@@ -167,13 +175,13 @@ jobs:
                     use_kpm: "enabled (开启)",
                     droidspaces: "不启用",
                     build_time: "",
-                    build_all: "true",
+                    build_all: "false",
                     export_susfs_patches: "true",
-                    build_a12_5_10: "false",
-                    build_a13_5_15: "false",
-                    build_a14_6_1: "false",
-                    build_a15_6_6: "false",
-                    build_a16_6_12: "false",
+                    build_a12_5_10: "true",
+                    build_a13_5_15: "true",
+                    build_a14_6_1: "true",
+                    build_a15_6_6: "true",
+                    build_a16_6_12: $build_a16,
                     use_zram: "false",
                     use_bbg: "false",
                     use_rekernel: "false",
@@ -186,6 +194,7 @@ jobs:
                     supp_op: "false"
                   }
                 }' > /tmp/dispatch.json
+              echo "6.12 纳入范围: $INCLUDE_612"
               TARGET_WF="main.yml"
               ;;
             *)
