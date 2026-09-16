@@ -39,7 +39,7 @@ jobs:
           fi
           echo "✅ 找到 Release: ${{ inputs.target_tag }}"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
       # ==================== 获取原始发布信息 ====================
       - name: 获取原始发布信息
@@ -57,7 +57,7 @@ jobs:
           echo "📋 原标题: $(cat original_title.txt)"
           echo "📋 Pre-release: $IS_PRERELEASE"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
       # ==================== 处理 Normal 类型 ====================
       - name: 处理 Normal 类型 - 标记正常
@@ -87,7 +87,7 @@ jobs:
 
           echo "✅ 已标记 Release 为正常 (Normal)"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
       # ==================== 处理 Bug 类型 ====================
       - name: 处理 Bug 类型
@@ -117,7 +117,7 @@ jobs:
 
           echo "✅ 已更新 Release 说明 (Bug)"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
       # ==================== 处理 Critical 类型 ====================
       - name: 处理 Critical 类型 - 删除并重建
@@ -168,7 +168,7 @@ jobs:
 
           echo "✅ 已清除所有附件并重建 Release (Critical)"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
       # ==================== 完成通知 ====================
       - name: 完成
