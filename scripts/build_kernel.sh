@@ -77,8 +77,8 @@ export COMPILE_FAILED=0
 export SUSFS_PATCH_EXPORT=false
 export REJ_COUNT=0
 export TOOLCHAIN_CACHE_HIT="${TOOLCHAIN_CACHE_HIT:-false}"
-# SUSFS 集成补丁导出目录，须与工作流上传路径 susfs-patch/ 保持一致
-export OUT_DIR="${OUT_DIR:-$WORKSPACE/susfs-patch}"
+# 注意：切勿在全局导出 OUT_DIR —— GKI 的 build/build.sh 会把它当作内核输出目录继承，
+# 导致产物从 out/<branch>/dist 跑到别处。SUSFS 补丁导出目录请在阶段内局部定义。
 
 log_stage() {
   echo ""
@@ -850,6 +850,8 @@ run_apply_susfs() {
 stage_gen_susfs_patch() {
   log_stage "gen_susfs_patch" "生成 SUSFS 集成补丁"
   local _pwd="$PWD"
+  # 局部作用域，避免污染 GKI 构建系统使用的 OUT_DIR
+  local OUT_DIR="${WORKSPACE}/susfs-patch"
   cd ${KERNEL_ROOT}/common
   export_susfs_patch() {
     cp /tmp/susfs-base.idx /tmp/susfs-after.idx || return 1
@@ -1640,7 +1642,17 @@ compile_kernel_once() {
     sed -i '/KMI_SYMBOL_LIST_STRICT_MODE/d' ./common/build.config.gki.aarch64
 
     if [ -f "build/build.sh" ]; then
-      LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang" || exit 1
+      # 显式钉住输出目录：GKI 的 build/build.sh 会把 OUT_DIR / DIST_DIR 当作外部环境继承，
+      # 一旦外层存在同名变量（哪怕只是补丁导出用的临时目录），产物就会落到预期之外的位置。
+      OUT_DIR="$KERNEL_ROOT/out/${ANDROID_VERSION}-${KERNEL_VERSION}" \
+      DIST_DIR="$KERNEL_ROOT/out/${ANDROID_VERSION}-${KERNEL_VERSION}/dist" \
+      LTO=thin \
+      BUILD_CONFIG=common/build.config.gki.aarch64 \
+      build/build.sh CC="/usr/bin/ccache clang" || {
+        echo "::error::build.sh 返回非零，列出实际产出以便定位"
+        find "$KERNEL_ROOT/out" -maxdepth 3 -name Image -o -maxdepth 3 -name Image.lz4 2>/dev/null | head
+        exit 1
+      }
       strings "out/${ANDROID_VERSION}-${KERNEL_VERSION}/dist/Image" | grep 'Linux version'
     else
       # 提取 gki_defconfig 修改到 fragment，避免 bazel trim 检查失败
