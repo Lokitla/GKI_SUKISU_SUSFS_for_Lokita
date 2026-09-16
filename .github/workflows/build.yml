@@ -231,7 +231,9 @@ jobs:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         cache_sign_key: ${{ secrets.CACHE_SIGN_KEY }}
     - name: 上传编译失败日志
-      if: ${{ always() }}
+      # A-3：原为 always()，构建成功时也会上传 Build-Logs，
+      # 而汇总 job 全量下载后把它当内核产物传上 Release。只在失败时上传。
+      if: failure()
       uses: actions/upload-artifact@v6
       with:
         name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}-Build-Logs

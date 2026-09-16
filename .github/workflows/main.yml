@@ -846,8 +846,8 @@ jobs:
 
           | 文件类型 | 用途 |
           |:---|:---|
-          | \`*_kernel-*.zip\` | AnyKernel3 内核刷入包 |
-          | \`*.img\` | boot、vendor_boot 等镜像文件 |
+          | \`*_kernel-*-AnyKernel3.zip\` | AnyKernel3 内核刷入包（与目录名前缀一致，后缀为 -AnyKernel3.zip） |
+          | \`boot.img\` / \`boot-gz.img\` / \`boot-lz4.img\` | 可直接刷入的 boot 镜像（boot-lz4 仅在 Image.lz4 重建成功时产出，否则仅有前两者） |
           | \`*.apk\` | KernelSU 管理器 |
           | \`susfs-*.zip\` | SUSFS 配套模块 |
           | \`SUSFS-Patches-*.zip\` | SUSFS 集成补丁（仅 SukiSU / ReSukiSU，供自行编译内核使用） |
@@ -966,11 +966,11 @@ jobs:
           echo "SUSFS files: ${sus_count}"
           find ./downloaded-artifacts -type f -name "*.apk" -print0 | \
           while IFS= read -r -d '' f; do
-            gh release upload "$NEW_TAG" "$f" || true
+            gh release upload "$NEW_TAG" "$f" --clobber || true
           done
           find ./downloaded-artifacts -type f -path "./downloaded-artifacts/susfs-*/*" -print0 | \
           while IFS= read -r -d '' f; do
-            gh release upload "$NEW_TAG" "$f" || true
+            gh release upload "$NEW_TAG" "$f" --clobber || true
           done
 
       # ==================== 上传 SUSFS 集成补丁 ====================
@@ -983,7 +983,7 @@ jobs:
           for file in ./downloaded-artifacts/SUSFS-Patches-*/SUSFS-Patches-*.zip; do
             [ -f "$file" ] || continue
             echo "上传 $file..."
-            gh release upload "$NEW_TAG" "$file" && uploaded=$((uploaded + 1))
+            gh release upload "$NEW_TAG" "$file" --clobber && uploaded=$((uploaded + 1))
           done
           echo "已上传 $uploaded 个 SUSFS 集成补丁压缩包"
 
@@ -994,8 +994,11 @@ jobs:
             [ -d "$file" ] && continue
             # 跳过 -Rejects 目录中的文件（已在 collect-rejects 中汇总处理）
             [[ "$file" == *-Rejects/* ]] && continue
+            # A-3：Build-Logs 是失败诊断用的日志，不是可刷写产物，不能进 Release
+            [[ "$file" == *-Build-Logs/* ]] && continue
             echo "上传 $file..."
-            gh release upload "$NEW_TAG" "$file"
+            # B-2：同名资产已存在时必须 --clobber，否则重跑发布会静默漏掉产物
+            gh release upload "$NEW_TAG" "$file" --clobber
           done
 
       # ==================== 构建摘要 ====================

@@ -43,8 +43,22 @@ runs:
 
         echo "Checking if cache already exists..."
 
-        # Check if cache already exists
-        if curl -sL --fail "https://github.com/${TARGET_REPO}/releases/download/$TAG_NAME/$CACHE_FILE" -o /dev/null 2>&1; then
+        # 未配置签名密钥时直接不存：restore 端是 fail-closed 的，
+        # 存一个没有 .hmac 的归档等于永远用不了的死缓存。
+        if [ -z "${CACHE_SIGN_KEY:-}" ]; then
+          echo "::warning::未配置 cache_sign_key，跳过缓存保存（restore 端要求签名）"
+          echo "Skipping cache save."
+          exit 0
+        fi
+
+        # Check if cache already exists —— tar 与 .hmac 必须都在。
+        # 只探测 tar 会漏掉"归档在、签名没了"的情况：此时既不会补传签名，
+        # restore 端又会因缺签名而拒绝，缓存就此永久失效。
+        cache_exists() {
+          curl -sL --fail "https://github.com/${TARGET_REPO}/releases/download/$TAG_NAME/$CACHE_FILE" -o /dev/null 2>&1 &&
+          curl -sL --fail "https://github.com/${TARGET_REPO}/releases/download/$TAG_NAME/$CACHE_FILE.hmac" -o /dev/null 2>&1
+        }
+        if cache_exists; then
           echo "Cache already exists for key: $CACHE_KEY"
           echo "Skipping upload."
           exit 0
@@ -73,13 +87,14 @@ runs:
 
         # 生成 HMAC 签名并随归档一同上传；restore 端据此拒绝被篡改的缓存
         UPLOADS="$CACHE_FILE"
-        if [ -n "${CACHE_SIGN_KEY:-}" ]; then
-          openssl dgst -sha256 -hmac "$CACHE_SIGN_KEY" -r "$CACHE_FILE" | awk '{print $1}' > "$CACHE_FILE.hmac"
-          echo "Signature created: $(cat "$CACHE_FILE.hmac")"
-          UPLOADS="$UPLOADS $CACHE_FILE.hmac"
-        else
-          echo "::warning::未配置 cache_sign_key，缓存未签名（restore 端将无法校验完整性）"
+        openssl dgst -sha256 -hmac "$CACHE_SIGN_KEY" -r "$CACHE_FILE" | awk '{print $1}' > "$CACHE_FILE.hmac"
+        if [ ! -s "$CACHE_FILE.hmac" ]; then
+          echo "Signature generation failed"
+          rm -f "$CACHE_FILE" "$CACHE_FILE.hmac"
+          exit 1
         fi
+        echo "Signature created: $(cat "$CACHE_FILE.hmac")"
+        UPLOADS="$UPLOADS $CACHE_FILE.hmac"
 
         echo "Uploading cache..."
         if timeout 10m gh release upload "$TAG_NAME" $UPLOADS --clobber --repo "$TARGET_REPO"; then

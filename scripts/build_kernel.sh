@@ -852,9 +852,10 @@ stage_susfs_baseline() {
   # 排除 .rej/.orig 和补丁文件本身：apply.sh 会把 SUSFS 补丁拷进 common/ 并留下 .rej
   # 从真实索引复制一份再 add，只需哈希变动文件，避免对整棵内核树重新哈希
   cp "$(git rev-parse --git-path index)" /tmp/susfs-base.idx
-  export GIT_INDEX_FILE=/tmp/susfs-base.idx
-  git add -A -- . ':!*.rej' ':!*.orig' ':!*.patch'
-  SUSFS_BASE_TREE=$(git write-tree)
+  # P1-3：GIT_INDEX_FILE 一旦导出就会污染本进程后续所有 git 调用（包括横跨其间的
+  # apply_susfs 阶段）。这里只在 write-tree 这一条命令上生效，用完立刻撤销。
+  GIT_INDEX_FILE=/tmp/susfs-base.idx git add -A -- . ':!*.rej' ':!*.orig' ':!*.patch'
+  SUSFS_BASE_TREE=$(GIT_INDEX_FILE=/tmp/susfs-base.idx git write-tree)
   export SUSFS_BASE_TREE="$SUSFS_BASE_TREE"
   export SUSFS_PATCH_EXPORT="true"
   echo "基线树对象: $SUSFS_BASE_TREE"
@@ -1863,6 +1864,99 @@ stage_patch_kpm_image() {
 
 run_patch_kpm_image() { stage_patch_kpm_image "$@"; }
 
+# ---------------------------------------------------------------------------
+# A-2 / B-1：按最终 Image 重建 Image.lz4
+#
+# 背景：KPM 镜像修补会 `mv oImage Image` 替换掉最终 Image，但同目录的 Image.lz4
+# 仍是旧 Image 的压缩结果。boot-lz4.img 直接拿它打包 → 刷进手机的是未打补丁的内核。
+#
+# 为什么不 `make O=... Image.lz4` 让 kbuild 重压：本脚本从不直接调用 make，内核由
+# build/build.sh（或 bazel）构建，手工复现 ARCH/CROSS_COMPILE/CC/LLVM/LZ4 全套环境
+# 一旦漏参数，等于用一个新的不确定性替换旧的不确定性。
+#
+# 做法：读取 kbuild 为 if_changed 落下的 .Image.lz4.cmd —— 里面是它上次生成时完全
+# 展开后的命令行，-l / -c1 / --favor-decSpeed / size_append 一并在内 —— 在临时目录
+# 里原样重放；读不到就退回标准 legacy 参数。无论走哪条，都必须通过两道产出侧硬校验：
+#   1. 首 4 字节是 LZ4 legacy 帧魔数 02 21 4C 18（现代帧 bootloader 拒收 → 变砖）
+#   2. 解压后与最终 Image 逐字节相同（证明内容就是最终内核）
+# 任一道不过 → 返回非零，调用方不产出 boot-lz4.img。
+# ---------------------------------------------------------------------------
+rebuild_image_lz4() {
+  local final_image="$1"   # 最终 Image 的绝对路径
+  local output="$2"        # 目标 Image.lz4 的绝对路径
+  local kernel_root="$3"   # 内核源码树根（用于搜索 kbuild 的 .cmd）
+  local lz4_bin="" cmdfile="" target="" cmd="" tmpdir="" tmp_out="" magic="" image_size=""
+
+  _lz4_bail() {
+    echo "::warning::Image.lz4 重建失败：$1"
+    rm -rf "$tmpdir"
+    return 1
+  }
+
+  [ -s "$final_image" ] || { _lz4_bail "最终 Image 不存在或为空: $final_image"; return 1; }
+
+  for b in lz4 lz4c; do
+    if command -v "$b" >/dev/null 2>&1; then lz4_bin="$b"; break; fi
+  done
+  [ -n "$lz4_bin" ] || { _lz4_bail "找不到可用的 lz4 / lz4c"; return 1; }
+
+  tmpdir=$(mktemp -d) || { _lz4_bail "无法创建临时目录"; return 1; }
+  cp -f "$final_image" "$tmpdir/Image" || { _lz4_bail "无法复制 Image 到临时目录"; return 1; }
+  tmp_out="$tmpdir/Image.lz4"
+
+  # kbuild 用 -C objtree 重新执行 make，.cmd 里的相对路径锚在 objtree 上
+  cmdfile="${kernel_root}/out/${ANDROID_VERSION}-${KERNEL_VERSION}/arch/arm64/boot/.Image.lz4.cmd"
+  if [ ! -s "$cmdfile" ]; then
+    cmdfile=$(find "$kernel_root/out" -name '.Image.lz4.cmd' -print -quit 2>/dev/null)
+  fi
+
+  if [ -n "$cmdfile" ] && [ -s "$cmdfile" ]; then
+    target=$(sed -n 's/^cmd_\([^ ]*\) := .*/\1/p' "$cmdfile" | head -n1)
+    cmd=$(sed -n 's/^cmd_[^ ]* := //p' "$cmdfile" | head -n1)
+    if [ -n "$target" ] && [ -n "$cmd" ]; then
+      # 先替换较长的输出路径，再替换输入路径（输入是输出的前缀，顺序不能反）
+      cmd=${cmd//"$target"/"$tmp_out"}
+      cmd=${cmd//"${target%.lz4}"/"$tmpdir/Image"}
+      echo "采用 kbuild 记录的原始压缩命令: $(basename "$cmdfile")"
+    else
+      cmd=""
+    fi
+  fi
+
+  if [ -z "$cmd" ]; then
+    echo "::warning::未找到 kbuild 的 .Image.lz4.cmd，改用标准 legacy 参数重压（同样需通过两道校验）"
+    cmd="cat $tmpdir/Image | $lz4_bin -l -9 - - > $tmp_out"
+  fi
+
+  if ! ( eval "$cmd" ) 2>/tmp/lz4-rebuild.log; then
+    { _lz4_bail "重放压缩命令失败: $(tail -n2 /tmp/lz4-rebuild.log 2>/dev/null)"; return 1; }
+  fi
+  [ -s "$tmp_out" ] || { _lz4_bail "压缩未产生输出"; return 1; }
+
+  # 校验 1：legacy 帧魔数。现代帧（04 22 4D 18）会被 GKI bootloader 拒收 → 卡第一屏
+  magic=$(od -An -tx1 -N4 "$tmp_out" 2>/dev/null | tr -d ' \n')
+  if [ "$magic" != "02214c18" ]; then
+    { _lz4_bail "产出不是 LZ4 legacy 帧（首 4 字节 $magic，期望 02214c18）"; return 1; }
+  fi
+
+  # 校验 2：解压后与最终 Image 逐字节相同。
+  # 这条通过即证明"解压出来的就是最终内核"，与帧参数、是否带 size_append 无关。
+  image_size=$(stat -c %s "$final_image")
+  if ! "$lz4_bin" -dc "$tmp_out" 2>/dev/null | head -c "$image_size" | cmp -s - "$final_image"; then
+    { _lz4_bail "解压结果与最终 Image 不一致"; return 1; }
+  fi
+
+  cp -f "$tmp_out" "$output" || { _lz4_bail "无法写入 $output"; return 1; }
+  rm -rf "$tmpdir"
+  echo "Image.lz4 已按最终 Image 重建并通过双重校验（$(stat -c %s "$output") 字节，legacy 帧）"
+  return 0
+}
+
+# AnyKernel3 刷机包文件名：打包与拷贝两条路径必须一致
+anykernel3_zip_name() {
+  echo "${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-AnyKernel3.zip"
+}
+
 stage_prepare_boot() {
   log_stage "prepare_boot" "准备 Boot 镜像"
   local _pwd="$PWD"
@@ -1890,10 +1984,26 @@ stage_prepare_boot() {
   echo "内核镜像校验通过: ${IMAGE_SIZE} 字节"
 
   cp "$SRC_DIR/Image" ./bootimgs/
-  cp "$SRC_DIR/Image.lz4" ./bootimgs/
   cp "$SRC_DIR/Image" ./
-  cp "$SRC_DIR/Image.lz4" ./
-  gzip -n -k -f -9 ./Image > ./Image.gz
+  # 原写法 `gzip ... > ./Image.gz` 是多余的覆盖式重定向：一旦 gzip 失败，
+  # 也会留下一个 0 字节的 Image.gz，进而被打进 boot-gz.img。去掉并做非空校验。
+  gzip -n -k -f -9 ./Image
+  if [ ! -s ./Image.gz ]; then
+    echo "::error::Image.gz 生成失败或为空，拒绝继续打包"
+    return 1
+  fi
+
+  # Image.lz4 必须与"最终" Image 对应：KPM 镜像修补会替换 Image，
+  # 沿用编译期产出的 lz4 会把未打补丁的内核打进 boot-lz4.img。
+  # 重建失败（含找不到 lz4、校验不过）时不产出 lz4 镜像，宁缺勿错。
+  LZ4_KERNEL_READY=0
+  if rebuild_image_lz4 "$PWD/Image" "$PWD/Image.lz4" "$KERNEL_ROOT"; then
+    cp ./Image.lz4 ./bootimgs/
+    LZ4_KERNEL_READY=1
+  else
+    echo "::warning::本次不打包 boot-lz4.img：错误的 lz4 会让刷机者拿到旧内核"
+    rm -f ./Image.lz4 ./bootimgs/Image.lz4
+  fi
 
   cd "$_pwd"
 }
@@ -1904,7 +2014,7 @@ stage_make_anykernel3() {
   log_stage "make_anykernel3" "创建 AnyKernel3 压缩包"
   local _pwd="$PWD"
   cd "$ANYKERNEL3"
-  ZIP_NAME="${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-AnyKernel3.zip"
+  ZIP_NAME="$(anykernel3_zip_name)"
   mv ../Image ./Image
   zip -r "../$ZIP_NAME" ./*
 
@@ -1924,6 +2034,19 @@ stage_prepare_anykernel3() {
   log_stage "prepare_anykernel3" "准备 AnyKernel3 目录"
   local _pwd="$PWD"
   mv ./Image "$ANYKERNEL3/Image"
+
+  # A-1：make_anykernel3 只在「上传全部」模式下执行，而本阶段只在非「上传全部」
+  # 模式下执行，两者条件互斥 —— 非「上传全部」时 Image 被搬进 AnyKernel3 目录
+  # 却没有任何一步打包，结果是一个刷机包都不产出。这里补上打包。
+  local _zip
+  _zip="$(anykernel3_zip_name)"
+  ( cd "$ANYKERNEL3" && zip -r "../$_zip" ./* )
+  if [ ! -s "$_zip" ]; then
+    echo "::error::AnyKernel3 刷机包生成失败或为空: $_zip"
+    cd "$_pwd"
+    return 1
+  fi
+  echo "已生成 AnyKernel3 刷机包: $_zip"
 
   cd "$_pwd"
 }
@@ -1954,7 +2077,8 @@ stage_build_boot_a12() {
   unzip gki-kernel.zip && rm gki-kernel.zip
   $UNPACK_BOOTIMG --boot_img="$(pwd)/boot-5.10.img"
 
-  gzip -n -k -f -9 ./Image > ./Image.gz
+  gzip -n -k -f -9 ./Image
+  [ -s ./Image.gz ] || { echo "::error::Image.gz 生成失败或为空"; return 1; }
 
   $MKBOOTIMG --header_version 4 --kernel Image --output boot.img --ramdisk out/ramdisk --os_version 12.0.0 --os_patch_level "${OS_PATCH_LEVEL}"
   $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
@@ -1964,9 +2088,13 @@ stage_build_boot_a12() {
   $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-gz.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
   cp ./boot-gz.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-boot-gz.img
 
-  $MKBOOTIMG --header_version 4 --kernel Image.lz4 --output boot-lz4.img --ramdisk out/ramdisk --os_version 12.0.0 --os_patch_level "${OS_PATCH_LEVEL}"
-  $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-lz4.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
-  cp ./boot-lz4.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-boot-lz4.img
+  if [ "${LZ4_KERNEL_READY:-0}" = "1" ] && [ -s ./Image.lz4 ]; then
+    $MKBOOTIMG --header_version 4 --kernel Image.lz4 --output boot-lz4.img --ramdisk out/ramdisk --os_version 12.0.0 --os_patch_level "${OS_PATCH_LEVEL}"
+    $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-lz4.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
+    cp ./boot-lz4.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-boot-lz4.img
+  else
+    echo "::warning::跳过 boot-lz4.img（Image.lz4 未就绪）"
+  fi
 
   cd "$_pwd"
 }
@@ -1984,7 +2112,8 @@ stage_build_boot_a13plus() {
   log_stage "build_boot_a13plus" "构建 Boot 镜像 (Android 13+)"
   local _pwd="$PWD"
   cd bootimgs
-  gzip -n -k -f -9 ./Image > ./Image.gz
+  gzip -n -k -f -9 ./Image
+  [ -s ./Image.gz ] || { echo "::error::Image.gz 生成失败或为空"; return 1; }
 
   $MKBOOTIMG --header_version 4 --kernel Image --output boot.img
   $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
@@ -1994,9 +2123,13 @@ stage_build_boot_a13plus() {
   $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-gz.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
   cp ./boot-gz.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-boot-gz.img
 
-  $MKBOOTIMG --header_version 4 --kernel Image.lz4 --output boot-lz4.img
-  $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-lz4.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
-  cp ./boot-lz4.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-boot-lz4.img
+  if [ "${LZ4_KERNEL_READY:-0}" = "1" ] && [ -s ./Image.lz4 ]; then
+    $MKBOOTIMG --header_version 4 --kernel Image.lz4 --output boot-lz4.img
+    $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-lz4.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
+    cp ./boot-lz4.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-boot-lz4.img
+  else
+    echo "::warning::跳过 boot-lz4.img（Image.lz4 未就绪）"
+  fi
 
   cd "$_pwd"
 }
