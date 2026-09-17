@@ -2434,6 +2434,7 @@ rebuild_image_lz4() {
   local output="$2"        # 目标 Image.lz4 的绝对路径
   local kernel_root="$3"   # 内核源码树根（用于搜索 kbuild 的 .cmd）
   local lz4_bin="" cmdfile="" objtree="" target="" cmd="" tmpdir="" tmp_out="" magic="" image_size=""
+  local probe_out="" probe_rc="" probe_sz=""
 
   _lz4_bail() {
     echo "::warning::Image.lz4 重建失败：$1"
@@ -2490,13 +2491,46 @@ rebuild_image_lz4() {
 
   # 产出校验：魔数 + 与最终 Image 逐字节一致。两种压缩途径共用同一套判定，
   # 任一不过就换另一条途径重试，两条都不行才放弃（宁缺勿错）。
+  # 失败时把「产物大小 + 末 4 字节 + 解压字节数」记进 _lz4_reason，
+  # 让最终告警能自证是哪一步挂了，而不是一句笼统的"内容不一致"。
+  local _lz4_reason=""
+  _lz4_compress_probe() {
+    # 先记录最后一字节：lz4 legacy 产物的末 4 字节必然是原始大小（小端）。
+    # 若它等于 Image 大小而全文仍对不上，说明是 lz4 把尾块补零/截断，
+    # 这正是"体积一致但 cmp 失败"的典型形态。
+    probe_sz=$(stat -c %s "$tmp_out" 2>/dev/null || echo "?")
+    local _tail4; _tail4=$(tail -c 4 "$tmp_out" 2>/dev/null | od -An -tx1 2>/dev/null | tr -d ' \n')
+    probe_out=$("$lz4_bin" -dc "$tmp_out" 2>&1 >/dev/null)
+    probe_rc=$?
+    _lz4_reason="产物 ${probe_sz} 字节，末4字节 ${_tail4:-无}"
+    if [ "$probe_rc" -ne 0 ]; then
+      _lz4_reason="$_lz4_reason；lz4 -d 退出码 $probe_rc（$probe_out）"
+      return 1
+    fi
+    return 0
+  }
+
   _lz4_produced_ok() {
-    [ -s "$tmp_out" ] || return 1
+    [ -s "$tmp_out" ] || { _lz4_reason="产物不存在或为空"; return 1; }
     magic=$(od -An -tx1 -N4 "$tmp_out" 2>/dev/null | tr -d ' \n')
-    [ "$magic" = "02214c18" ] || return 1
+    if [ "$magic" != "02214c18" ]; then
+      _lz4_reason="帧魔数 ${magic:-无} ≠ 02214c18（非 legacy，GKI bootloader 会拒收）"
+      return 1
+    fi
+    _lz4_compress_probe || return 1
     image_size=$(stat -c %s "$final_image")
-    [ "$("$lz4_bin" -dc "$tmp_out" 2>/dev/null | wc -c)" = "$image_size" ] || return 1
-    "$lz4_bin" -dc "$tmp_out" 2>/dev/null | cmp -s - "$final_image" || return 1
+    local _decoded; _decoded=$("$lz4_bin" -dc "$tmp_out" 2>/dev/null | wc -c)
+    if [ "$_decoded" != "$image_size" ]; then
+      _lz4_reason="$_lz4_reason；解压 ${_decoded} 字节 ≠ Image ${image_size} 字节"
+      return 1
+    fi
+    if ! "$lz4_bin" -dc "$tmp_out" 2>/dev/null | cmp -s - "$final_image"; then
+      # 体积一致但内容不一致 → 差异在内部，定位首个不同字节的偏移，便于判断
+      # 是压缩器行为异常还是源 Image 在中途被换掉
+      local _off; _off=$("$lz4_bin" -dc "$tmp_out" 2>/dev/null | cmp -l - "$final_image" 2>/dev/null | head -n1 | awk '{print $1}')
+      _lz4_reason="$_lz4_reason；解压结果与最终 Image 内容不一致（首个差异偏移 ${_off:-未知}，总长一致 ${image_size} 字节）"
+      return 1
+    fi
     return 0
   }
 
@@ -2510,7 +2544,7 @@ rebuild_image_lz4() {
       if _lz4_produced_ok; then
         _used="kbuild .cmd"
       else
-        echo "::warning::kbuild .cmd 重放产物未通过校验，改用标准 legacy 参数重压"
+        echo "::warning::kbuild .cmd 重放产物未通过校验（${_lz4_reason}），改用标准 legacy 参数重压"
       fi
     else
       cd "$_saved_pwd"
@@ -2521,6 +2555,10 @@ rebuild_image_lz4() {
   # 途径 2：标准 legacy 参数（-l -9）。kbuild 用 -12 --favor-decSpeed，
   # 但那些参数只影响压缩率与速度，不影响解压结果的正确性 —— 校验仍按全文比对。
   if [ -z "$_used" ]; then
+    # 必须回到原 CWD：_legacy_cmd 里的路径都是绝对路径，但 cp 到 $output
+    # 用的是相对调用方语义；更关键的是把 CWD 留在 objtree 会让后续
+    # 调用方（stage_prepare_boot 的 cp ./Image.lz4 ...）全部错位。
+    cd "$_saved_pwd" 2>/dev/null || cd /
     rm -f "$tmp_out"
     if ! ( eval "$_legacy_cmd" ) 2>/tmp/lz4-rebuild.log; then
       { _lz4_bail "legacy 重压失败: $(tail -n1 /tmp/lz4-rebuild.log 2>/dev/null)"; return 1; }
@@ -2528,7 +2566,7 @@ rebuild_image_lz4() {
     if _lz4_produced_ok; then
       _used="legacy -l -9"
     else
-      _lz4_bail "两条压缩途径均未产出合格 Image.lz4（产物 $(stat -c %s "$tmp_out" 2>/dev/null) 字节，末4字节 $(tail -c 4 "$tmp_out" 2>/dev/null | od -An -tx1 | tr -d ' \n')，lz4=$($lz4_bin --version 2>&1 | head -n1)，Image=$image_size 字节）"
+      _lz4_bail "两条压缩途径均未产出合格 Image.lz4（${_lz4_reason}；lz4=$($lz4_bin --version 2>&1 | head -n1)）"
       return 1
     fi
   fi
