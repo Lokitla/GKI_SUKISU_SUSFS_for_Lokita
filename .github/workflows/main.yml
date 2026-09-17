@@ -149,14 +149,17 @@ on:
         required: false
         type: boolean
         default: false
-      ksu_mode:
-        description: "KernelSU 模式：关闭=正常集成 KernelSU / 禁用KSU=不集成任何 KernelSU 代码（SUSFS 的启停由 enable_susfs 独立控制，不要写在这里）"
-        required: false
-        type: choice
-        options:
-          - "关闭"
-          - "禁用KSU"
-        default: "关闭"
+      # ksu_mode 已从手动触发界面隐藏：本仓库的存在前提就是集成 KernelSU，
+      # 不存在"不集成 KSU"的常规用法。功能代码未删除——build.yml 的
+      # workflow_call 仍保留该输入，需要时取消下面注释并恢复 with: 透传即可。
+#       ksu_mode:
+#         description: "KernelSU 模式：关闭=正常集成 KernelSU / 禁用KSU=不集成任何 KernelSU 代码（SUSFS 的启停由 enable_susfs 独立控制，不要写在这里）"
+#         required: false
+#         type: choice
+#         options:
+#           - "关闭"
+#           - "禁用KSU"
+#         default: "关闭"
       ksu_branch_mode:
         description: "SukiSU 拉取分支（仅 SukiSU 变体生效）"
         required: false
@@ -203,7 +206,7 @@ jobs:
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
-      ksu_mode: ${{ inputs.ksu_mode }}
+      # ksu_mode 不传：build.yml 默认「关闭」（正常集成 KernelSU）。
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
   # ==================== Android 13 - 5.15 构建 ====================
   build-a13-5-15:
@@ -231,7 +234,6 @@ jobs:
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
-      ksu_mode: ${{ inputs.ksu_mode }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
   # ==================== Android 14 - 6.1 构建 ====================
   build-a14-6-1:
@@ -259,7 +261,6 @@ jobs:
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
-      ksu_mode: ${{ inputs.ksu_mode }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
   # ==================== Android 15 - 6.6 构建 ====================
   build-a15-6-6:
@@ -287,7 +288,6 @@ jobs:
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
-      ksu_mode: ${{ inputs.ksu_mode }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
   # ==================== Android 16 - 6.12 构建 ====================
   build-a16-6-12:
@@ -315,7 +315,6 @@ jobs:
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
-      ksu_mode: ${{ inputs.ksu_mode }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
   # ==================== 收集补丁冲突文件 ====================
   # 汇总所有构建任务中的 .rej 文件，方便调试补丁问题

@@ -14,16 +14,16 @@ on:
         required: false
         type: boolean
         default: true
-      sukisu_commit:
-        description: "SukiSU 提交 hash：管理器与内核统一使用该 commit（留空则取 config/config 的 sukisu=，再留空则用最新）"
-        required: false
-        type: string
-        default: ""
       ksu_branch_mode:
         description: "SukiSU 内核侧拉取的分支：auto/main/builtin。管理器始终来自 main，此参数仅用于日志与版本基准说明"
         required: false
         type: string
         default: "auto"
+      sukisu_commit:
+        description: "SukiSU 提交 hash：管理器与内核统一使用该 commit（留空则取 config/config 的 sukisu=，再留空则用最新）"
+        required: false
+        type: string
+        default: ""
     outputs:
       susVer:
         description: "The fetched SUSFS version number"
