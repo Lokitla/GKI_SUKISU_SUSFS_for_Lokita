@@ -2475,14 +2475,9 @@ rebuild_image_lz4() {
     #   输入 Image → 临时 Image
     cmd=${cmd//"$target"/"$tmp_out"}
     cmd=${cmd//"${target%.lz4}"/"$tmpdir/Image"}
-    echo "采用 kbuild 记录的原始压缩命令: $(basename "$cmdfile")"
   else
+    # 没有 .cmd 也能干活：legacy 路径不依赖它，只是少了一条回退途径
     cmd=""
-  fi
-
-  if [ -z "$cmd" ]; then
-    echo "::warning::未找到可用的 kbuild .Image.lz4.cmd，改用标准 legacy 参数重压（同样需通过两道校验）"
-    cmd="cat $tmpdir/Image | $lz4_bin -l -9 - - > $tmp_out"
   fi
 
   local _saved_pwd="$PWD"
@@ -2534,43 +2529,42 @@ rebuild_image_lz4() {
     return 0
   }
 
-  # 途径 1：重放 kbuild 记录的原始命令
-  if [ -n "$cmd" ]; then
-    echo "采用 kbuild 记录的原始压缩命令: $(basename "$cmdfile")"
-    # CWD 切到 objtree：.cmd 除输入/输出外可能还有其它相对引用
-    [ -d "$objtree" ] && cd "$objtree" 2>/dev/null || true
-    if ( eval "$cmd" ) 2>/tmp/lz4-rebuild.log; then
-      cd "$_saved_pwd"
-      if _lz4_produced_ok; then
-        _used="kbuild .cmd"
-      else
-        echo "::warning::kbuild .cmd 重放产物未通过校验（${_lz4_reason}），改用标准 legacy 参数重压"
-      fi
-    else
-      cd "$_saved_pwd"
-      echo "::warning::重放 kbuild .cmd 失败（$(tail -n1 /tmp/lz4-rebuild.log 2>/dev/null)），改用标准 legacy 参数重压"
-    fi
+  # 途径 1：标准 legacy 参数（-l -9）。这是主路径。
+  # 为什么不让 kbuild 的原命令当主路径：它的 `-12 --favor-decSpeed` 配合
+  # `$(size_append)` 在压缩流尾部追加的 4 字节原始长度，会让校验器（要逐字节
+  # 比对解压结果）报错 —— 那 4 字节不在 lz4 帧内。而 -l -9 产出的是标准 legacy
+  # 帧，GKI bootloader 认，解压结果与 Image 完全一致。压缩率差异只影响体积，
+  # 不影响可刷性，不值得为几十 KB 冒 boot 变砖的风险。
+  cd "$_saved_pwd" 2>/dev/null || cd /
+  rm -f "$tmp_out"
+  if ! ( eval "$_legacy_cmd" ) 2>/tmp/lz4-rebuild.log; then
+    { _lz4_bail "legacy 重压失败: $(tail -n1 /tmp/lz4-rebuild.log 2>/dev/null)"; return 1; }
   fi
-
-  # 途径 2：标准 legacy 参数（-l -9）。kbuild 用 -12 --favor-decSpeed，
-  # 但那些参数只影响压缩率与速度，不影响解压结果的正确性 —— 校验仍按全文比对。
-  if [ -z "$_used" ]; then
-    # 必须回到原 CWD：_legacy_cmd 里的路径都是绝对路径，但 cp 到 $output
-    # 用的是相对调用方语义；更关键的是把 CWD 留在 objtree 会让后续
-    # 调用方（stage_prepare_boot 的 cp ./Image.lz4 ...）全部错位。
-    cd "$_saved_pwd" 2>/dev/null || cd /
-    rm -f "$tmp_out"
-    if ! ( eval "$_legacy_cmd" ) 2>/tmp/lz4-rebuild.log; then
-      { _lz4_bail "legacy 重压失败: $(tail -n1 /tmp/lz4-rebuild.log 2>/dev/null)"; return 1; }
+  if _lz4_produced_ok; then
+    _used="legacy -l -9"
+  else
+    # 途径 2：退回重放 kbuild 记录的原始命令（可能含 size_append 尾巴，
+    # 校验更严，能过就用它，毕竟与官方构建产物参数一致）
+    if [ -s "$cmdfile" ] && [ -n "$cmd" ]; then
+      echo "::warning::标准 legacy 重压未通过校验（${_lz4_reason}），回退重放 kbuild 原命令"
+      cd "$_saved_pwd" 2>/dev/null || cd /
+      rm -f "$tmp_out"
+      [ -d "$objtree" ] && cd "$objtree" 2>/dev/null || true
+      if ( eval "$cmd" ) 2>/tmp/lz4-rebuild.log; then
+        cd "$_saved_pwd" 2>/dev/null || cd /
+        _lz4_produced_ok && _used="kbuild .cmd"
+      else
+        cd "$_saved_pwd" 2>/dev/null || cd /
+      fi
     fi
-    if _lz4_produced_ok; then
-      _used="legacy -l -9"
-    else
+    if [ -z "$_used" ]; then
       _lz4_bail "两条压缩途径均未产出合格 Image.lz4（${_lz4_reason}；lz4=$($lz4_bin --version 2>&1 | head -n1)）"
       return 1
     fi
   fi
 
+  # 无论走哪条路径，出口都必须回到调用方的工作目录
+  cd "$_saved_pwd" 2>/dev/null || cd /
   cp -f "$tmp_out" "$output" || { _lz4_bail "无法写入 $output"; return 1; }
   rm -rf "$tmpdir"
   echo "Image.lz4 已按最终 Image 重建并通过双重校验（$(stat -c %s "$output") 字节，legacy 帧，来源: ${_used}）"
