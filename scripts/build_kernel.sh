@@ -2412,17 +2412,28 @@ run_patch_kpm_image() { stage_patch_kpm_image "$@"; }
 # 一旦漏参数，等于用一个新的不确定性替换旧的不确定性。
 #
 # 做法：读取 kbuild 为 if_changed 落下的 .Image.lz4.cmd —— 里面是它上次生成时完全
-# 展开后的命令行，-l / -c1 / --favor-decSpeed / size_append 一并在内 —— 在临时目录
-# 里原样重放；读不到就退回标准 legacy 参数。无论走哪条，都必须通过两道产出侧硬校验：
+# 展开后的命令行，-l / -12 / --favor-decSpeed / size_append 一并在内 —— 在 objtree
+# 下原样重放（.cmd 里的相对路径锚在 objtree 上，CWD 不对就会读到错的/不存在的输入）；
+# 读不到就退回标准 legacy 参数。无论走哪条，都必须通过两道产出侧硬校验：
 #   1. 首 4 字节是 LZ4 legacy 帧魔数 02 21 4C 18（现代帧 bootloader 拒收 → 变砖）
 #   2. 解压后与最终 Image 逐字节相同（证明内容就是最终内核）
 # 任一道不过 → 返回非零，调用方不产出 boot-lz4.img。
+#
+# 关于 .cmd 的转义，有两个必须处理的坑（否则 eval 必失败）：
+#   1) kbuild 用 `printf '%s\n' 'cmd_$@ := $(make-cmd)'` 写出该文件，make-cmd 会把
+#      命令里的每个 `'` 转成 `'\''`（escsq），使整条命令能被单引号包裹。这层转义
+#      只在 make 的 printf 上下文里成立；直接 eval 会得到引号不配对的语法错误。
+#      这里先做反转义还原成原始命令。
+#   2) `$(size_append)` 展开后是一串常量 `printf '\273\326\002\000'`（无路径），
+#      不会在下面的路径替换中被误伤；但它记录的是 kbuild 生成时的 Image 大小，
+#      KPM 修补后可能过期。它写在压缩流之外，lz4 -dc 不会吐出这 4 字节，
+#      因此不影响校验 2 —— 保留原样即可。
 # ---------------------------------------------------------------------------
 rebuild_image_lz4() {
   local final_image="$1"   # 最终 Image 的绝对路径
   local output="$2"        # 目标 Image.lz4 的绝对路径
   local kernel_root="$3"   # 内核源码树根（用于搜索 kbuild 的 .cmd）
-  local lz4_bin="" cmdfile="" target="" cmd="" tmpdir="" tmp_out="" magic="" image_size=""
+  local lz4_bin="" cmdfile="" objtree="" target="" cmd="" tmpdir="" tmp_out="" magic="" image_size=""
 
   _lz4_bail() {
     echo "::warning::Image.lz4 重建失败：$1"
@@ -2441,34 +2452,49 @@ rebuild_image_lz4() {
   cp -f "$final_image" "$tmpdir/Image" || { _lz4_bail "无法复制 Image 到临时目录"; return 1; }
   tmp_out="$tmpdir/Image.lz4"
 
-  # kbuild 用 -C objtree 重新执行 make，.cmd 里的相对路径锚在 objtree 上
-  cmdfile="${kernel_root}/out/${ANDROID_VERSION}-${KERNEL_VERSION}/arch/arm64/boot/.Image.lz4.cmd"
+  # objtree：.cmd 里的相对路径全部锚在这里
+  objtree="${kernel_root}/out/${ANDROID_VERSION}-${KERNEL_VERSION}"
+  cmdfile="${objtree}/arch/arm64/boot/.Image.lz4.cmd"
   if [ ! -s "$cmdfile" ]; then
     # 限定到当前版本子目录，避免多 Android/Kernel 版本 out/ 共存时命中其他分支的 .cmd
-    cmdfile=$(find "$kernel_root/out/${ANDROID_VERSION}-${KERNEL_VERSION}" -name '.Image.lz4.cmd' -print -quit 2>/dev/null)
+    cmdfile=$(find "$objtree" -name '.Image.lz4.cmd' -print -quit 2>/dev/null)
   fi
 
   if [ -n "$cmdfile" ] && [ -s "$cmdfile" ]; then
     target=$(sed -n 's/^cmd_\([^ ]*\) := .*/\1/p' "$cmdfile" | head -n1)
     cmd=$(sed -n 's/^cmd_[^ ]* := //p' "$cmdfile" | head -n1)
-    if [ -n "$target" ] && [ -n "$cmd" ]; then
-      # 先替换较长的输出路径，再替换输入路径（输入是输出的前缀，顺序不能反）
-      cmd=${cmd//"$target"/"$tmp_out"}
-      cmd=${cmd//"${target%.lz4}"/"$tmpdir/Image"}
-      echo "采用 kbuild 记录的原始压缩命令: $(basename "$cmdfile")"
-    else
-      cmd=""
-    fi
+  fi
+
+  if [ -n "$target" ] && [ -n "$cmd" ]; then
+    # 反转义 kbuild 的 escsq：'\'' → '
+    # （kbuild 为把整条命令塞进单引号，把每个 ' 写成 '\''；eval 前必须还原）
+    cmd=${cmd//"'\\''"/"'"}
+    # 只替换独立的输入/输出路径，避免误伤引号内的常量与其它 token：
+    #   输出 .lz4 → 临时 .lz4（先替换更长的那段，否则会被输入替换吃掉）
+    #   输入 Image → 临时 Image
+    cmd=${cmd//"$target"/"$tmp_out"}
+    cmd=${cmd//"${target%.lz4}"/"$tmpdir/Image"}
+    echo "采用 kbuild 记录的原始压缩命令: $(basename "$cmdfile")"
+  else
+    cmd=""
   fi
 
   if [ -z "$cmd" ]; then
-    echo "::warning::未找到 kbuild 的 .Image.lz4.cmd，改用标准 legacy 参数重压（同样需通过两道校验）"
+    echo "::warning::未找到可用的 kbuild .Image.lz4.cmd，改用标准 legacy 参数重压（同样需通过两道校验）"
     cmd="cat $tmpdir/Image | $lz4_bin -l -9 - - > $tmp_out"
   fi
 
+  # CWD 切到 objtree：.cmd 里除输入/输出外可能还有其它相对引用
+  # （例如 mkbootimg 依赖的 scripts/、size_append 读取的文件等）。
+  local _saved_pwd="$PWD"
+  [ -d "$objtree" ] && cd "$objtree" 2>/dev/null || true
+
   if ! ( eval "$cmd" ) 2>/tmp/lz4-rebuild.log; then
+    cd "$_saved_pwd"
     { _lz4_bail "重放压缩命令失败: $(tail -n2 /tmp/lz4-rebuild.log 2>/dev/null)"; return 1; }
   fi
+  cd "$_saved_pwd"
+
   [ -s "$tmp_out" ] || { _lz4_bail "压缩未产生输出"; return 1; }
 
   # 校验 1：legacy 帧魔数。现代帧（04 22 4D 18）会被 GKI bootloader 拒收 → 卡第一屏
