@@ -4,8 +4,17 @@
 # 流程：拉取 SukiSU-Ultra/main 最新提交号 → 与 sha 分支记录的旧值比对 →
 #       有更新则回写 sha 分支，并按 build_scope 触发构建。
 #
-# 关于默认范围：默认跑「全部版本」，即 5.10 / 5.15 / 6.1 / 6.6 的全矩阵
-# （22 + 20 + 23 + 15 = 80 个内核版本，与上游 zzh 每次 Release 的数量一致）。
+# 关于默认范围：默认跑「全部版本」，即 5.10 / 5.15 / 6.1 / 6.6 的维护矩阵。
+#
+# 矩阵不再在 workflow 里硬编码，改由 .github/workflows/config/matrix.json
+# 统一维护（对齐 ShirkNeko 的做法），共 19 个组合：
+#   5.10 : 136, 198, 209, 236, X(LTS)
+#   5.15 : 74, 123, 148, 170, 178, 180
+#   6.1  : 78, 90, 99, 124, 145
+#   6.6  : 50, 66, 102
+# 刻意不跑上游那样的 80 个全量：早期子版本（5.10.66/81/101…）实质已无人使用，
+# 编出来只占 Release 体积和 CI 时长，所以只保留仍在维护、仍有人刷的组合。
+# 想调整范围改 matrix.json 即可，不需要动 workflow。
 # 想省时间时手动选「单版本冒烟」，只编 5.10.66 一个。
 #
 # 默认构建配置：KPM = patched（开启并修补）、ZRAM (LZ4KD) = 开启，
@@ -164,37 +173,40 @@ jobs:
               # 完整矩阵走「构建内核」(main.yml)。
               # 不用 build_all=true 而是逐个显式开启：build_all 会把 6.12 一起拉进来，
               # 而 6.12 与最新 SukiSU 不兼容（见文件头注释），得能单独关掉。
-              # 5.10(22) + 5.15(20) + 6.1(23) + 6.6(15) = 80 个版本。
+              # 实际组合数由 matrix.json 决定（当前 19 个）。
+              # 注意：boolean 型 input 必须传 JSON 真布尔（true/false），
+              # 传字符串 "true" 会被 GitHub 判为非法值并回退成 false，
+              # 导致所有 build_a1x 开关全部失效、一个内核都不编。
               jq -n \
                 --arg ref "${{ github.ref_name }}" \
                 --arg release_type "$RELEASE_TYPE" \
-                --arg build_a16 "$INCLUDE_612" \
+                --argjson build_a16 "$INCLUDE_612" \
                 '{
                   ref: $ref,
                   inputs: {
                     release_type: $release_type,
                     kernelsu_variant: "SukiSU",
-                    enable_susfs: "true",
+                    enable_susfs: true,
                     use_kpm: "patched (开启并修补)",
                     droidspaces: "不启用",
                     build_time: "",
-                    build_all: "false",
-                    export_susfs_patches: "true",
-                    build_a12_5_10: "true",
-                    build_a13_5_15: "true",
-                    build_a14_6_1: "true",
-                    build_a15_6_6: "true",
+                    build_all: false,
+                    export_susfs_patches: true,
+                    build_a12_5_10: true,
+                    build_a13_5_15: true,
+                    build_a14_6_1: true,
+                    build_a15_6_6: true,
                     build_a16_6_12: $build_a16,
-                    use_zram: "true",
-                    use_bbg: "false",
-                    use_rekernel: "false",
-                    cve_2026_43499_patch: "false",
-                    droidspaces_ntsync: "false",
-                    use_bbr: "false",
-                    send_telegram: "true",
-                    use_release_cache: "false",
-                    manager_spoofed: "true",
-                    supp_op: "false"
+                    use_zram: true,
+                    use_bbg: false,
+                    use_rekernel: false,
+                    cve_2026_43499_patch: false,
+                    droidspaces_ntsync: false,
+                    use_bbr: false,
+                    send_telegram: true,
+                    use_release_cache: false,
+                    manager_spoofed: true,
+                    supp_op: false
                   }
                 }' > /tmp/dispatch.json
               echo "6.12 纳入范围: $INCLUDE_612"
@@ -204,6 +216,7 @@ jobs:
               # 单版本冒烟走「Android 内核构建-自定义」(kernel-custom.yml)：
               # 只有它支持精确到单个子版本，一次只编 1 个，几分钟就有结果。
               # 5.10.66 是已实测可编的组合；只传 AnyKernel3 包，省掉三个 boot 镜像。
+              # boolean 型 input 一律传 JSON 真布尔，理由同上。
               jq -n \
                 --arg ref "${{ github.ref_name }}" \
                 '{
@@ -211,23 +224,23 @@ jobs:
                   inputs: {
                     kernel_version: "5.10",
                     kernelsu_variant: "SukiSU",
-                    enable_susfs: "true",
+                    enable_susfs: true,
                     use_kpm: "patched (开启并修补)",
                     droidspaces: "不启用",
                     artifact_upload_mode: "仅上传 AnyKernel3.zip",
                     build_scope: "指定版本",
                     os_patch_level: "66",
                     build_time: "",
-                    use_zram: "true",
-                    use_bbg: "false",
-                    use_rekernel: "false",
-                    cve_2026_43499_patch: "false",
-                    supp_op: "false",
-                    droidspaces_ntsync: "false",
-                    use_bbr: "false",
-                    send_telegram: "true",
-                    use_release_cache: "false",
-                    manager_spoofed: "true"
+                    use_zram: true,
+                    use_bbg: false,
+                    use_rekernel: false,
+                    cve_2026_43499_patch: false,
+                    supp_op: false,
+                    droidspaces_ntsync: false,
+                    use_bbr: false,
+                    send_telegram: true,
+                    use_release_cache: false,
+                    manager_spoofed: true
                   }
                 }' > /tmp/dispatch.json
               TARGET_WF="kernel-custom.yml"

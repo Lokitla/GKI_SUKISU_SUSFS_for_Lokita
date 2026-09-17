@@ -218,78 +218,27 @@ on:
         type: string
         default: ""
 jobs:
+  prepare-matrix:
+    name: "生成构建矩阵"
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+      count: ${{ steps.gen.outputs.count }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: 生成构建矩阵
+        id: gen
+        run: python3 scripts/gen_matrix.py --android android12 --github-output
+
   build-kernels-a12-5-10:
+    needs: prepare-matrix
     name: "5.10.${{ matrix.sub_level }}-${{ matrix.os_patch_level }}"
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - sub_level: "66"
-            os_patch_level: "2022-01"
-            revision: "r11"
-          - sub_level: "81"
-            os_patch_level: "2022-03"
-            revision: "r11"
-          - sub_level: "101"
-            os_patch_level: "2022-04"
-            revision: "r28"
-          - sub_level: "110"
-            os_patch_level: "2022-07"
-            revision: "r1"
-          - sub_level: "117"
-            os_patch_level: "2022-09"
-            revision: "r1"
-          - sub_level: "136"
-            os_patch_level: "2022-11"
-            revision: "r15"
-          - sub_level: "149"
-            os_patch_level: "2023-01"
-            revision: "r1"
-          - sub_level: "160"
-            os_patch_level: "2023-03"
-            revision: "r1"
-          - sub_level: "168"
-            os_patch_level: "2023-04"
-            revision: "r9"
-          - sub_level: "177"
-            os_patch_level: "2023-07"
-            revision: "r3"
-          - sub_level: "185"
-            os_patch_level: "2023-09"
-            revision: "r1"
-          - sub_level: "198"
-            os_patch_level: "2024-01"
-            revision: "r17"
-          - sub_level: "205"
-            os_patch_level: "2024-03"
-            revision: "r1"
-          - sub_level: "209"
-            os_patch_level: "2024-05"
-            revision: "r13"
-          - sub_level: "218"
-            os_patch_level: "2024-08"
-            revision: "r14"
-          - sub_level: "226"
-            os_patch_level: "2024-11"
-            revision: "r8"
-          - sub_level: "233"
-            os_patch_level: "2025-02"
-            revision: "r1"
-          - sub_level: "236"
-            os_patch_level: "2025-05"
-            revision: "r1"
-          - sub_level: "237"
-            os_patch_level: "2025-06"
-            revision: "r1"
-          - sub_level: "240"
-            os_patch_level: "2025-09"
-            revision: "r1"
-          - sub_level: "246"
-            os_patch_level: "2025-12"
-            revision: "r1"
-          - sub_level: "X"
-            os_patch_level: "lts"
-            revision: "r1"
+        # 矩阵改由 .github/workflows/config/matrix.json 生成（19 组合）
+        # 本轮维护范围：仅保留仍在实机使用的子版本，剔除早期已弃用版本
+        include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
