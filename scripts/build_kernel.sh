@@ -2100,7 +2100,7 @@ stage_set_build_time() {
   if [[ -n "$input_time" && "$input_time" != "N" && "$input_time" != "n" ]]; then
     TIME_REGEX='^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (0[1-9]|[12][0-9]|3[01]) ([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9] UTC [0-9]{4}$'
     if [[ ! "$input_time" =~ $TIME_REGEX ]]; then
-      echo "::error title=构建时间格式错误::自定义构建时间必须形如 Sun Dec 01 08:10:00 UTC 2024，请删除多余前缀并使用两位日期。"
+      echo "::error title=构建时间格式错误::自定义构建时间必须形如 Thu Sep 17 00:00:00 UTC 2026，请删除多余前缀并使用两位日期。"
       return 1
     fi
 

@@ -42,7 +42,7 @@ permissions:
       build_time:
         required: false
         type: string
-        default: Sun Dec 01 08:10:00 UTC 2024
+        default: Thu Sep 17 00:00:00 UTC 2026
       use_zram:
         required: true
         type: boolean
