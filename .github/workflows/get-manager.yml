@@ -46,6 +46,7 @@ jobs:
       CCACHE_NOHASHDIR: "true"
       CCACHE_HARDLINK: "true"
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      KSU_BRANCH_MODE: ${{ inputs.ksu_branch_mode }}
 
     steps:
       - name: 🧐 Debug Workflow Caller Context
@@ -161,7 +162,7 @@ jobs:
           # 基准固定为 main 分支的提交数，与内核侧 setup.sh 产出的版本口径一致。
           if [ "$KSU_VARIANT" == "SukiSU" ]; then
             KSU_GIT_VERSION=$(git rev-list --count refs/remotes/origin/main 2>/dev/null || git rev-list --count HEAD)
-            echo "SukiSU: main 分支提交数 = $KSU_GIT_VERSION（分支模式输入: ${{ inputs.ksu_branch_mode }}）"
+            echo "SukiSU: main 分支提交数 = $KSU_GIT_VERSION（分支模式输入: $KSU_BRANCH_MODE）"
           else
             KSU_GIT_VERSION=$(git rev-list --count HEAD)
           fi
@@ -331,11 +332,11 @@ jobs:
           # 保证管理器与内核完全来自同一个 commit。
           if [ -n "$SUKISU_COMMIT" ] && [ "$KSU_VARIANT" = "SukiSU" ]; then
             echo "按指定提交 $SUKISU_COMMIT 精确查找 Manager 构建..."
-            PINNED_RUNS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            PINNED_RUNS=$(curl -s -H "Authorization: token $GH_TOKEN" \
               "https://api.github.com/repos/$REPO/actions/workflows/$FILENAME/runs?head_sha=$SUKISU_COMMIT&status=success&per_page=5")
             PINNED_ID=$(printf '%s' "$PINNED_RUNS" | jq -r '.workflow_runs[0].id // empty')
             if [ -n "$PINNED_ID" ]; then
-              ARTIFACTS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              ARTIFACTS=$(curl -s -H "Authorization: token $GH_TOKEN" \
                 "https://api.github.com/repos/$REPO/actions/runs/$PINNED_ID/artifacts")
               CANDIDATE_LIST=$(get_manager_artifacts "$ARTIFACTS")
               if [ -n "$CANDIDATE_LIST" ]; then
@@ -356,7 +357,7 @@ jobs:
           for PAGE in $(seq 1 10); do
             echo "--------------------------------------------------"
             echo "正在检查第 ${PAGE} 页历史构建..."
-            RUNS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "$RUNS_URL&page=$PAGE")
+            RUNS=$(curl -s -H "Authorization: token $GH_TOKEN" "$RUNS_URL&page=$PAGE")
             RUN_COUNT=$(printf '%s' "$RUNS" | jq '.workflow_runs | length')
             if [ "$RUN_COUNT" -eq 0 ]; then
               break
@@ -377,7 +378,7 @@ jobs:
                 continue
               fi
 
-              ARTIFACTS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              ARTIFACTS=$(curl -s -H "Authorization: token $GH_TOKEN" \
                 "https://api.github.com/repos/$REPO/actions/runs/$BUILD_ID/artifacts")
               CANDIDATE_LIST=$(get_manager_artifacts "$ARTIFACTS")
               if [ -z "$CANDIDATE_LIST" ]; then
@@ -411,7 +412,7 @@ jobs:
             SAFE_NAME=$(echo "$NAME" | tr '/ ' '__')
             ZIP_NAME="$KSU_VARIANT-${SAFE_NAME}(${{ env.KSU_VERSION }}).zip"
             echo "下载 $NAME -> $ZIP_NAME"
-            curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o "$ZIP_NAME" "$URL"
+            curl -L -H "Authorization: token $GH_TOKEN" -o "$ZIP_NAME" "$URL"
             mkdir -p "manager-artifacts/$SAFE_NAME"
             unzip -o "$ZIP_NAME" -d "manager-artifacts/$SAFE_NAME"
             rm -rf "$ZIP_NAME"
@@ -448,11 +449,11 @@ jobs:
             exit 0
           fi
 
-          BUILD_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          BUILD_ID=$(curl -s -H "Authorization: token $GH_TOKEN" \
           "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/workflows/build.yml/runs?status=success" |
           jq -r '.workflow_runs[0].id')
 
-          ARTIFACTS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          ARTIFACTS=$(curl -s -H "Authorization: token $GH_TOKEN" \
           "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs/$BUILD_ID/artifacts")
 
           DOWNLOAD_URL=$(echo "$ARTIFACTS" | jq -r '.artifacts[0].archive_download_url')
@@ -464,7 +465,7 @@ jobs:
           echo $DOWNLOAD_URL
           echo $NAME
           # 下载 Manager 文件
-          curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o "$NAME" "$DOWNLOAD_URL"
+          curl -L -H "Authorization: token $GH_TOKEN" -o "$NAME" "$DOWNLOAD_URL"
           echo "$NAME 文件已下载.zip"
 
 

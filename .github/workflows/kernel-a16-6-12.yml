@@ -121,7 +121,11 @@ on:
       ksu_branch_mode:
         description: "SukiSU 拉取分支：auto=跟随SUSFS开关自动选 / main=纯管理器分支 / builtin=内核内置实现（仅 SukiSU 生效）"
         required: false
-        type: string
+        type: choice
+        options:
+          - "auto"
+          - "main"
+          - "builtin"
         default: "auto"
       susfs_commit:
         description: "SUSFS 提交 hash：内核 SUSFS 修补使用该 commit（留空则取 config/config 或分支最新）"
@@ -216,7 +220,11 @@ on:
       ksu_branch_mode:
         description: "SukiSU 拉取分支：auto=跟随SUSFS开关自动选 / main=纯管理器分支 / builtin=内核内置实现（仅 SukiSU 生效）"
         required: false
-        type: string
+        type: choice
+        options:
+          - "auto"
+          - "main"
+          - "builtin"
         default: "auto"
       susfs_commit:
         description: "SUSFS 提交 hash：内核 SUSFS 修补使用该 commit（留空则取 config/config 或分支最新）"

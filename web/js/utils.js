@@ -5,10 +5,15 @@
 import { RUNTIME_CACHE_KEY, SUSFS_COMPAT_MIN } from './config.js';
 
 // HTML 转义，防止 XSS
+// 注意：textContent → innerHTML 只会转义 & < >，不碰引号。而本文件 escape 出来的值
+// 大量被拼进 title="..." / data-xxx="..." 这类 HTML 属性里，含双引号的数据会直接
+// 截断属性、拼出 onerror= 之类的东西。所以这里补上引号转义，属性上下文才安全。
 export function esc(str) {
   var el = document.createElement('span');
-  el.textContent = str;
-  return el.innerHTML;
+  el.textContent = str == null ? '' : String(str);
+  return el.innerHTML
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // 复制文本到剪贴板（兼容旧浏览器）

@@ -143,7 +143,13 @@ stage_summary() {
   echo "Droidspaces   : ${DROIDSPACES}"
   echo "NTSync        : ${DROIDSPACES_NTSYNC}"
   echo "产物上传模式  : ${ARTIFACT_UPLOAD_MODE}"
-  echo "Stock Config  : 自动检测 config/stock_defconfig"
+  # 实际状态来自 apply_stock_config；这里以前写死"自动检测"，
+  # 文件不存在时也照样显示，看不出这个功能到底开没开
+  if [ -f "$WORKSPACE/config/stock_defconfig" ]; then
+    echo "Stock Config  : 启用（config/stock_defconfig 已就位）"
+  else
+    echo "Stock Config  : 未启用（缺 config/stock_defconfig，跳过 /proc/config.gz 伪装）"
+  fi
   echo "========================================"
 
 
@@ -549,7 +555,20 @@ except Exception:
     # 之后每次 sync 都会以 "Checking out local projects failed" 收场。
     if [ "$attempt" -eq $((MAX_ATTEMPTS - 1)) ]; then
       echo "清空工作目录后重来"
-      find "$PWD" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+      # 用显式变量而不是 $PWD：这行是 -exec rm -rf，一旦所处目录不是内核源码根
+      # （比如哪天有人把这段挪到别处、或 KERNEL_ROOT 为空导致 cd 失败），
+      # 删掉的就是整个工作区——scripts/、config/ 一起没了，且报错信息完全指不到这里。
+      # 三重校验：路径非空、必须是绝对路径、必须真的是内核源码根（有 common/ 或 .repo）。
+      if [ -z "${KERNEL_ROOT}" ] || [[ "${KERNEL_ROOT}" != /* ]]; then
+        echo "::error::KERNEL_ROOT 非法（'${KERNEL_ROOT}'），拒绝清空目录"
+        exit 1
+      fi
+      if [ ! -d "${KERNEL_ROOT}/common" ] && [ ! -d "${KERNEL_ROOT}/.repo" ]; then
+        echo "::error::${KERNEL_ROOT} 看起来不是内核源码根（缺 common/ 与 .repo），拒绝清空目录"
+        exit 1
+      fi
+      echo "清空 ${KERNEL_ROOT} 后重来"
+      find "${KERNEL_ROOT}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
     fi
 
     echo "${RETRY_DELAY}s 后重试..."
