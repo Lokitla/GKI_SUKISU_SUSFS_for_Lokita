@@ -203,7 +203,7 @@ jobs:
         key: toolchain-${{ runner.os }}-v1
     - name: 构建内核
       id: build
-      run: ./scripts/build_kernel.sh --all
+      run: bash scripts/build_kernel.sh --all
       env:
         ANDROID_VERSION: ${{ inputs.android_version }}
         KERNEL_VERSION: ${{ inputs.kernel_version }}
