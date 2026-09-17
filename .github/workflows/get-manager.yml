@@ -9,7 +9,7 @@ on:
       kernelsu_variant:
         required: true
         type: string
-      spoofed:
+      manager_spoofed:
         description: "是否一并拉取 Spoofed（伪装官方包名）管理器；关闭则只保留普通管理器"
         required: false
         type: boolean
@@ -291,7 +291,7 @@ jobs:
           # [融合] Spoofed（伪装官方 KernelSU 包名）管理器开关
           #   开启：一并拉取 Spoofed-Manager（伪装官方包名的管理器）
           #   关闭：过滤掉所有名字含 spoofed 的产物，只保留普通管理器
-          WANT_SPOOFED="${{ inputs.spoofed }}"
+          WANT_SPOOFED="${{ inputs.manager_spoofed }}"
           case "$WANT_SPOOFED" in
             true|TRUE|True|1) JQ_SPOOFED=true ;;
             *) JQ_SPOOFED=false ;;
@@ -527,7 +527,7 @@ jobs:
           if-no-files-found: warn
 
       - name: 上传 Spoofed 管理器 APK
-        if: steps.add_KSU.outcome == 'success' && inputs.spoofed
+        if: steps.add_KSU.outcome == 'success' && inputs.manager_spoofed
         uses: actions/upload-artifact@v6
         with:
           name: ${{ inputs.kernelsu_variant }}-Spoofed-Manager(${{ env.KSU_VERSION }})

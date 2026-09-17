@@ -321,6 +321,6 @@ jobs:
     secrets: inherit
     with:
       kernelsu_variant: ${{ inputs.kernelsu_variant }}
-      spoofed: ${{ inputs.manager_spoofed }}
+      manager_spoofed: ${{ inputs.manager_spoofed }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}

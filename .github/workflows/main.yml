@@ -189,9 +189,9 @@ jobs:
     secrets: inherit
     with:
       kernelsu_variant: ${{ inputs.kernelsu_variant }}
-      spoofed: ${{ inputs.manager_spoofed }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
+      manager_spoofed: ${{ inputs.manager_spoofed }}
   # ==================== Android 12 - 5.10 构建 ====================
   build-a12-5-10:
     if: inputs.build_a12_5_10 || inputs.build_all
@@ -215,7 +215,6 @@ jobs:
       use_bbr: ${{ inputs.use_bbr || false }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
-      manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 }}
@@ -244,7 +243,6 @@ jobs:
       use_bbr: ${{ inputs.use_bbr || false }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
-      manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 }}
@@ -273,7 +271,6 @@ jobs:
       use_bbr: ${{ inputs.use_bbr || false }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
-      manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 }}
@@ -302,7 +299,6 @@ jobs:
       use_bbr: ${{ inputs.use_bbr || false }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
-      manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 }}
@@ -331,7 +327,6 @@ jobs:
       use_bbr: ${{ inputs.use_bbr || false }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
-      manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 }}
