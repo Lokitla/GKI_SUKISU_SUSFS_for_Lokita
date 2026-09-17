@@ -349,14 +349,32 @@ stage_gen_sign_key() {
   log_stage "gen_sign_key" "生成签名密钥"
   local _pwd="$PWD"
   # P2-5 修复：复用已有密钥以保证 boot 签名可复现，仅在缺失时生成；公钥归档便于审计
+  #
+  # 注意（可复现性）：该 pem 位于 kernel-build-tools/ 内，会随「缓存工具链」
+  # 步骤（actions/cache key: toolchain-${runner.os}-v1）一起被缓存与恢复。
+  # 因此：
+  #   - 缓存命中 → 复用首次构建生成的密钥，跨 Android/内核版本一致；
+  #   - 缓存未命中/被清除 → 重新生成随机密钥，boot.img 签名随之变化。
+  # 若需要"任意时刻字节级可复现"，应把密钥作为 secret 注入而非依赖缓存状态。
+  # 这里显式打印指纹，便于事后确认某次产物到底由哪把密钥签名。
   if [ -s "$BOOT_SIGN_KEY_PATH" ]; then
     echo "复用已有签名密钥: $BOOT_SIGN_KEY_PATH"
   else
     openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 > "$BOOT_SIGN_KEY_PATH"
     echo "已生成新签名密钥: $BOOT_SIGN_KEY_PATH"
+    echo "::warning::本次内核 boot 签名使用了新生成的随机密钥（缓存未命中）。" \
+         "同缓存周期内的其他构建复用它；缓存失效后签名密钥会变化。"
   fi
   mkdir -p "$WORKSPACE/build-logs"
   openssl rsa -in "$BOOT_SIGN_KEY_PATH" -pubout -out "$WORKSPACE/build-logs/boot_sign_key.pub" 2>/dev/null || true
+  # 输出公钥指纹，作为 key=value 追加到 build-logs 供审计与产物对照
+  if [ -s "$WORKSPACE/build-logs/boot_sign_key.pub" ]; then
+    fingerprint=$(openssl pkey -pubin -in "$WORKSPACE/build-logs/boot_sign_key.pub" \
+      -outform DER 2>/dev/null | sha256sum | awk '{print $1}')
+    echo "boot 签名公钥指纹(sha256): ${fingerprint:-不可用}"
+    echo "boot_sign_key_fingerprint=${fingerprint:-unavailable}" \
+      >> "$WORKSPACE/build-logs/build-info.txt"
+  fi
 
   cd "$_pwd"
 }
@@ -2460,10 +2478,16 @@ rebuild_image_lz4() {
   fi
 
   # 校验 2：解压后与最终 Image 逐字节相同。
-  # 这条通过即证明"解压出来的就是最终内核"，与帧参数、是否带 size_append 无关。
+  # 严格比对全文，不能只比前 N 字节：kbuild 的原始命令可能带 size_append，
+  # 解压结果会多出 4 字节长度后缀；若用 `head -c size` 截断后比对，
+  # 这种"多尾巴"的产物会被误判为通过，刷入后 bootloader 解析到垃圾数据。
   image_size=$(stat -c %s "$final_image")
-  if ! "$lz4_bin" -dc "$tmp_out" 2>/dev/null | head -c "$image_size" | cmp -s - "$final_image"; then
-    { _lz4_bail "解压结果与最终 Image 不一致"; return 1; }
+  decompressed_size=$("$lz4_bin" -dc "$tmp_out" 2>/dev/null | wc -c)
+  if [ "$decompressed_size" != "$image_size" ]; then
+    { _lz4_bail "解压后大小 ${decompressed_size} 与最终 Image ${image_size} 不一致"; return 1; }
+  fi
+  if ! "$lz4_bin" -dc "$tmp_out" 2>/dev/null | cmp -s - "$final_image"; then
+    { _lz4_bail "解压结果与最终 Image 内容不一致"; return 1; }
   fi
 
   cp -f "$tmp_out" "$output" || { _lz4_bail "无法写入 $output"; return 1; }
