@@ -159,6 +159,11 @@ on:
         required: false
         type: string
         default: ""
+      kpm_patch_sha256:
+        description: "KPM 修补工具(patch_linux)的 sha256 锚点：传给各内核版本工作流，最终交给 build_kernel.sh 做 fail-closed 比对（留空则不校验）"
+        required: false
+        type: string
+        default: ""
       ksu_branch_mode:
         description: "SukiSU 拉取分支（仅 SukiSU 变体生效）"
         required: false
@@ -178,6 +183,7 @@ jobs:
       kernelsu_variant: ${{ inputs.kernelsu_variant }}
       spoofed: ${{ inputs.manager_spoofed }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
+      kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
   # ==================== Android 12 - 5.10 构建 ====================
   build-a12-5-10:
@@ -205,6 +211,7 @@ jobs:
       manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
+      kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
   # ==================== Android 13 - 5.15 构建 ====================
   build-a13-5-15:
@@ -232,6 +239,7 @@ jobs:
       manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
+      kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
   # ==================== Android 14 - 6.1 构建 ====================
   build-a14-6-1:
@@ -259,6 +267,7 @@ jobs:
       manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
+      kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
   # ==================== Android 15 - 6.6 构建 ====================
   build-a15-6-6:
@@ -286,6 +295,7 @@ jobs:
       manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
+      kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
   # ==================== Android 16 - 6.12 构建 ====================
   build-a16-6-12:
@@ -313,6 +323,7 @@ jobs:
       manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
+      kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
   # ==================== 收集补丁冲突文件 ====================
   # 汇总所有构建任务中的 .rej 文件，方便调试补丁问题

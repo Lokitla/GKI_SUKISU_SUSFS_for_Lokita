@@ -126,6 +126,11 @@ on:
           - "auto"
           - "main"
           - "builtin"
+      kpm_patch_sha256:
+        description: "KPM 修补工具(patch_linux)的 sha256 锚点：传给 build_kernel.sh 做 fail-closed 比对，不符即拒绝执行（留空则不校验）"
+        required: false
+        type: string
+        default: ""
         default: "auto"
       susfs_commit:
         description: "SUSFS 提交 hash：内核 SUSFS 修补使用该 commit（留空则取 config/config 或分支最新）"
@@ -225,6 +230,11 @@ on:
           - "auto"
           - "main"
           - "builtin"
+      kpm_patch_sha256:
+        description: "KPM 修补工具(patch_linux)的 sha256 锚点：传给 build_kernel.sh 做 fail-closed 比对，不符即拒绝执行（留空则不校验）"
+        required: false
+        type: string
+        default: ""
         default: "auto"
       susfs_commit:
         description: "SUSFS 提交 hash：内核 SUSFS 修补使用该 commit（留空则取 config/config 或分支最新）"
@@ -287,6 +297,7 @@ jobs:
       use_release_cache: ${{ inputs.use_release_cache || false }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
+      kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 }}
       susfs_commit: ${{ inputs.susfs_commit || '' }}
   # 仅在直接触发时运行，从 main.yml 调用时跳过
   get-ksu-manager:

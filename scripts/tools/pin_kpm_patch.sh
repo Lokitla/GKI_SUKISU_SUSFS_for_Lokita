@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# 生成/刷新 KPM 修补工具（patch_linux）的 sha256 锚点。
+#
+# 背景：build_kernel.sh 默认跟随 SukiSU_patch 上游 main 分支，零版本锚点，
+# 上游一旦被改（投毒或误改）无法察觉。本脚本下载当前上游文件、算出 sha256，
+# 写入 config/kpm_patch_sha256；此后构建会做 fail-closed 比对，不符即中止。
+#
+# 用法:
+#   ./scripts/tools/pin_kpm_patch.sh              # 写入锚点（默认）
+#   ./scripts/tools/pin_kpm_patch.sh --check      # 只比对不写入（CI 巡检用）
+#   ./scripts/tools/pin_kpm_patch.sh --clear      # 清除锚点，恢复零锚点运行
+#   ./scripts/tools/pin_kpm_patch.sh --url <url>  # 指定其它下载地址
+#
+# 上游更新 patch_linux 后，重新跑一次本脚本即可刷新锚点。
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+PIN_FILE="$REPO_ROOT/config/kpm_patch_sha256"
+DEFAULT_URL="https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux"
+URL="$DEFAULT_URL"
+MODE="write"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --check) MODE="check"; shift ;;
+    --clear) MODE="clear"; shift ;;
+    --url)   URL="${2:?--url 需要参数}"; shift 2 ;;
+    -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    *) echo "未知参数: $1" >&2; exit 2 ;;
+  esac
+done
+
+if [ "$MODE" = "clear" ]; then
+  rm -f "$PIN_FILE"
+  echo "已清除锚点 $PIN_FILE（恢复零锚点运行，构建时会打印 ::warning::）"
+  exit 0
+fi
+
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+
+echo "下载: $URL"
+curl -LSsf "$URL" -o "$tmp"
+
+size=$(stat -c %s "$tmp")
+if [ "$size" -lt 1024 ]; then
+  echo "::error::下载内容异常（${size} 字节），拒绝生成锚点" >&2
+  exit 1
+fi
+sha=$(sha256sum "$tmp" | awk '{print $1}')
+echo "大小: ${size} 字节"
+echo "sha256: $sha"
+
+if [ "$MODE" = "check" ]; then
+  if [ ! -f "$PIN_FILE" ]; then
+    echo "::error::锚点文件不存在（$PIN_FILE），当前为零锚点运行" >&2
+    exit 1
+  fi
+  cur=$(tr -d '[:space:]' < "$PIN_FILE")
+  if [ "$cur" = "$sha" ]; then
+    echo "✅ 锚点一致"
+  else
+    echo "::error::锚点漂移：已 pin $cur，上游现为 $sha" >&2
+    echo "::error::上游 patch_linux 已变更，请人工确认后再刷新锚点" >&2
+    exit 1
+  fi
+  exit 0
+fi
+
+mkdir -p "$REPO_ROOT/config"
+printf '%s\n' "$sha" > "$PIN_FILE"
+echo
+echo "✅ 已写入 $PIN_FILE"
+echo "   此后 build_kernel.sh 会做 fail-closed 比对；上游变更将中止构建。"
+echo "   上游更新后重新运行本脚本刷新锚点。"

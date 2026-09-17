@@ -71,7 +71,10 @@ esac
 : "${KPM_PATCH_URL:=https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux}"
 # P1-A 修复：KPM 修补工具的可选 sha256 锚点。留空则不校验（跟随 main、零锚点风险）；
 # 传入具体 64 位 hex 后，下方 stage_patch_kpm 会做 fail-closed 比对，不符即拒绝执行。
-# 入口：本地 build.py --kpm-patch-sha256 / CI build.yml inputs.kpm_patch_sha256。
+# 入口优先级（高 → 低）：
+#   1) 环境变量 EXPECTED_KPM_PATCH_SHA256（CI: build.yml inputs.kpm_patch_sha256；本地: --kpm-patch-sha256）
+#   2) $WORKSPACE/config/kpm_patch_sha256（仓库内单一 pin 源，可用 scripts/tools/pin_kpm_patch.sh 生成）
+#   3) 空 → 不校验，打印 ::warning:: 明示零锚点运行
 : "${EXPECTED_KPM_PATCH_SHA256:=}"
 : "${WORKSPACE:=$(pwd)}"
 : "${COMPILE_TIMEOUT_MINUTES:=30}"
@@ -2200,6 +2203,17 @@ stage_patch_kpm_image() {
   fi
   orig_size=$(stat -c %s Image)
 
+  # 解析锚点：环境变量 → config/kpm_patch_sha256 → 空
+  local kpm_expected="${EXPECTED_KPM_PATCH_SHA256:-}"
+  local kpm_pin_file="$WORKSPACE/config/kpm_patch_sha256"
+  if [ -z "$kpm_expected" ] && [ -f "$kpm_pin_file" ]; then
+    kpm_expected=$(tr -d '[:space:]' < "$kpm_pin_file")
+    [ -n "$kpm_expected" ] && echo "KPM 锚点来源: $kpm_pin_file"
+  fi
+  if [ -z "$kpm_expected" ]; then
+    echo "::warning::未配置 KPM 修补工具 sha256 锚点（EXPECTED_KPM_PATCH_SHA256 与 config/kpm_patch_sha256 均为空），本次为零锚点运行：上游变更无法被察觉。可用 scripts/tools/pin_kpm_patch.sh 生成锚点。"
+  fi
+
   # P1-2 修复：下载后显式校验，chmod 755（原 777 过度放权），可选 sha256 比对
   if ! curl -LSsf "$KPM_PATCH_URL" -o patch; then
     echo "::warning::下载 KPM 修补工具失败，跳过（不影响其余产物）"
@@ -2207,9 +2221,20 @@ stage_patch_kpm_image() {
     chmod 755 patch
     KPM_SHA=$(sha256sum patch | awk '{print $1}')
     echo "KPM 修补工具 sha256: $KPM_SHA"
-    if [ -n "${EXPECTED_KPM_PATCH_SHA256:-}" ] && [ "$KPM_SHA" != "$EXPECTED_KPM_PATCH_SHA256" ]; then
-      echo "::error::KPM 修补工具 sha256 不匹配（期望 $EXPECTED_KPM_PATCH_SHA256，实际 $KPM_SHA），拒绝执行"
-    elif ! ./patch; then
+    # 无论是否配置锚点都回显可复制的 pin 值，便于事后取证与生成锚点
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+      printf 'KPM 修补工具（`patch_linux`）sha256：`%s`\n' "$KPM_SHA" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+    fi
+    if [ -n "$kpm_expected" ]; then
+      if [ "$KPM_SHA" != "$kpm_expected" ]; then
+        echo "::error::KPM 修补工具 sha256 不匹配（期望 $kpm_expected，实际 $KPM_SHA），拒绝执行 KPM 修补并中止构建"
+        rm -f patch
+        cd "$_pwd"
+        return 1
+      fi
+      echo "KPM 修补工具 sha256 校验通过（锚点一致）"
+    fi
+    if ! ./patch; then
       echo "::warning::KPM 修补脚本返回非零，请查看上方输出"
     elif [ -f oImage ]; then
       # 安全性校验：修补产物必须与原始 Image 体积相当。
