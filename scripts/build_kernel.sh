@@ -51,6 +51,11 @@ SUSFS_CONFIG_OPTIONS=(
   CONFIG_KSU_SUSFS_SUS_MAP=y
 )
 : "${SUPP_OP:=false}"
+# P1-2 合规锚点：严格许可模式。设为 true 时，跳过两个「许可未明 / 非标准许可」的
+# 非必需补丁（Numbersf/Action-Build 的 Unicode 绕过修复、WildKernels/kernel_patches
+# 的三星 min_kdp），只构建 GPL 体系内可清晰追溯的产物。
+# 详见 THIRD_PARTY_NOTICES.md。默认 false（保持既有构建行为）。
+: "${STRICT_LICENSE_MODE:=false}"
 : "${DROIDSPACES:=不启用}"
 : "${DROIDSPACES_NTSYNC:=false}"
 : "${ARTIFACT_UPLOAD_MODE:=上传全部}"
@@ -104,6 +109,7 @@ export EXPORT_SUSFS_PATCHES
 export ENABLE_SUSFS
 export EXPECTED_KPM_PATCH_SHA256
 export SUPP_OP
+export STRICT_LICENSE_MODE
 export DROIDSPACES
 export DROIDSPACES_NTSYNC
 export ARTIFACT_UPLOAD_MODE
@@ -1549,6 +1555,14 @@ run_inject_ntsync() {
 
 stage_apply_unicode_fix() {
   log_stage "apply_unicode_fix" "应用 Unicode 绕过修复"
+  # P1-2：该补丁来自 Numbersf/Action-Build（自定义许可，非 GPL 体系）。
+  # 严格许可模式下整个跳过，产物中不含该来源代码，代价是 SUSFS 的 Unicode 绕过
+  # 修复不生效（内核本身仍可正常构建与启动）。
+  if [ "${STRICT_LICENSE_MODE:-false}" = "true" ]; then
+    echo "跳过 Unicode 绕过修复（STRICT_LICENSE_MODE=true：排除 Numbersf/Action-Build 非标准许可来源）"
+    echo "::warning::严格许可模式：Unicode 绕过修复未应用，SUSFS 的 Unicode 相关隐藏能力会减弱"
+    return 0
+  fi
   local _pwd="$PWD"
   local _rc=0
   cd ${KERNEL_ROOT}/common
@@ -1642,26 +1656,34 @@ stage_fix_66_wifi_bt() {
   MIN_KDP_PATCH="$KERNEL_PATCHES/samsung/min_kdp/add-min_kdp-symbols.patch"
   MIN_KDP_DST="drivers/min_kdp.c"
 
-  ensure_line_once "$GALAXY_SYMBOL_LIST" "kdp_set_cred_non_rcu"
-  ensure_line_once "$GALAXY_SYMBOL_LIST" "kdp_usecount_dec_and_test"
-  ensure_line_once "$GALAXY_SYMBOL_LIST" "kdp_usecount_inc"
-
-  if [ ! -f "$MIN_KDP_PATCH" ]; then
-    echo "::error::补丁不存在: $MIN_KDP_PATCH"
-    exit 1
-  fi
-  if patch -p1 --dry-run < "$MIN_KDP_PATCH" >/dev/null 2>&1; then
-    patch -p1 --no-backup-if-mismatch < "$MIN_KDP_PATCH"
+  # P1-2：min_kdp.c 与三星符号来自 WildKernels/kernel_patches（上游未声明许可），
+  # 严格许可模式下整体跳过，只保留小米侧符号（不引入未声明许可的代码）。
+  # 代价：三星机型的 WiFi/蓝牙兼容性修复不生效。
+  if [ "${STRICT_LICENSE_MODE:-false}" = "true" ]; then
+    echo "跳过三星 min_kdp 修补（STRICT_LICENSE_MODE=true：排除 WildKernels/kernel_patches 未声明许可来源）"
+    echo "::warning::严格许可模式：三星 min_kdp 未注入，三星机型的 WiFi/蓝牙兼容性修复不生效"
   else
-    echo "min_kdp symbols patch 已应用或当前上下文不匹配，跳过。"
-  fi
+    ensure_line_once "$GALAXY_SYMBOL_LIST" "kdp_set_cred_non_rcu"
+    ensure_line_once "$GALAXY_SYMBOL_LIST" "kdp_usecount_dec_and_test"
+    ensure_line_once "$GALAXY_SYMBOL_LIST" "kdp_usecount_inc"
 
-  if [ ! -f "$MIN_KDP_SRC" ]; then
-    echo "::error::文件不存在: $MIN_KDP_SRC"
-    exit 1
+    if [ ! -f "$MIN_KDP_PATCH" ]; then
+      echo "::error::补丁不存在: $MIN_KDP_PATCH"
+      exit 1
+    fi
+    if patch -p1 --dry-run < "$MIN_KDP_PATCH" >/dev/null 2>&1; then
+      patch -p1 --no-backup-if-mismatch < "$MIN_KDP_PATCH"
+    else
+      echo "min_kdp symbols patch 已应用或当前上下文不匹配，跳过。"
+    fi
+
+    if [ ! -f "$MIN_KDP_SRC" ]; then
+      echo "::error::文件不存在: $MIN_KDP_SRC"
+      exit 1
+    fi
+    cp "$MIN_KDP_SRC" "$MIN_KDP_DST"
+    ensure_line_once "$DRIVERS_MAKEFILE" "obj-y += min_kdp.o"
   fi
-  cp "$MIN_KDP_SRC" "$MIN_KDP_DST"
-  ensure_line_once "$DRIVERS_MAKEFILE" "obj-y += min_kdp.o"
 
   ensure_line_once "$XIAOMI_SYMBOL_LIST" "device_find_any_child"
 
@@ -2176,6 +2198,15 @@ stage_patch_kpm_image() {
 
   if [ "${KERNEL_VERSION}" = "6.6" ]; then
     echo "6.6 内核不支持 KPM 镜像修补，跳过"
+    cd "$_pwd"
+    return 0
+  fi
+
+  # P1-2：patch_linux 来自 SukiSU-Ultra/SukiSU_patch（上游未声明许可）。
+  # 严格许可模式下不使用该工具，保留未修补的原始 Image（KPM 模块加载能力不生效）。
+  if [ "${STRICT_LICENSE_MODE:-false}" = "true" ]; then
+    echo "跳过 KPM 镜像修补（STRICT_LICENSE_MODE=true：排除 SukiSU_patch 未声明许可的 patch_linux）"
+    echo "::warning::严格许可模式：Image 未做 KPM 修补，内核将无法加载 KPM 模块"
     cd "$_pwd"
     return 0
   fi

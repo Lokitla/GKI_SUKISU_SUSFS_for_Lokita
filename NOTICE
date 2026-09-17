@@ -4,6 +4,9 @@ GKI_SUKISU_SUSFS_for_Lokita
 本仓库是个人自用分支，由多个上游项目融合而成（融合说明见 FUSION.md）。
 仓库自身的构建脚本、工作流与文档，在下列上游项目的许可证框架下发布。
 
+许可未明 / 非标准许可的组件的逐项风险锚点（引入位置、自行核实方式、退出开关）
+单独记录于 THIRD_PARTY_NOTICES.md，本文件只作归属声明与交叉引用。
+
 ================================================================================
 一、本仓库自身许可证
 ================================================================================
@@ -76,12 +79,20 @@ GKI_SUKISU_SUSFS_for_Lokita
                                                      AK3 脚本许可）
                               注：包内 magiskboot / magiskpolicy 来自 Magisk，为
                                   GPL-3.0+。
-  WildKernels/kernel_patches  三星 min_kdp 等补丁     未声明（按上游当前状态使用；如作者提供许可或提出异议将调整/移除）
-  Numbersf/Action-Build       Unicode 绕过修复补丁    自定义许可（非标准开源协议，⚠ 与 GPL 再分发自由冲突，见下方说明）
-  SukiSU-Ultra/SukiSU_patch   ZRAM / LZ4KD 补丁      未声明（同上：按上游当前状态使用，如有异议将调整/移除）
+  WildKernels/kernel_patches  三星 min_kdp 等补丁     未声明（构建关键依赖：min_kdp.c 会编进内核）
+                                                     → 见 THIRD_PARTY_NOTICES.md 2.1（锚点 / 核实 / 退出方案）
+  Numbersf/Action-Build       Unicode 绕过修复补丁    自定义许可（非标准开源协议，⚠ 与 GPL 再分发自由冲突）
+                                                     → 见 THIRD_PARTY_NOTICES.md 2.2
+  SukiSU-Ultra/SukiSU_patch   ZRAM / LZ4KD 补丁      未声明（同上）
                               KPM 镜像修补工具（patch_linux）
                               注：原名 ShirkNeko/SukiSU_patch，已改名；
                                   本仓库直接引用新名称，不再依赖旧地址跳转。
+                              patch_linux 为未声明许可的预编译二进制，
+                                  → 见 THIRD_PARTY_NOTICES.md 2.3（含 sha256 锚点做法）
+
+  上述三个「许可未明 / 非标准许可」的组件均为功能增强项而非构建必需项。
+  如需产出完全不含这类来源的内核，可开启 STRICT_LICENSE_MODE=true 一次性剔除三者，
+  代价与细节见 THIRD_PARTY_NOTICES.md 第三节。
 
   ⚠ 许可冲突声明：Numbersf/Action-Build 采用自定义许可（非 GPL 体系），其「禁止原样 fork
   再分发或公开宣传」的限制与 GPL 的再分发自由相冲突。本仓库不以其 GPL 兼容方式再分发该
