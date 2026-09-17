@@ -47,7 +47,7 @@ GitHub Actions 上。ShirkNeko 的 Python 版能本地跑，但功能比 zzh 少
 **直接搬运任何一边都是错的**，因此采用第三条路：
 
 ```
-scripts/build_kernel.sh        ← 单一真相源（完整功能，44 个阶段）
+scripts/build_kernel.sh        ← 单一真相源（完整功能，45 个阶段）
         ├─ .github/workflows/build.yml 调用它 → Actions 构建
         └─ build.py 调用它                   → 本地构建
 ```
@@ -154,7 +154,7 @@ run_cleanup_disk() {
 
 因此以下方面是**静态推导等价**，尚未经过真实构建验证：
 
-- 44 个阶段在独立 shell 进程中串接后，个别依赖子 shell 行为的语句
+- 45 个阶段在独立 shell 进程中串接后，个别依赖子 shell 行为的语句
 - `compile_kernel` 的重试包装（原为 `nick-fields/retry@v4` action）
 - 各补丁步骤在真实源码上的实际效果
 

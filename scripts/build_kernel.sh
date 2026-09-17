@@ -53,6 +53,10 @@ esac
 # 直接指向新名字，免得哪天跳转撤掉就整片构建一起挂。
 # 跟随 SukiSU_patch 上游 main 分支（不钉 commit，便于自动跟进上游）
 : "${KPM_PATCH_URL:=https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux}"
+# P1-A 修复：KPM 修补工具的可选 sha256 锚点。留空则不校验（跟随 main、零锚点风险）；
+# 传入具体 64 位 hex 后，下方 stage_patch_kpm 会做 fail-closed 比对，不符即拒绝执行。
+# 入口：本地 build.py --kpm-patch-sha256 / CI build.yml inputs.kpm_patch_sha256。
+: "${EXPECTED_KPM_PATCH_SHA256:=}"
 : "${WORKSPACE:=$(pwd)}"
 : "${COMPILE_TIMEOUT_MINUTES:=30}"
 : "${COMPILE_MAX_ATTEMPTS:=3}"
@@ -79,6 +83,7 @@ export USE_REKERNEL
 export CVE_2026_43499_PATCH
 export EXPORT_SUSFS_PATCHES
 export ENABLE_SUSFS
+export EXPECTED_KPM_PATCH_SHA256
 export SUPP_OP
 export DROIDSPACES
 export DROIDSPACES_NTSYNC
@@ -814,6 +819,9 @@ stage_add_kernelsu() {
   else
     export KSU_LATEST_COMMIT_DATE="未知"
   fi
+
+  # P2-12 修复：清理下载到 /tmp 的 setup 脚本，避免跨任务 /tmp 竞态（同路径重复写入）
+  rm -f /tmp/ksu_setup.sh
 
   cd "$_pwd"
 }
@@ -2196,10 +2204,12 @@ stage_build_boot_a12() {
 
 # 条件执行（等价原工作流 if:）
 run_build_boot_a12() {
-  if [ "$ANDROID_VERSION" = "android12" ]; then
+  # P2-4 修复：「仅 AnyKernel3」模式用户只拿刷机包，boot 镜像编译纯属浪费 runner，
+  # 且上传步骤本就不收集非「上传全部」模式的 *.img，这里在阶段层直接跳过。
+  if [ "$ANDROID_VERSION" = "android12" ] && [ "$ARTIFACT_UPLOAD_MODE" = "上传全部" ]; then
     stage_build_boot_a12 "$@"
   else
-    echo "跳过阶段: build_boot_a12（条件不满足）"
+    echo "跳过阶段: build_boot_a12（条件不满足或仅 AnyKernel3 模式无需 boot 镜像）"
   fi
 }
 
@@ -2231,10 +2241,11 @@ stage_build_boot_a13plus() {
 
 # 条件执行（等价原工作流 if:）
 run_build_boot_a13plus() {
-  if [ "$ANDROID_VERSION" = "android13" ] || [ "$ANDROID_VERSION" = "android14" ] || [ "$ANDROID_VERSION" = "android15" ] || [ "$ANDROID_VERSION" = "android16" ]; then
+  # P2-4 修复：同上，仅「上传全部」模式才构建 boot 镜像
+  if { [ "$ANDROID_VERSION" = "android13" ] || [ "$ANDROID_VERSION" = "android14" ] || [ "$ANDROID_VERSION" = "android15" ] || [ "$ANDROID_VERSION" = "android16" ]; } && [ "$ARTIFACT_UPLOAD_MODE" = "上传全部" ]; then
     stage_build_boot_a13plus "$@"
   else
-    echo "跳过阶段: build_boot_a13plus（条件不满足）"
+    echo "跳过阶段: build_boot_a13plus（条件不满足或仅 AnyKernel3 模式无需 boot 镜像）"
   fi
 }
 
@@ -2362,7 +2373,24 @@ usage() {
 EOF
 }
 
+# P2-3 修复：REVISION / OS_PATCH_LEVEL 会被直接内插进 curl URL（如 GKI_URL）、
+# 产物文件名、git 分支名与 mkbootimg --os_patch_level。若缺失白名单，含 $(...) 的
+# 输入会在双引号内触发命令替换（命令注入）。这里做早期 fail-closed 校验，任何阶段
+# 运行前即拦截；白名单与 P1-1 的 VERSION 一致：字母数字及 . _ -。
+validate_inputs() {
+  local v val
+  for v in OS_PATCH_LEVEL REVISION; do
+    val="${!v}"
+    if [ -n "$val" ]; then
+      case "$val" in
+        *[!A-Za-z0-9._-]*) echo "::error::$v 含非法字符，仅允许字母数字及 . _ -（命令注入防护）"; exit 1 ;;
+      esac
+    fi
+  done
+}
+
 main() {
+  validate_inputs
   local mode="all" target=""
   while [ $# -gt 0 ]; do
     case "$1" in

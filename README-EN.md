@@ -11,6 +11,7 @@
 > - Workflows, build scripts and docs here were **modified with AI assistance** and have **not been reviewed, endorsed or contributed to by any upstream author**; behaviour may differ from upstream. The upstream authors take no responsibility for anything in this repository.
 > - Builds are for the owner's own testing and are **not an official distribution channel**; for official releases go to [zzh's original repo](https://github.com/zzh20188/GKI_KernelSU_SUSFS/releases).
 > - Flashing third-party kernels risks bricking, data loss and app integrity-check failures. Back up your stock boot image and proceed at your own risk.
+> - The docs site (GitHub Pages) uses [GoatCounter](https://www.goatcounter.com/) for anonymous visit stats, hosted at `zzh20188.goatcounter.com`; it collects no personally identifiable information. Disable JavaScript or block `gc.zgo.at` to opt out.
 > - Please report issues **here** and never contact the upstream authors about them (no issues, emails or Coolapk DMs).
 
 ---

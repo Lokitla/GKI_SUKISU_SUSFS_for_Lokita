@@ -11,6 +11,7 @@
 > - 仓库内的工作流、构建脚本与文档经过 **AI 辅助修改与二次开发**，**未经任何上游作者审阅、认可或参与**，行为可能与上游不一致；上游作者对本仓库的内容、质量与后果不承担任何责任。
 > - 产物仅供本人测试，**不是官方发布渠道**；想要官方版本请前往 [zzh 原仓库](https://github.com/zzh20188/GKI_KernelSU_SUSFS/releases)。
 > - 刷入第三方内核存在变砖、丢失数据、触发应用风控等风险；请自行备份原厂 Boot 镜像，风险自负。
+> - 文档站点（GitHub Pages）使用 [GoatCounter](https://www.goatcounter.com/) 做匿名访问统计，数据托管于 `zzh20188.goatcounter.com`，不收集可识别个人身份的信息；禁用 JavaScript 或拦截 `gc.zgo.at` 即可退出统计。
 > - 遇到问题请在本仓库反馈，**不要以任何方式打扰上游作者**（包括 Issue、邮件、酷安私信等）。
 
 ---
@@ -141,6 +142,8 @@ GitHub Actions 与本地 `build.py` 共用这一份 45 阶段脚本，不存在�
 > **SUKISU最新版:** 已经恢复构建，但不兼容6.12
 >
 > 增加了了老版本SukiSU的构建，若使用老版本内核最好搭配同样版本的管理器，老版本完全使用以前的SUKISU和SUSFS代码，因此不包含最近的特性或bug
+>
+> **rekernel 特性（beta）：** rekernel 特性现已支持（目前处于 beta 阶段）
 > 
 > <img width="296" height="152" alt="image" src="https://github.com/user-attachments/assets/e60316c3-c760-4178-a4c8-b94d0ef0b5b2" />
 

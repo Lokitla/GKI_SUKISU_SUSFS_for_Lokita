@@ -134,6 +134,7 @@ def build_env(args, android, kernel, sub_level, os_patch):
         "DROIDSPACES_NTSYNC": str(args.ntsync).lower(),
         "CVE_2026_43499_PATCH": str(args.cve_patch).lower(),
         "EXPORT_SUSFS_PATCHES": str(args.export_susfs_patches).lower(),
+        "EXPECTED_KPM_PATCH_SHA256": args.kpm_patch_sha256 or "",
         "ARTIFACT_UPLOAD_MODE": args.artifact_mode,
         "WORKSPACE": str(args.workspace),
     }
@@ -190,6 +191,8 @@ def main():
     parser.add_argument("--kpm", nargs="?", choices=KPM_MODES, const="patched", default="patched",
                         metavar="{disabled,enabled,patched}",
                         help="KPM 模块支持（默认 patched 开启并修补；--kpm disabled 关闭）")
+    parser.add_argument("--kpm-patch-sha256", help="KPM 修补工具(patch_linux)的 sha256 锚点，"
+                        "传入后做 fail-closed 比对，不符即拒绝执行（留空则不校验）")
     parser.add_argument("--bbg", action="store_true", help="启用 Baseband-guard")
     parser.add_argument("--rekernel", action="store_true", help="启用 Re-Kernel")
     parser.add_argument("--no-susfs", action="store_true", help="禁用 SUSFS")

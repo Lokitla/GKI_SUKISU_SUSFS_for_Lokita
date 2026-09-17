@@ -111,6 +111,11 @@ permissions:
         required: false
         type: string
         default: ""
+      kpm_patch_sha256:
+        description: "KPM 修补工具(patch_linux)的 sha256 锚点：传给 build_kernel.sh 做 fail-closed 比对，不符即拒绝执行（留空则不校验）"
+        required: false
+        type: string
+        default: ""
 jobs:
   build-kernel:
     name: ${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}-${{ inputs.ksu_variant }}
@@ -215,6 +220,7 @@ jobs:
         USE_REKERNEL: ${{ inputs.use_rekernel }}
         CVE_2026_43499_PATCH: ${{ inputs.cve_2026_43499_patch }}
         EXPORT_SUSFS_PATCHES: ${{ inputs.export_susfs_patches }}
+        EXPECTED_KPM_PATCH_SHA256: ${{ inputs.kpm_patch_sha256 }}
         ENABLE_SUSFS: ${{ inputs.enable_susfs }}
         SUPP_OP: ${{ inputs.supp_op }}
         DROIDSPACES: ${{ inputs.droidspaces }}
