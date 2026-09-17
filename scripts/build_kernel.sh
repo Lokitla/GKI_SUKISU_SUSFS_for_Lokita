@@ -2484,41 +2484,58 @@ rebuild_image_lz4() {
     cmd="cat $tmpdir/Image | $lz4_bin -l -9 - - > $tmp_out"
   fi
 
-  # CWD 切到 objtree：.cmd 里除输入/输出外可能还有其它相对引用
-  # （例如 mkbootimg 依赖的 scripts/、size_append 读取的文件等）。
   local _saved_pwd="$PWD"
-  [ -d "$objtree" ] && cd "$objtree" 2>/dev/null || true
+  local _legacy_cmd="cat $tmpdir/Image | $lz4_bin -l -9 - - > $tmp_out"
+  local _used=""
 
-  if ! ( eval "$cmd" ) 2>/tmp/lz4-rebuild.log; then
-    cd "$_saved_pwd"
-    { _lz4_bail "重放压缩命令失败: $(tail -n2 /tmp/lz4-rebuild.log 2>/dev/null)"; return 1; }
+  # 产出校验：魔数 + 与最终 Image 逐字节一致。两种压缩途径共用同一套判定，
+  # 任一不过就换另一条途径重试，两条都不行才放弃（宁缺勿错）。
+  _lz4_produced_ok() {
+    [ -s "$tmp_out" ] || return 1
+    magic=$(od -An -tx1 -N4 "$tmp_out" 2>/dev/null | tr -d ' \n')
+    [ "$magic" = "02214c18" ] || return 1
+    image_size=$(stat -c %s "$final_image")
+    [ "$("$lz4_bin" -dc "$tmp_out" 2>/dev/null | wc -c)" = "$image_size" ] || return 1
+    "$lz4_bin" -dc "$tmp_out" 2>/dev/null | cmp -s - "$final_image" || return 1
+    return 0
+  }
+
+  # 途径 1：重放 kbuild 记录的原始命令
+  if [ -n "$cmd" ]; then
+    echo "采用 kbuild 记录的原始压缩命令: $(basename "$cmdfile")"
+    # CWD 切到 objtree：.cmd 除输入/输出外可能还有其它相对引用
+    [ -d "$objtree" ] && cd "$objtree" 2>/dev/null || true
+    if ( eval "$cmd" ) 2>/tmp/lz4-rebuild.log; then
+      cd "$_saved_pwd"
+      if _lz4_produced_ok; then
+        _used="kbuild .cmd"
+      else
+        echo "::warning::kbuild .cmd 重放产物未通过校验，改用标准 legacy 参数重压"
+      fi
+    else
+      cd "$_saved_pwd"
+      echo "::warning::重放 kbuild .cmd 失败（$(tail -n1 /tmp/lz4-rebuild.log 2>/dev/null)），改用标准 legacy 参数重压"
+    fi
   fi
-  cd "$_saved_pwd"
 
-  [ -s "$tmp_out" ] || { _lz4_bail "压缩未产生输出"; return 1; }
-
-  # 校验 1：legacy 帧魔数。现代帧（04 22 4D 18）会被 GKI bootloader 拒收 → 卡第一屏
-  magic=$(od -An -tx1 -N4 "$tmp_out" 2>/dev/null | tr -d ' \n')
-  if [ "$magic" != "02214c18" ]; then
-    { _lz4_bail "产出不是 LZ4 legacy 帧（首 4 字节 $magic，期望 02214c18）"; return 1; }
-  fi
-
-  # 校验 2：解压后与最终 Image 逐字节相同。
-  # 严格比对全文，不能只比前 N 字节：kbuild 的原始命令可能带 size_append，
-  # 解压结果会多出 4 字节长度后缀；若用 `head -c size` 截断后比对，
-  # 这种"多尾巴"的产物会被误判为通过，刷入后 bootloader 解析到垃圾数据。
-  image_size=$(stat -c %s "$final_image")
-  decompressed_size=$("$lz4_bin" -dc "$tmp_out" 2>/dev/null | wc -c)
-  if [ "$decompressed_size" != "$image_size" ]; then
-    { _lz4_bail "解压后大小 ${decompressed_size} 与最终 Image ${image_size} 不一致"; return 1; }
-  fi
-  if ! "$lz4_bin" -dc "$tmp_out" 2>/dev/null | cmp -s - "$final_image"; then
-    { _lz4_bail "解压结果与最终 Image 内容不一致"; return 1; }
+  # 途径 2：标准 legacy 参数（-l -9）。kbuild 用 -12 --favor-decSpeed，
+  # 但那些参数只影响压缩率与速度，不影响解压结果的正确性 —— 校验仍按全文比对。
+  if [ -z "$_used" ]; then
+    rm -f "$tmp_out"
+    if ! ( eval "$_legacy_cmd" ) 2>/tmp/lz4-rebuild.log; then
+      { _lz4_bail "legacy 重压失败: $(tail -n1 /tmp/lz4-rebuild.log 2>/dev/null)"; return 1; }
+    fi
+    if _lz4_produced_ok; then
+      _used="legacy -l -9"
+    else
+      _lz4_bail "两条压缩途径均未产出合格 Image.lz4（产物 $(stat -c %s "$tmp_out" 2>/dev/null) 字节，末4字节 $(tail -c 4 "$tmp_out" 2>/dev/null | od -An -tx1 | tr -d ' \n')，lz4=$($lz4_bin --version 2>&1 | head -n1)，Image=$image_size 字节）"
+      return 1
+    fi
   fi
 
   cp -f "$tmp_out" "$output" || { _lz4_bail "无法写入 $output"; return 1; }
   rm -rf "$tmpdir"
-  echo "Image.lz4 已按最终 Image 重建并通过双重校验（$(stat -c %s "$output") 字节，legacy 帧）"
+  echo "Image.lz4 已按最终 Image 重建并通过双重校验（$(stat -c %s "$output") 字节，legacy 帧，来源: ${_used}）"
   return 0
 }
 
