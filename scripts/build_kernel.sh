@@ -844,6 +844,12 @@ stage_resolve_ksu_branch() {
         echo "未在 $LEGACY_SUKISU_CONFIG 配置 SukiSU 固定提交" >&2
         exit 1
       fi
+      # 与下方 PINNED_COMMIT 一致：来自配置文件的值同样要过 hex 校验，
+      # 否则一行被污染的配置就能把任意字符串带进下游 git 操作。
+      if [[ ! "$SUKISU_FIXED_COMMIT" =~ ^[0-9a-fA-F]{40}$ && ! "$SUKISU_FIXED_COMMIT" =~ ^[0-9a-fA-F]{64}$ ]]; then
+        echo "::error::$LEGACY_SUKISU_CONFIG 的 sukisu= 不是合法的 commit hash（要求 40 位 SHA-1 或 64 位 SHA-256 的 hex）：$SUKISU_FIXED_COMMIT" >&2
+        exit 1
+      fi
       BRANCH="$SUKISU_FIXED_COMMIT"
       ;;
   esac
@@ -861,7 +867,13 @@ stage_resolve_ksu_branch() {
     fi
   fi
   if [ -n "$PINNED_COMMIT" ] && [ "$variant_input" == "SukiSU" ]; then
-    if [ "${#PINNED_COMMIT}" = "40" ] || [ "${#PINNED_COMMIT}" = "64" ]; then
+    # 长度 + 字符集双重校验。只判长度不够：`$PINNED_COMMIT` 会作为位置参数交给
+    # `bash -s "$BRANCH"`，虽然双引号挡住了命令替换，但 `--xxx` 形态会被 bash 当成
+    # 选项解析（实测报 "invalid option"），含空格/控制字符的值也会污染下游 git 操作。
+    # commit hash 的合法字符集固定为 [0-9a-f]，这里 fail-closed。
+    if [[ ! "$PINNED_COMMIT" =~ ^[0-9a-fA-F]{40}$ && ! "$PINNED_COMMIT" =~ ^[0-9a-fA-F]{64}$ ]]; then
+      echo "::warning::忽略非法 SukiSU 提交: ${PINNED_COMMIT}（要求 40 位 SHA-1 或 64 位 SHA-256 的 hex，改用默认分支）"
+    else
       BRANCH="$PINNED_COMMIT"
       echo "SukiSU 使用自定义提交: $PINNED_COMMIT"
       # 固定提交无法从名字判断血统，只能靠下面的分支复核（setup 之后用 git 实际
@@ -869,8 +881,6 @@ stage_resolve_ksu_branch() {
       if [ "${ENABLE_SUSFS}" = "true" ]; then
         echo "::warning::SukiSU 固定提交 + SUSFS：请确认 $PINNED_COMMIT 属于 builtin 血统（kernel/feature/selinux_hide.c 中不应出现 ksu_patch_text），否则 SELinux 隐藏会失效"
       fi
-    else
-      echo "::warning::忽略长度非 40/64 的 SukiSU 提交: $PINNED_COMMIT（改用默认分支）"
     fi
   fi
 

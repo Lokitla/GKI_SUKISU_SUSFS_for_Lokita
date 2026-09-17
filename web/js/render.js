@@ -141,7 +141,7 @@ function buildCard(data, meta) {
       '</tr>';
     });
     return '<table>' +
-      '<thead class="table-half-head"><tr><th>' + t.date + '</th><th>' + t.kernelVersion + '</th></tr></thead>' +
+      '<thead class="table-half-head"><tr><th>' + esc(t.date) + '</th><th>' + esc(t.kernelVersion) + '</th></tr></thead>' +
       '<tbody>' + rows + '</tbody>' +
     '</table>';
   }
@@ -156,15 +156,15 @@ function buildCard(data, meta) {
       legendHtml +
       ltsHtml +
       '<div class="stats">' +
-        '<div class="stat"><div class="stat-label">' + t.releases + '</div><div class="stat-value">' + totalReleases + '</div></div>' +
-        '<div class="stat"><div class="stat-label">' + t.first + '</div><div class="stat-value">' + esc(firstDate) + '</div></div>' +
-        '<div class="stat"><div class="stat-label">' + t.latest + '</div><div class="stat-value">' + esc(lastDate) + '</div></div>' +
-        '<div class="stat"><div class="stat-label">' + t.latestKernel + '</div><div class="stat-value">' + esc(lastKernel) + '</div></div>' +
+        '<div class="stat"><div class="stat-label">' + esc(t.releases) + '</div><div class="stat-value">' + totalReleases + '</div></div>' +
+        '<div class="stat"><div class="stat-label">' + esc(t.first) + '</div><div class="stat-value">' + esc(firstDate) + '</div></div>' +
+        '<div class="stat"><div class="stat-label">' + esc(t.latest) + '</div><div class="stat-value">' + esc(lastDate) + '</div></div>' +
+        '<div class="stat"><div class="stat-label">' + esc(t.latestKernel) + '</div><div class="stat-value">' + esc(lastKernel) + '</div></div>' +
       '</div>' +
       '<div class="table-dual-wrapper">' +
         '<div class="table-dual-header">' +
-          '<span>' + t.date + '</span>' +
-          '<span>' + t.kernelVersion + '</span>' +
+          '<span>' + esc(t.date) + '</span>' +
+          '<span>' + esc(t.kernelVersion) + '</span>' +
         '</div>' +
         '<div class="table-dual-body">' +
           '<div class="table-half">' + buildHalf(leftCol, false) + '</div>' +

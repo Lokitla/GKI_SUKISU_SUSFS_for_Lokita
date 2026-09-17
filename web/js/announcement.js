@@ -29,6 +29,25 @@ function dismissAnnounceToday() {
 
 // ---- 简易 Markdown 渲染 ----
 
+// 允许的链接协议白名单。公告内容走 data/announcement.json，虽然当前由本仓库
+// 自行维护，但一旦该文件被 PR 注入或由外部流程改写，`[x](javascript:...)` 就会
+// 变成持久化 XSS —— esc() 只转义 & < > 和引号，不校验协议。这里按白名单放行，
+// 未命中一律降级为不可点击的纯文本（而不是直接丢弃，避免内容凭空消失）。
+var SAFE_LINK_SCHEMES = ['http:', 'https:', 'mailto:'];
+
+function isSafeLinkUrl(url) {
+  var u = String(url == null ? '' : url).trim();
+  if (!u) return false;
+  // 显式协议：按白名单比对（大小写不敏感，且容忍前导空白/控制字符）
+  var m = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(u.replace(/^[\s\u0000-\u001f]+/, ''));
+  if (m) {
+    return SAFE_LINK_SCHEMES.indexOf(m[1].toLowerCase() + ':') !== -1;
+  }
+  // 无协议：允许相对链接（guide.html）与协议相对链接（//host/path），
+  // 但要排除 `javascript` 这类经 HTML 实体或空白变体绕过的写法。
+  return !/[\u0000-\u001f]/.test(u);
+}
+
 // 渲染行内 Markdown（代码、链接、加粗、斜体）
 function renderInlineMarkdown(text) {
   var html = esc(text == null ? '' : String(text));
@@ -40,6 +59,15 @@ function renderInlineMarkdown(text) {
   });
 
   html = html.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, function (_, label, url) {
+    // url 在 esc() 之后，HTML 实体需还原后再做协议判断（&amp; -> & 等不影响
+    // 协议首段，但 &#x6a;avascript: 这类实体编码必须先解码才能识别）。
+    var raw = String(url)
+      .replace(/&amp;/g, '&')
+      .replace(/&#x([0-9a-fA-F]+);/g, function (_m, h) { return String.fromCharCode(parseInt(h, 16)); })
+      .replace(/&#(\d+);/g, function (_m, d) { return String.fromCharCode(parseInt(d, 10)); });
+    if (!isSafeLinkUrl(raw)) {
+      return label + ' (' + url + ')';
+    }
     return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + label + '</a>';
   });
   html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');

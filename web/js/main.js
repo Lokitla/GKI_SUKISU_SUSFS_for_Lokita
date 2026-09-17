@@ -14,7 +14,7 @@ import { initSearch } from './search.js';
 import { initTimeConverter } from './time-converter.js';
 import { initBackToTop } from './back-to-top.js';
 import { showToast } from './toast.js';
-import { copyText, fetchJsonFresh } from './utils.js';
+import { copyText, fetchJsonFresh, esc } from './utils.js';
 import { DATA_FILES } from './config.js';
 import { renderTabs, renderPanels, animateCounters, initRipple } from './render.js';
 
@@ -64,8 +64,10 @@ async function loadData() {
   }
 
   if (datasets.length === 0) {
+    // errorTitle 转义（与其余 t.* 用法保持一致）；errorHint 有意包含 <code>
+    // 标签以提示目录名，属受控常量，保持原样渲染。
     document.getElementById('content').innerHTML =
-      '<div class="error"><p>' + t.errorTitle + '</p><p style="margin-top:0.5rem;color:var(--text-muted)">' + t.errorHint + '</p></div>';
+      '<div class="error"><p>' + esc(t.errorTitle) + '</p><p style="margin-top:0.5rem;color:var(--text-muted)">' + t.errorHint + '</p></div>';
     return;
   }
 

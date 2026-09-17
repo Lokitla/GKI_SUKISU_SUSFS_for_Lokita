@@ -35,12 +35,19 @@ jobs:
       - name: Run incremental update
         working-directory: scripts
         run: |
-          # Exit 0 = data changed, 2 = no changes, 1 = real error
-          python update_data.py && exit_code=0 || exit_code=$?
-          if [ $exit_code -eq 1 ]; then
-            echo "::error::update_data.py failed with an error"
-            exit 1
-          fi
+          set +e
+          python update_data.py
+          exit_code=$?
+          set -e
+          # 约定的退出码：0 = 有变更，2 = 无变更，1 = 真实错误。
+          # 其余任何非零码（信号中断 137、解释器崩溃等）都不在白名单里，
+          # 必须同样中止，否则坏数据会被当成"无变更"静默带过。
+          case "$exit_code" in
+            0) echo "update_data.py: 数据有变更" ;;
+            2) echo "update_data.py: 数据无变更" ;;
+            1) echo "::error::update_data.py 执行失败（退出码 1）"; exit 1 ;;
+            *) echo "::error::update_data.py 返回未预期的退出码 $exit_code"; exit 1 ;;
+          esac
 
       - name: Commit data changes
         id: commit
@@ -53,7 +60,13 @@ jobs:
             echo "No data changes to commit."
           else
             git commit -m "chore: update GKI kernel version data"
-            git push
+            # 与并发的 Auto_Trigger（同样会 push）存在竞态：被拒时先 rebase 再重试，
+            # 避免整个数据更新因一次 push 竞争而丢失。
+            if ! git push; then
+              echo "首次 push 被拒，rebase 后重试"
+              git pull --rebase --autostash origin "${GITHUB_REF_NAME}"
+              git push
+            fi
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -62,6 +75,10 @@ jobs:
     if: ${{ contains(fromJSON('["zzh20188/GKI_KernelSU_SUSFS", "Lokitla/GKI_SUKISU_SUSFS_for_Lokita"]'), github.repository) }}
     needs: update-data
     runs-on: ubuntu-latest
+    env:
+      # 经 job 级 env 转一手，避免把 ${{ }} 直接内插进 run 块（与全仓其余
+      # 工作流保持同一种写法）。
+      REF_NAME: ${{ github.ref_name }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -73,7 +90,7 @@ jobs:
           ref: ${{ github.ref_name }}
 
       - name: Pull latest data
-        run: git pull origin ${{ github.ref_name }}
+        run: git pull origin "$REF_NAME"
 
       - name: Copy data to web directory
         run: cp -r data/ web/data/
