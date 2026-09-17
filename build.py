@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-or-later
 """GKI 内核本地构建 CLI —— 与 GitHub Actions 共用同一份构建逻辑。
 
 真正的构建逻辑在 scripts/build_kernel.sh，本脚本只负责：

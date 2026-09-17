@@ -29,7 +29,7 @@ on:
           - SukiSU(40548)
           - ReSukiSU
           - Official
-          #- Next
+          - Next
         default: SukiSU
       enable_susfs:
         description: "集成 SUSFS"

@@ -175,7 +175,7 @@ Wiki 涵盖内容：
 | **Telegram 通知** | 构建完成后推送消息与产物校验值到 TG | Actions: `send_telegram` |
 | **Release 缓存** | 用 GitHub Release 存 ccache，突破 `actions/cache` 的容量与过期限制 | Actions: `use_release_cache` |
 | **Spoofed 管理器开关** | 可单独控制是否一并拉取伪装官方包名的 SukiSU 管理器 APK | Actions: `manager_spoofed` |
-| **KPM 镜像修补** | 编译完成后对 `Image` 打 KPM 补丁（移植自 ShirkNeko 的 `patch_kpm_image`），5.x 与 6.1 有效，6.6 自动跳过 | Actions: `use_kpm` 选 `enabled` / `patched` |
+| **KPM 镜像修补** | 编译完成后对 `Image` 打 KPM 补丁（移植自 ShirkNeko 的 `patch_kpm_image`），5.x / 6.1 / 6.12 有效，6.6 自动跳过 | Actions: `use_kpm` 选 `enabled` / `patched` |
 | **管理器拆分为两个产物** | 普通管理器与 Spoofed 管理器各自成为独立产物，不再混在一个压缩包里 | 默认生效 |
 | **SUSFS 独立开关** | 原「KernelSU / SUSFS 模式」三态选择简化为「集成 SUSFS」勾选框（不再提供纯净 GKI） | Actions: `enable_susfs` |
 
@@ -245,6 +245,7 @@ Wiki 涵盖内容：
 | `force` | 忽略「是否有新提交」，强制触发 | 否 |
 | `build_scope` | `全部版本` / `单版本冒烟` / `不构建` | `全部版本` |
 | `include_612` | 一并把 6.12 的 4 个版本纳入（当前与最新 SukiSU 不兼容） | 否 |
+| `ksu_branch_mode` | SukiSU 拉取分支：`auto`=跟随 SUSFS 开关自动选（开 SUSFS→builtin，关→main）/ `main`=纯管理器分支 / `builtin`=内核内置实现 | `auto` |
 | `release_type` | `Release` / `Pre-Release` / `Actions` | `Release` |
 
 > 选 `全部版本` 走 `main.yml` 展开矩阵；选 `单版本冒烟` 走 `kernel-custom.yml`，

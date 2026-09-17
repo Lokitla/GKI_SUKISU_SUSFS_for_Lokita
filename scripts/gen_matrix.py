@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-or-later
 """从 .github/workflows/config/matrix.json 生成构建矩阵。
 
 两种模式：

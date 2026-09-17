@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-or-later
 # 生成/刷新 KPM 修补工具（patch_linux）的 sha256 锚点。
 #
 # 背景：build_kernel.sh 默认跟随 SukiSU_patch 上游 main 分支，零版本锚点，

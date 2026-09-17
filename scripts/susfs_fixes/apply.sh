@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-or-later
 # 应用 SUSFS 补丁及各内核版本所需的上下文修复
 #
 # 依赖环境变量：

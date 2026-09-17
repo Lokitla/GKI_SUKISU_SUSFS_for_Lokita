@@ -116,6 +116,14 @@ GKI_SUKISU_SUSFS_for_Lokita
   vc-teahouse/Baseband-guard       BBG 防格机                GPL-2.0
   zzh20188/GKI_KernelSU_SUSFS      hmbird_patch.c            GPL-2.0
 
+[文档站点服务]
+
+  GoatCounter（zzh20188.goatcounter.com / gc.zgo.at）
+    用途：GitHub Pages 文档站点的匿名访问统计（仅统计 PV，不收集可识别个人身份的信息）
+    性质：第三方 SaaS 分析服务（自有许可，非本仓库代码、不参与构建）
+    隐私：禁用 JavaScript 或拦截 gc.zgo.at 即可退出统计；本仓库不控制其数据处理，
+          相关说明与退出方式见 README 顶部隐私提示。
+
 ================================================================================
 三、许可证兼容性说明
 ================================================================================

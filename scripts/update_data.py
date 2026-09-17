@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+
 """增量更新 GKI 内核版本数据。
 
 读取现有 JSON 数据，仅抓取缺失的月份，同时更新 LTS 版本。

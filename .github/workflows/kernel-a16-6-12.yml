@@ -18,7 +18,7 @@ on:
           - SukiSU(40548)
           - ReSukiSU
           - Official
-          #- Next
+          - Next
         default: SukiSU
       enable_susfs:
         description: "集成 SUSFS"
@@ -275,8 +275,13 @@ jobs:
           MODE: ${{ inputs.called_from_main && 'auto' || 'full' }}
         run: |
           set -euo pipefail
-          # auto 模式不含 6.12：脚本会输出空矩阵，下游 job 据此跳过
+          # auto 模式不含 6.12：脚本会输出空矩阵，下游 build job 的
+          # `if: needs.prepare-matrix.outputs.count != '0'` 据此跳过。
           python3 scripts/gen_matrix.py --mode "$MODE" --android android16 --github-output
+          if [ "$MODE" = "auto" ]; then
+            echo "::notice::6.12 不在自动矩阵（auto 模式），本工作流跳过构建；" \
+                 "如需 6.12 请在 main.yml 勾选 build_a16_6_12（Auto_Trigger 勾选 include_612）"
+          fi
 
   build-kernels-a16-6-12:
     needs: prepare-matrix

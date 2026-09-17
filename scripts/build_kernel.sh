@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-or-later
 # =============================================================================
 # GKI 内核构建核心脚本 —— YAML 工作流与 Python CLI 共用的单一真相源
 #
@@ -912,12 +913,31 @@ stage_add_kernelsu() {
   log_stage "add_kernelsu" "添加 KernelSU"
   local _pwd="$PWD"
   cd ${KERNEL_ROOT}
+  # P2-9 修复：上游 setup.sh 下载后先做内容校验再执行（供应链风险兜底）。
+  # curl -f 只保证 HTTP 成功，不足以判断拿到的是脚本：CDN 错误页、被劫持的空壳、
+  # 截断的半截文件都能以 200 返回。这里要求「非空 + 可读 + 含 shell 脚本痕迹」，
+  # 不满足即拒绝执行（fail-closed），避免把来路不明的内容直接交给 bash。
+  fetch_ksu_setup() {
+    local url="$1" label="$2"
+    if ! curl -LSsf "$url" -o /tmp/ksu_setup.sh; then
+      echo "::error::下载 ${label} setup.sh 失败"; return 1
+    fi
+    if [ ! -s /tmp/ksu_setup.sh ]; then
+      echo "::error::${label} setup.sh 内容为空（疑似 CDN 错误页或下载截断），拒绝执行"; return 1
+    fi
+    if ! grep -qE '(^|[[:space:]])sh[[:space:]]|#!/|KernelSU|setup' /tmp/ksu_setup.sh; then
+      echo "::error::${label} setup.sh 内容不像脚本（未匹配到 shell/KernelSU 特征），拒绝执行"; return 1
+    fi
+    echo "${label} setup.sh 校验通过（$(wc -c < /tmp/ksu_setup.sh) 字节）"
+    return 0
+  }
+
   case "${KSU_VARIANT}" in
     "Official")
       echo "添加 KernelSU 官方版..."
       # P1-2 修复：下载后显式校验再执行（不钉 commit，跟随上游 main 分支）
       KSU_SETUP="https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh"
-      if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 KernelSU 官方 setup.sh 失败"; return 1; fi
+      fetch_ksu_setup "$KSU_SETUP" "KernelSU 官方" || return 1
       bash -s "$BRANCH" < /tmp/ksu_setup.sh || { echo "::error::KernelSU 官方 setup.sh 执行失败"; return 1; }
 
       cd KernelSU
@@ -934,14 +954,14 @@ stage_add_kernelsu() {
       echo "添加 KernelSU-Next..."
       # P1-2 修复：下载后显式校验再执行（不钉 commit，跟随上游 dev 分支）
       KSU_SETUP="https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/refs/heads/dev/kernel/setup.sh"
-      if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 KernelSU-Next setup.sh 失败"; return 1; fi
+      fetch_ksu_setup "$KSU_SETUP" "KernelSU-Next" || return 1
       bash -s "$BRANCH" < /tmp/ksu_setup.sh || { echo "::error::KernelSU-Next setup.sh 执行失败"; return 1; }
       ;;
     "SukiSU")
       echo "添加 ${KSU_VARIANT}..."
       # P1-2 修复：下载后显式校验再执行（不钉 commit，跟随上游 main 分支）
       KSU_SETUP="https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh"
-      if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 SukiSU setup.sh 失败"; return 1; fi
+      fetch_ksu_setup "$KSU_SETUP" "SukiSU" || return 1
       bash -s "$BRANCH" < /tmp/ksu_setup.sh || { echo "::error::SukiSU setup.sh 执行失败"; return 1; }
 
       # 版本号处理：以 main 分支提交数为基准，且直接沿用上游的计算口径。
@@ -982,7 +1002,7 @@ stage_add_kernelsu() {
       echo "添加 ReSukiSU..."
       # P1-2 修复：下载后显式校验再执行（不钉 commit，跟随上游 main 分支）
       KSU_SETUP="https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh"
-      if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 ReSukiSU setup.sh 失败"; return 1; fi
+      fetch_ksu_setup "$KSU_SETUP" "ReSukiSU" || return 1
       bash -s "$BRANCH" < /tmp/ksu_setup.sh || { echo "::error::ReSukiSU setup.sh 执行失败"; return 1; }
       ;;
     *)
@@ -993,7 +1013,7 @@ stage_add_kernelsu() {
       echo "添加 ${KSU_VARIANT}..."
       # P1-2 修复：下载后显式校验再执行（不钉 commit，跟随上游 main 分支）
       KSU_SETUP="https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh"
-      if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 SukiSU setup.sh 失败"; return 1; fi
+      fetch_ksu_setup "$KSU_SETUP" "SukiSU" || return 1
       bash -s "$BRANCH" < /tmp/ksu_setup.sh || { echo "::error::SukiSU setup.sh 执行失败"; return 1; }
       ;;
   esac

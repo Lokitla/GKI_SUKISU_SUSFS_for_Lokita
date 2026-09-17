@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Telegram 构建通知脚本（融合自 ShirkNeko/GKI_KernelSU_SUSFS）。
 
 相对原始实现的改进：
