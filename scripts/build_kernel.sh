@@ -2705,6 +2705,25 @@ EOF
 # 运行前即拦截；白名单与 P1-1 的 VERSION 一致：字母数字及 . _ -。
 validate_inputs() {
   local v val
+
+  # KSU_MODE 白名单：合法值只有「关闭」与「禁用KSU」。
+  # 历史上 6 个 workflow 曾发出过「禁用SUSFS」这类非法值：它不等于「禁用KSU」，
+  # 脚本里所有 `!= "禁用KSU"` 的判断都会把它当成「KSU 启用」静默放行 —— 语义靠猜，
+  # 且一旦有人以为它真的禁用了 SUSFS 就会埋雷。这里 fail-closed。
+  # 注：SUSFS 的启停由 ENABLE_SUSFS 独立控制，不通过 KSU_MODE 表达。
+  case "${KSU_MODE:-}" in
+    关闭|禁用KSU) ;;
+    "")
+      echo "::error::KSU_MODE 为空，合法值：关闭 / 禁用KSU"
+      exit 1
+      ;;
+    *)
+      echo "::error::KSU_MODE 非法值：'${KSU_MODE}'（合法值：关闭 / 禁用KSU）"
+      echo "::error::SUSFS 的启停由 ENABLE_SUSFS 独立控制，不要写进 KSU_MODE"
+      exit 1
+      ;;
+  esac
+
   for v in OS_PATCH_LEVEL REVISION; do
     val="${!v}"
     if [ -n "$val" ]; then

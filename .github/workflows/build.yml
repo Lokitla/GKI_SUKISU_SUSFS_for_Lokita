@@ -28,8 +28,12 @@ permissions:
         required: true
         type: string
       ksu_mode:
+        description: "KernelSU 模式：关闭=正常集成 KernelSU / 禁用KSU=不集成任何 KernelSU 代码（SUSFS 的启停由 enable_susfs 独立控制）"
         required: false
-        type: string
+        type: choice
+        options:
+          - "关闭"
+          - "禁用KSU"
         default: 关闭
       version:
         required: false

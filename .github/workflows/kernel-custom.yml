@@ -151,6 +151,14 @@ on:
         required: false
         type: string
         default: ""
+      ksu_mode:
+        description: "KernelSU 模式：关闭=正常集成 KernelSU / 禁用KSU=不集成任何 KernelSU 代码（SUSFS 的启停由 enable_susfs 独立控制，不要写在这里）"
+        required: false
+        type: choice
+        options:
+          - "关闭"
+          - "禁用KSU"
+        default: "关闭"
       susfs_commit:
         description: "SUSFS 提交 hash：内核 SUSFS 修补使用该 commit（留空则取 config/config 或分支最新）"
         required: false
@@ -340,7 +348,7 @@ jobs:
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       supp_op: ${{ inputs.supp_op || false }}
       enable_susfs: ${{ inputs.enable_susfs }}
-      ksu_mode: ${{ inputs.enable_susfs && '关闭' || '禁用SUSFS' }}
+      ksu_mode: ${{ inputs.ksu_mode }}
       droidspaces: ${{ inputs.droidspaces || '不启用' }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync || false }}
       artifact_upload_mode: ${{ inputs.artifact_upload_mode }}
