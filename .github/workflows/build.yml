@@ -227,6 +227,7 @@ jobs:
         DROIDSPACES_NTSYNC: ${{ inputs.droidspaces_ntsync }}
         ARTIFACT_UPLOAD_MODE: ${{ inputs.artifact_upload_mode }}
         USE_BBR: ${{ inputs.use_bbr }}
+        SUKISU_COMMIT: ${{ inputs.sukisu_commit }}
         TOOLCHAIN_CACHE_HIT: ${{ steps.cache-toolchain.outputs.cache-hit }}
         WORKSPACE: ${{ github.workspace }}
     - name: 保存 Release 缓存（可选）

@@ -729,16 +729,24 @@ stage_resolve_ksu_branch() {
       ;;
   esac
 
-  # 检查自定义提交 (仅对 SukiSU 生效)
+  # 统一 SukiSU 提交来源：CI 传入的 SUKISU_COMMIT 环境变量优先于 config/config，
+  # 与 get-manager.yml 完全对齐（之前只从 config/config 的 sukisu= 行读取，且依赖
+  # build.yml 的 sed 改写与 custom=true 标志，任一环节缺失内核就会退回默认分支/最新）。
+  # 指定提交时内核与管理器必须来自同一个 commit，版本才能一致。
+  PINNED_COMMIT="${SUKISU_COMMIT:-}"
   CONFIG_FILE="config/config"
-  if [ -f "$CONFIG_FILE" ]; then
+  if [ -z "$PINNED_COMMIT" ] && [ -f "$CONFIG_FILE" ]; then
     CUSTOM_ENABLED=$(grep "^custom=" "$CONFIG_FILE" | cut -d'=' -f2)
     if [ "$CUSTOM_ENABLED" == "true" ] && [ "$variant_input" == "SukiSU" ]; then
-      SUKISU_COMMIT=$(grep "^sukisu=" "$CONFIG_FILE" | cut -d'=' -f2)
-      if [ -n "$SUKISU_COMMIT" ]; then
-        BRANCH="-s $SUKISU_COMMIT"
-        echo "SukiSU 使用自定义提交: $SUKISU_COMMIT"
-      fi
+      PINNED_COMMIT=$(grep "^sukisu=" "$CONFIG_FILE" | cut -d'=' -f2)
+    fi
+  fi
+  if [ -n "$PINNED_COMMIT" ] && [ "$variant_input" == "SukiSU" ]; then
+    if [ "${#PINNED_COMMIT}" = "40" ] || [ "${#PINNED_COMMIT}" = "64" ]; then
+      BRANCH="-s $PINNED_COMMIT"
+      echo "SukiSU 使用自定义提交: $PINNED_COMMIT"
+    else
+      echo "::warning::忽略长度非 40/64 的 SukiSU 提交: $PINNED_COMMIT（改用默认分支）"
     fi
   fi
 
@@ -792,6 +800,18 @@ stage_add_kernelsu() {
       KSU_SETUP="https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh"
       if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 SukiSU setup.sh 失败"; return 1; fi
       bash /tmp/ksu_setup.sh $BRANCH || { echo "::error::SukiSU setup.sh 执行失败"; return 1; }
+      # 与管理器使用同一公式显式计算并注入 KSU_VERSION，覆盖 setup.sh 可能按默认分支
+      # 计算的版本，确保内核报告版本 == 管理器版本（两者都来自 $BRANCH 指向的同一 commit）
+      if [ -d "KernelSU/.git" ]; then
+        cd KernelSU
+        KSU_GIT_VERSION=$(git rev-list --count HEAD)
+        KSU_VERSION=$((40000 + KSU_GIT_VERSION - 2815))
+        export KSU_VERSION="$KSU_VERSION"
+        if [ -f "kernel/Kbuild" ]; then
+          sed -i "s/DKSU_VERSION=[0-9][0-9]*/DKSU_VERSION=${KSU_VERSION}/" kernel/Kbuild
+        fi
+        cd ..
+      fi
       ;;
     "ReSukiSU")
       echo "添加 ReSukiSU..."
