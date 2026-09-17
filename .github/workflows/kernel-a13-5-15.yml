@@ -237,11 +237,7 @@ on:
       ksu_branch_mode:
         description: "SukiSU 拉取分支：auto=跟随SUSFS开关自动选 / main=纯管理器分支 / builtin=内核内置实现（仅 SukiSU 生效）"
         required: false
-        type: choice
-        options:
-          - "auto"
-          - "main"
-          - "builtin"
+        type: string
         default: "auto"
       kpm_patch_sha256:
         description: "KPM 修补工具(patch_linux)的 sha256 锚点：传给 build_kernel.sh 做 fail-closed 比对，不符即拒绝执行（留空则不校验）"
@@ -251,10 +247,7 @@ on:
       ksu_mode:
         description: "KernelSU 模式：关闭=正常集成 KernelSU / 禁用KSU=不集成任何 KernelSU 代码（SUSFS 的启停由 enable_susfs 独立控制，不要写在这里）"
         required: false
-        type: choice
-        options:
-          - "关闭"
-          - "禁用KSU"
+        type: string
         default: "关闭"
       susfs_commit:
         description: "SUSFS 提交 hash：内核 SUSFS 修补使用该 commit（留空则取 config/config 或分支最新）"
