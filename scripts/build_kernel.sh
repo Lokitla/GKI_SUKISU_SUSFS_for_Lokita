@@ -34,6 +34,22 @@ set -eo pipefail
 : "${CVE_2026_43499_PATCH:=false}"
 : "${EXPORT_SUSFS_PATCHES:=false}"
 : "${ENABLE_SUSFS:=true}"
+
+# SUSFS 开关清单——与 SukiSU builtin 分支 kernel/Kconfig 里的 KSU_SUSFS* 一一对应
+# （builtin 的 Kconfig 共 11 项：KSU_SUSFS 总开关 + 下面 9 个子项；main 分支 0 项）。
+# 单一真相源：写 defconfig 和编译前核对 Kconfig 都从这里取，避免两处各写一份而漂移。
+SUSFS_CONFIG_OPTIONS=(
+  CONFIG_KSU_SUSFS=y
+  CONFIG_KSU_SUSFS_SUS_PATH=y
+  CONFIG_KSU_SUSFS_SUS_MOUNT=y
+  CONFIG_KSU_SUSFS_SUS_KSTAT=y
+  CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+  CONFIG_KSU_SUSFS_ENABLE_LOG=y
+  CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+  CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+  CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+  CONFIG_KSU_SUSFS_SUS_MAP=y
+)
 : "${SUPP_OP:=false}"
 : "${DROIDSPACES:=不启用}"
 : "${DROIDSPACES_NTSYNC:=false}"
@@ -365,6 +381,11 @@ stage_clone_deps() {
   else
     git clone --depth 1 https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
   fi
+
+  # ShirkNeko 与 simonpunk 是两个内容并不相同的 fork（6.12 只有 simonpunk 有分支）。
+  # 上面 clone 失败时错误被 2>/dev/null 吞掉，不打印实际来源的话，日志里根本看不出
+  # 这次到底用了哪一家的补丁——排查"SUSFS 行为和别人不一样"时会白绕一大圈。
+  echo "SUSFS 实际来源: $(git -C susfs4ksu remote get-url origin) @ $(git -C susfs4ksu rev-parse --short=9 HEAD)"
 
   # 先记录分支最新提交日期，之后再切到固定提交，避免把这个日期读成固定提交的日期
   SUSFS_LATEST_COMMIT_DATE=$(git -C susfs4ksu log -1 --date=format:'%Y-%m-%d %H:%M:%S %z' --format='%cd')
@@ -1015,9 +1036,11 @@ stage_config_sukisu_manager() {
   fi
 
   GIT_HASH=$(git rev-parse --short=8 HEAD)
-  BRANCH_NAME="${BRANCH#-s }"
-  if [ -z "$BRANCH_NAME" ] || [ "$BRANCH_NAME" = "$BRANCH" ]; then
-    BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+  # BRANCH 是纯 ref（分支名或 40/64 位 commit），不再是 "-s builtin" 这种带前缀的旧格式
+  BRANCH_NAME="$BRANCH"
+  if [ "${#BRANCH}" = "40" ] || [ "${#BRANCH}" = "64" ]; then
+    # 固定提交是 detached HEAD，--abbrev-ref 只会返回 "HEAD"，用提交号前 12 位更可读
+    BRANCH_NAME="${BRANCH:0:12}"
   fi
 
   if [ -n "$CUSTOM_TAG" ]; then
@@ -1026,7 +1049,11 @@ stage_config_sukisu_manager() {
     VERSION_TEMPLATE="v\$1-$GIT_HASH@$BRANCH_NAME"
   fi
 
-  awk -v body="$VERSION_TEMPLATE" '
+  # Kbuild 里找不到 define get_ksu_version_full 时 awk 会以 1 退出；此前写作
+  # `awk ... && mv ...`，在 set -e 下会直接把整个构建判失败——但版本标识只是
+  # 展示用的字符串，上游一旦改名就全片 SukiSU 构建挂掉，代价完全不成比例。
+  # 改为降级告警：定制不了就跳过，内核照常产出。
+  if ! awk -v body="$VERSION_TEMPLATE" '
     BEGIN {
       in_block = 0
       replaced = 0
@@ -1051,7 +1078,13 @@ stage_config_sukisu_manager() {
         exit 1
       }
     }
-  ' "$KBUILD_FILE" > "${KBUILD_FILE}.tmp" && mv "${KBUILD_FILE}.tmp" "$KBUILD_FILE"
+  ' "$KBUILD_FILE" > "${KBUILD_FILE}.tmp"; then
+    echo "::warning::$KBUILD_FILE 中未找到 define get_ksu_version_full，跳过 SukiSU 版本标识定制"
+    rm -f "${KBUILD_FILE}.tmp"
+    cd "$_pwd"
+    return 0
+  fi
+  mv "${KBUILD_FILE}.tmp" "$KBUILD_FILE"
 
   echo "已更新 get_ksu_version_full 模板: $VERSION_TEMPLATE"
 
@@ -1094,12 +1127,67 @@ run_susfs_baseline() {
   fi
 }
 
+# SUSFS 补丁本身不含 Kconfig——CONFIG_KSU_SUSFS* 全部由 KernelSU 侧声明：
+#   SukiSU builtin 的 kernel/Kconfig 里 KSU_SUSFS* 齐全（总开关 + 9 个子项）
+#   SukiSU main   的 kernel/Kconfig 里一个都没有
+# 而 build.config.gki 的 check_defconfig 已被本脚本 sed 掉，defconfig 里写了
+# 却没有 Kconfig 认领的项会被静默丢弃：构建照样成功、内核照样能开机，
+# SUSFS 却一行都没编进去（管理器里也就看不到 SUSFS 选项）。
+# 所以这里按 Kconfig 的实际声明逐项核对，缺一个就终止。
+verify_susfs_kconfig() {
+  local ksu_dir="$KERNEL_ROOT/KernelSU"
+  local declared_list opt name
+  local -a missing=()
+
+  if [ ! -d "$ksu_dir" ]; then
+    echo "::error::未找到 $ksu_dir，无法核对 SUSFS Kconfig"
+    return 1
+  fi
+
+  # pipefail 下 grep 无匹配会让整条赋值失败，必须兜住
+  declared_list=$(grep -RhE '^[[:space:]]*config[[:space:]]+KSU_SUSFS[A-Z_]*([[:space:]]|$)' \
+    "$ksu_dir" 2>/dev/null \
+    | sed -E 's/^[[:space:]]*config[[:space:]]+//; s/[[:space:]].*$//' | sort -u) || true
+
+  for opt in "${SUSFS_CONFIG_OPTIONS[@]}"; do
+    name="${opt%%=*}"
+    name="${name#CONFIG_}"
+    if ! printf '%s\n' "$declared_list" | grep -qx "$name"; then
+      missing+=("CONFIG_${name}")
+    fi
+  done
+
+  if [ "${#missing[@]}" -gt 0 ]; then
+    echo "::error title=SUSFS Kconfig 缺失::KernelSU（${KSU_VARIANT} / ${BRANCH}）未声明 ${#missing[@]}/${#SUSFS_CONFIG_OPTIONS[@]} 个 SUSFS 开关"
+    printf '  缺失: %s\n' "${missing[@]}"
+    echo "::error::这些开关会被 Kconfig 静默丢弃（build.config.gki 的 check_defconfig 已禁用），SUSFS 不会编进内核"
+    echo "::error::SukiSU 请用 builtin 分支；Official 需确认 10_enable_susfs_for_ksu.patch 已打上"
+    return 1
+  fi
+  echo "SUSFS Kconfig 校验通过：KernelSU 已声明全部 ${#SUSFS_CONFIG_OPTIONS[@]} 个 SUSFS 开关"
+}
+
 stage_apply_susfs() {
   log_stage "apply_susfs" "应用 SUSFS 补丁"
   local _pwd="$PWD"
+
+  # SUSFS 补丁引用大量 ksu_* 符号（ksu_handle_*、ksu_is_*_enabled 等），
+  # 没有 KernelSU 源码时补丁照打不误，最后一定卡在链接期 undefined reference，
+  # 报出来的错和真正的原因隔着十万八千里。这里提前说清楚。
+  if [ "${ENABLE_SUSFS}" = "true" ] && [ "${KSU_MODE}" = "禁用KSU" ]; then
+    echo "::error::SUSFS 依赖 KernelSU，KSU_MODE=禁用KSU 时不能启用 SUSFS（请关闭 SUSFS 或改用非禁用KSU 模式）"
+    return 1
+  fi
+
   cd ${KERNEL_ROOT}
   bash "$WORKSPACE/scripts/susfs_fixes/apply.sh"
   cd "$_pwd"
+
+  # 补丁落地后立刻核对 Kconfig：只查 .rej 和源码注入还不够，
+  # Kconfig 不认领的话 defconfig 写得再全也是白写。
+  if [ "${ENABLE_SUSFS}" = "true" ] && [ "${KSU_MODE}" != "禁用KSU" ]; then
+    verify_susfs_kconfig
+  fi
 }
 
 # 条件执行（等价原工作流 if:）
@@ -1771,18 +1859,7 @@ stage_config_susfs() {
   log_stage "config_susfs" "添加 SUSFS 配置"
   local _pwd="$PWD"
   LINES_BEFORE=$(wc -l < "$DEFCONFIG")
-  cat >> "$DEFCONFIG" << 'EOF'
-CONFIG_KSU_SUSFS=y
-CONFIG_KSU_SUSFS_SUS_PATH=y
-CONFIG_KSU_SUSFS_SUS_MOUNT=y
-CONFIG_KSU_SUSFS_SUS_KSTAT=y
-CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-CONFIG_KSU_SUSFS_ENABLE_LOG=y
-CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-CONFIG_KSU_SUSFS_SUS_MAP=y
-EOF
+  printf '%s\n' "${SUSFS_CONFIG_OPTIONS[@]}" >> "$DEFCONFIG"
 
   # 把本步实际追加的行导出为配置片段，随 SUSFS 集成补丁一起分发
   if [ "$SUSFS_PATCH_EXPORT" = "true" ] && [ -d "$WORKSPACE/susfs-patch" ]; then

@@ -40,6 +40,15 @@ apply_patch_checked() {
 echo "应用 SUSFS 补丁..."
 
 SUSFS_PATCH="50_add_susfs_in_gki-$ANDROID_VERSION-$KERNEL_VERSION.patch"
+# SUSFS 上游按内核版本分分支，分支名对不上时补丁文件根本不存在。
+# 直接 cp 只会丢一句 "No such file"，看不出是"分支名错了"还是"这个内核版本没有 SUSFS"，
+# 而这两者的排查方向完全不同，所以先显式判一次。
+if [ ! -f "$SUSFS4KSU/kernel_patches/$SUSFS_PATCH" ]; then
+  echo "::error::SUSFS 补丁不存在: $SUSFS4KSU/kernel_patches/$SUSFS_PATCH"
+  echo "::error::SUSFS 源（$(git -C "$SUSFS4KSU" remote get-url origin 2>/dev/null || echo 未知)）的 gki-$ANDROID_VERSION-$KERNEL_VERSION 分支未提供该内核版本的补丁"
+  echo "::error::请确认该内核版本是否有 SUSFS 支持，或改用 simonpunk/ShirkNeko 中有对应分支的源"
+  exit 1
+fi
 cp "$SUSFS4KSU/kernel_patches/$SUSFS_PATCH" ./common/
 cp "$SUSFS4KSU"/kernel_patches/fs/* ./common/fs/
 cp "$SUSFS4KSU"/kernel_patches/include/linux/* ./common/include/linux/
