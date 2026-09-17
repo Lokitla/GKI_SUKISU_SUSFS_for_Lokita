@@ -19,6 +19,11 @@ on:
         required: false
         type: string
         default: ""
+      ksu_branch_mode:
+        description: "SukiSU 内核侧拉取的分支：auto/main/builtin。管理器始终来自 main，此参数仅用于日志与版本基准说明"
+        required: false
+        type: string
+        default: "auto"
     outputs:
       susVer:
         description: "The fetched SUSFS version number"
@@ -134,20 +139,32 @@ jobs:
             SUKISU_COMMIT="$CUSTOM_COMMIT"
           fi
           SUKISU_COMMIT=$(echo "$SUKISU_COMMIT" | xargs)
+
+          # 管理器 APK 只能来自 main 分支：builtin 是只含 kernel/ 与 uapi/ 的独立分支，
+          # 连 manager/ 目录都没有，不存在可用的 Manager CI 产物。
+          # 因此这里只 fetch 被钉的 commit（用于溯源/校验），绝不 checkout 到它——
+          # 一旦切到 builtin，工作区会失去 manager/ 等目录，且提交数基准从 main 的
+          # 3737 变成 builtin 的 802，算出的版本号与内核不一致，管理器启动即闪退。
           if [ -n "$SUKISU_COMMIT" ] && [ "$KSU_VARIANT" = "SukiSU" ]; then
-            echo "SukiSU 使用指定提交: $SUKISU_COMMIT"
-            git -C KernelSU fetch --no-tags origin "$SUKISU_COMMIT" >/dev/null 2>&1 || true
-            if ! git -C KernelSU checkout -q "$SUKISU_COMMIT"; then
-              echo "::error::无法切换到 SukiSU 提交 $SUKISU_COMMIT"
-              exit 1
+            echo "SukiSU 指定提交: $SUKISU_COMMIT（仅 fetch 校验，工作区保持 main）"
+            if ! git -C KernelSU fetch --no-tags origin "$SUKISU_COMMIT" >/dev/null 2>&1; then
+              echo "::warning::无法获取 SukiSU 提交 $SUKISU_COMMIT，继续按 main 处理"
             fi
           fi
+          # 显式拉取 main 引用，供后续按 main 计数使用
+          git -C KernelSU fetch --no-tags origin main:refs/remotes/origin/main >/dev/null 2>&1 || true
           echo "SUKISU_COMMIT=$SUKISU_COMMIT" >> "$GITHUB_ENV"
 
           cd KernelSU
 
-          # 计算KSU版本号
-          KSU_GIT_VERSION=$(git rev-list --count HEAD)
+          # 计算KSU版本号。
+          # 基准固定为 main 分支的提交数，与内核侧 setup.sh 产出的版本口径一致。
+          if [ "$KSU_VARIANT" == "SukiSU" ]; then
+            KSU_GIT_VERSION=$(git rev-list --count refs/remotes/origin/main 2>/dev/null || git rev-list --count HEAD)
+            echo "SukiSU: main 分支提交数 = $KSU_GIT_VERSION（分支模式输入: ${{ inputs.ksu_branch_mode }}）"
+          else
+            KSU_GIT_VERSION=$(git rev-list --count HEAD)
+          fi
 
           if [ "$KSU_VARIANT" == "SukiSU" ]; then
             KSU_VERSION=$((40000 + KSU_GIT_VERSION - 2815))
@@ -244,7 +261,23 @@ jobs:
             fi
 
             local git_version
-            git_version=$(git -C KernelSU rev-list --count "$head_sha")
+            # Manager CI 只跑在 main 上，必须按 main 的计数口径算。
+            # 若该 commit 属于 builtin（独立分支，提交数仅 802），直接计数会得到
+            # 远低于实际的版本号，从而把"候选管理器版本"误判为低于内核版本，
+            # 最终选中一个过旧的 APK。
+            if [ "$KSU_VARIANT" = "SukiSU" ] && \
+               git -C KernelSU cat-file -e refs/remotes/origin/builtin^{commit} 2>/dev/null && \
+               git -C KernelSU merge-base --is-ancestor "$head_sha" refs/remotes/origin/builtin 2>/dev/null; then
+              git_version=$(git -C KernelSU rev-list --count refs/remotes/origin/main)
+            else
+              git_version=$(git -C KernelSU rev-list --count "$head_sha")
+            fi
+
+            if [ "$KSU_VARIANT" = "SukiSU" ] && ! [ "$git_version" -gt 802 ] 2>/dev/null; then
+              echo "::warning::$head_sha 的提交数 $git_version 低于 builtin 规模，疑似计数基准错误，跳过该构建" >&2
+              return 1
+            fi
+
             case "$KSU_VARIANT" in
               "SukiSU") echo $((40000 + git_version - 2815)) ;;
               "ReSukiSU") echo $((30700 + git_version)) ;;

@@ -159,6 +159,15 @@ on:
         required: false
         type: string
         default: ""
+      ksu_branch_mode:
+        description: "SukiSU 拉取分支（仅 SukiSU 变体生效）"
+        required: false
+        type: choice
+        options:
+          - "auto"
+          - "main"
+          - "builtin"
+        default: "auto"
 jobs:
   # ==================== 获取管理器 ====================
   # 下载最新的 KernelSU 管理器 APK 和 SUSFS 模块
@@ -169,6 +178,7 @@ jobs:
       kernelsu_variant: ${{ inputs.kernelsu_variant }}
       spoofed: ${{ inputs.manager_spoofed }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
+      ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
   # ==================== Android 12 - 5.10 构建 ====================
   build-a12-5-10:
     if: inputs.build_a12_5_10 || inputs.build_all
@@ -195,6 +205,7 @@ jobs:
       manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
+      ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
   # ==================== Android 13 - 5.15 构建 ====================
   build-a13-5-15:
     if: inputs.build_a13_5_15 || inputs.build_all
@@ -221,6 +232,7 @@ jobs:
       manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
+      ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
   # ==================== Android 14 - 6.1 构建 ====================
   build-a14-6-1:
     if: inputs.build_a14_6_1 || inputs.build_all
@@ -247,6 +259,7 @@ jobs:
       manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
+      ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
   # ==================== Android 15 - 6.6 构建 ====================
   build-a15-6-6:
     if: inputs.build_a15_6_6 || inputs.build_all
@@ -273,6 +286,7 @@ jobs:
       manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
+      ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
   # ==================== Android 16 - 6.12 构建 ====================
   build-a16-6-12:
     if: inputs.build_a16_6_12 || inputs.build_all
@@ -299,6 +313,7 @@ jobs:
       manager_spoofed: ${{ inputs.manager_spoofed }}
       supp_op: ${{ inputs.supp_op }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
+      ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
   # ==================== 收集补丁冲突文件 ====================
   # 汇总所有构建任务中的 .rej 文件，方便调试补丁问题
   collect-rejects:

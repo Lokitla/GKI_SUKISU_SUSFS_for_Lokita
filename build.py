@@ -118,6 +118,7 @@ def build_env(args, android, kernel, sub_level, os_patch):
         "OS_PATCH_LEVEL": os_patch,
         "KSU_VARIANT": args.ksu_variant,
         "KSU_MODE": "关闭",
+        "KSU_BRANCH_MODE": getattr(args, "ksu_branch_mode", "auto") or "auto",
         "VERSION": args.version or "",
         "REVISION": args.revision or "",
         "BUILD_TIME": args.build_time or "",
@@ -182,6 +183,10 @@ def main():
     parser.add_argument("--revision", help="Android 12 revision（可选）")
     parser.add_argument("--ksu-variant", default="SukiSU", choices=KSU_VARIANTS,
                         metavar="变体", help="KernelSU 变体（默认 SukiSU）")
+    parser.add_argument("--ksu-branch-mode", default="auto", choices=["auto", "main", "builtin"],
+                        metavar="{auto,main,builtin}",
+                        help="SukiSU 拉取分支（仅 SukiSU 生效）：auto=跟随 SUSFS 开关自动选"
+                             "（默认），main=纯管理器分支，builtin=内核内置实现")
     parser.add_argument("--version", help="自定义版本名")
     parser.add_argument("--build-time", help="自定义构建时间")
 

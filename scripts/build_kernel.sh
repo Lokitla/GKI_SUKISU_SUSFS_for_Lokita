@@ -696,24 +696,93 @@ run_add_oneplus8e() {
   fi
 }
 
+# 计算 SukiSU 的 KSU_VERSION，基准固定为 main 分支的提交数。
+#
+# 为什么必须用 main 而不是当前 HEAD：
+#   builtin 是与 main 无共同祖先的独立分支（提交数 802，main 为 3737）。两者
+#   VERSION_BASE/VERSION_OFFSET 相同，若按 HEAD 计数，builtin 会得到
+#   40000+802-2815=37987，而管理器（只能来自 main）是 40922，版本不匹配则闪退。
+#   上游 kernel/Makefile 里写死 REPO_BRANCH := main 正是这个原因。
+#
+# 依赖 KernelSU/ 目录（本函数内自行 cd，不改变调用方 cwd）。
+resolve_sukisu_version() {
+  local ksu_dir="KernelSU" count="" api_count="" local_count=""
+
+  [ -d "$ksu_dir/.git" ] || { echo "::error::找不到 $ksu_dir/.git"; return 1; }
+
+  # 首选 GitHub API：main 分支提交总数 = Link 头里最后一页的页码
+  api_count=$(curl -sI "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/commits?sha=main&per_page=1" 2>/dev/null |
+    grep -i "^link:" | sed -n 's/.*page=\([0-9]*\)>; rel="last".*/\1/p')
+
+  # 兜底用本地 main 的计数（全量克隆时可用）
+  if git -C "$ksu_dir" rev-parse --verify -q refs/remotes/origin/main >/dev/null 2>&1; then
+    local_count=$(git -C "$ksu_dir" rev-list --count refs/remotes/origin/main 2>/dev/null)
+  elif git -C "$ksu_dir" rev-parse --verify -q refs/heads/main >/dev/null 2>&1; then
+    local_count=$(git -C "$ksu_dir" rev-list --count refs/heads/main 2>/dev/null)
+  fi
+
+  # 两者都拿到时取较大值：API 可能因分支默认值变化而偏小，本地可能因浅克隆而偏小
+  if [ -n "$api_count" ] && [ -n "$local_count" ]; then
+    if [ "$api_count" -ge "$local_count" ] 2>/dev/null; then count="$api_count"; else count="$local_count"; fi
+  elif [ -n "$api_count" ]; then
+    count="$api_count"
+  elif [ -n "$local_count" ]; then
+    count="$local_count"
+  fi
+
+  # 都拿不到时的最后回退：只能信 HEAD。此时若在 builtin 上会偏低，
+  # 明确告警而不是悄悄给出错误版本号。
+  if [ -z "$count" ]; then
+    count=$(git -C "$ksu_dir" rev-list --count HEAD 2>/dev/null)
+    echo "::warning::SukiSU 无法取得 main 提交数，回退 HEAD=$count（若在 builtin 分支则版本号会偏低）"
+  fi
+
+  case "$count" in
+    ''|*[!0-9]*) echo "::error::SukiSU 提交数解析异常: '$count'"; return 1 ;;
+  esac
+  [ "$count" -gt 0 ] || { echo "::error::SukiSU 提交数为 0"; return 1; }
+
+  echo $((40000 + count - 2815))
+}
+
 stage_resolve_ksu_branch() {
   log_stage "resolve_ksu_branch" "确定 KernelSU 分支"
   local _pwd="$PWD"
   variant_input="${KSU_VARIANT}"
 
+  # KSU_BRANCH_MODE 手动指定分支：
+  #   auto    —— 默认。SukiSU 开 SUSFS 走 builtin，关 SUSFS 走 main
+  #   main    —— 强制 main（纯管理器分支，内核侧只有薄 hook 层）
+  #   builtin —— 强制 builtin（内核侧内置完整 KernelSU 实现，SUSFS 需要的能力更全）
+  # 仅对 SukiSU 生效；其他变体忽略此开关。
+  BRANCH_MODE="${KSU_BRANCH_MODE:-auto}"
+
   case "$variant_input" in
     "Official"|"ReSukiSU")
-      BRANCH="-s main"
+      BRANCH="main"
       ;;
     "SukiSU")
-      if [ "${ENABLE_SUSFS}" = "false" ]; then
-        BRANCH="-s main"
-      else
-        BRANCH="-s builtin"
-      fi
+      case "$BRANCH_MODE" in
+        main)
+          BRANCH="main"
+          echo "SukiSU: 手动指定 main 分支"
+          ;;
+        builtin)
+          BRANCH="builtin"
+          echo "SukiSU: 手动指定 builtin 分支"
+          ;;
+        *)
+          if [ "${ENABLE_SUSFS}" = "false" ]; then
+            BRANCH="main"
+          else
+            BRANCH="builtin"
+          fi
+          echo "SukiSU: auto 模式（ENABLE_SUSFS=${ENABLE_SUSFS}）→ $BRANCH"
+          ;;
+      esac
       ;;
     "Next")
-      BRANCH=""
+      BRANCH="dev_susfs"
       ;;
     *)
       if [ -z "$LEGACY_SUKISU_CONFIG" ] || [ ! -f "$LEGACY_SUKISU_CONFIG" ]; then
@@ -725,7 +794,7 @@ stage_resolve_ksu_branch() {
         echo "未在 $LEGACY_SUKISU_CONFIG 配置 SukiSU 固定提交" >&2
         exit 1
       fi
-      BRANCH="-s $SUKISU_FIXED_COMMIT"
+      BRANCH="$SUKISU_FIXED_COMMIT"
       ;;
   esac
 
@@ -743,15 +812,20 @@ stage_resolve_ksu_branch() {
   fi
   if [ -n "$PINNED_COMMIT" ] && [ "$variant_input" == "SukiSU" ]; then
     if [ "${#PINNED_COMMIT}" = "40" ] || [ "${#PINNED_COMMIT}" = "64" ]; then
-      BRANCH="-s $PINNED_COMMIT"
+      BRANCH="$PINNED_COMMIT"
       echo "SukiSU 使用自定义提交: $PINNED_COMMIT"
     else
       echo "::warning::忽略长度非 40/64 的 SukiSU 提交: $PINNED_COMMIT（改用默认分支）"
     fi
   fi
 
+  # BRANCH 为纯 ref（分支名或 commit hash），不再带 "-s" 前缀。
+  # SukiSU/KernelSU 官方/ReSukiSU 的 setup.sh 用法是 `setup.sh [--cleanup | <commit-or-tag>]`，
+  # 即 ref 作为位置参数传入。此前写成 "bash setup.sh -s builtin" 会把 "-s" 本身当作
+  # 位置参数，git checkout "-s builtin" 报 unknown switch 后静默回退默认分支，
+  # 导致"说要 builtin 实际编了 main"。调用侧统一改回 `bash -s "$BRANCH"`。
   export BRANCH="$BRANCH"
-  echo "KSU 分支: $BRANCH"
+  echo "KSU 分支: $BRANCH (mode=$BRANCH_MODE)"
 
   cd "$_pwd"
 }
@@ -775,7 +849,7 @@ stage_add_kernelsu() {
       # P1-2 修复：下载后显式校验再执行（不钉 commit，跟随上游 main 分支）
       KSU_SETUP="https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh"
       if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 KernelSU 官方 setup.sh 失败"; return 1; fi
-      bash /tmp/ksu_setup.sh $BRANCH || { echo "::error::KernelSU 官方 setup.sh 执行失败"; return 1; }
+      bash -s "$BRANCH" < /tmp/ksu_setup.sh || { echo "::error::KernelSU 官方 setup.sh 执行失败"; return 1; }
 
       cd KernelSU
       KSU_GIT_VERSION=$(git rev-list --count HEAD)
@@ -792,25 +866,47 @@ stage_add_kernelsu() {
       # P1-2 修复：下载后显式校验再执行（不钉 commit，跟随上游 dev 分支）
       KSU_SETUP="https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/refs/heads/dev/kernel/setup.sh"
       if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 KernelSU-Next setup.sh 失败"; return 1; fi
-      bash /tmp/ksu_setup.sh -s dev_susfs || { echo "::error::KernelSU-Next setup.sh 执行失败"; return 1; }
+      bash -s "$BRANCH" < /tmp/ksu_setup.sh || { echo "::error::KernelSU-Next setup.sh 执行失败"; return 1; }
       ;;
     "SukiSU")
       echo "添加 ${KSU_VARIANT}..."
       # P1-2 修复：下载后显式校验再执行（不钉 commit，跟随上游 main 分支）
       KSU_SETUP="https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh"
       if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 SukiSU setup.sh 失败"; return 1; fi
-      bash /tmp/ksu_setup.sh $BRANCH || { echo "::error::SukiSU setup.sh 执行失败"; return 1; }
-      # 与管理器使用同一公式显式计算并注入 KSU_VERSION，覆盖 setup.sh 可能按默认分支
-      # 计算的版本，确保内核报告版本 == 管理器版本（两者都来自 $BRANCH 指向的同一 commit）
+      bash -s "$BRANCH" < /tmp/ksu_setup.sh || { echo "::error::SukiSU setup.sh 执行失败"; return 1; }
+
+      # 版本号处理：以 main 分支提交数为基准，且直接沿用上游的计算口径。
+      #
+      # 不能写 `git rev-list --count HEAD` 再套公式：
+      #   builtin 是与 main 无共同祖先的独立分支（提交数 802，main 为 3737），
+      #   按 HEAD 计数会得出 40000+802-2815=37987，而管理器（来自 main）是 40922，
+      #   管理器启动比对版本失败即闪退。
+      #
+      # 上游 kernel/Makefile（builtin）与 kernel/Kbuild（main）里都已经做了正确处理：
+      #   REPO_BRANCH := main
+      #   GITHUB_COMMITS := curl ".../commits?sha=main&per_page=1"   # 网络取 main 总数
+      #   LOCAL_COUNT := $(if $(GITHUB_COMMITS),$(GITHUB_COMMITS),$(git rev-list --count main))
+      #   KSU_VERSION := $(VERSION_BASE + LOCAL_COUNT - VERSION_OFFSET)
+      # 所以我们只做校验与兜底，不再自行改写版本号。
+      #
+      # 注意 builtin 没有 kernel/Kbuild（版本定义在 kernel/Makefile），此前那段
+      # `sed -i ... kernel/Kbuild` 在 builtin 上是静默空操作，属于假装成功的无效步骤。
       if [ -d "KernelSU/.git" ]; then
-        cd KernelSU
-        KSU_GIT_VERSION=$(git rev-list --count HEAD)
-        KSU_VERSION=$((40000 + KSU_GIT_VERSION - 2815))
+        KSU_VERSION=$(resolve_sukisu_version) || {
+          echo "::error::SukiSU 版本号解析失败"; return 1;
+        }
         export KSU_VERSION="$KSU_VERSION"
-        if [ -f "kernel/Kbuild" ]; then
-          sed -i "s/DKSU_VERSION=[0-9][0-9]*/DKSU_VERSION=${KSU_VERSION}/" kernel/Kbuild
+        echo "SukiSU KSU_VERSION（main 基准）= $KSU_VERSION"
+
+        # 仅在文件存在时做一次显式对齐，覆盖上游可能因网络受限而退化的取值。
+        # 用 [0-9][0-9]* 匹配，避免把 \$(KSU_VERSION) 这类变量引用误伤。
+        if [ -f "KernelSU/kernel/Kbuild" ]; then
+          sed -i "s/\bDKSU_VERSION=[0-9][0-9]*/DKSU_VERSION=${KSU_VERSION}/" KernelSU/kernel/Kbuild
         fi
-        cd ..
+        if [ -f "KernelSU/kernel/Makefile" ]; then
+          sed -i "s/\bVERSION_BASE[[:space:]]*:=[[:space:]]*[0-9][0-9]*/VERSION_BASE    := 40000/" KernelSU/kernel/Makefile
+          sed -i "s/\bVERSION_OFFSET[[:space:]]*:=[[:space:]]*[0-9][0-9]*/VERSION_OFFSET  := 2815/" KernelSU/kernel/Makefile
+        fi
       fi
       ;;
     "ReSukiSU")
@@ -818,7 +914,7 @@ stage_add_kernelsu() {
       # P1-2 修复：下载后显式校验再执行（不钉 commit，跟随上游 main 分支）
       KSU_SETUP="https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh"
       if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 ReSukiSU setup.sh 失败"; return 1; fi
-      bash /tmp/ksu_setup.sh $BRANCH || { echo "::error::ReSukiSU setup.sh 执行失败"; return 1; }
+      bash -s "$BRANCH" < /tmp/ksu_setup.sh || { echo "::error::ReSukiSU setup.sh 执行失败"; return 1; }
       ;;
     *)
       if [ -z "$LEGACY_SUKISU_CONFIG" ]; then
@@ -829,7 +925,7 @@ stage_add_kernelsu() {
       # P1-2 修复：下载后显式校验再执行（不钉 commit，跟随上游 main 分支）
       KSU_SETUP="https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh"
       if ! curl -LSsf "$KSU_SETUP" -o /tmp/ksu_setup.sh; then echo "::error::下载 SukiSU setup.sh 失败"; return 1; fi
-      bash /tmp/ksu_setup.sh $BRANCH || { echo "::error::SukiSU setup.sh 执行失败"; return 1; }
+      bash -s "$BRANCH" < /tmp/ksu_setup.sh || { echo "::error::SukiSU setup.sh 执行失败"; return 1; }
       ;;
   esac
 
