@@ -814,9 +814,29 @@ stage_resolve_ksu_branch() {
     if [ "${#PINNED_COMMIT}" = "40" ] || [ "${#PINNED_COMMIT}" = "64" ]; then
       BRANCH="$PINNED_COMMIT"
       echo "SukiSU 使用自定义提交: $PINNED_COMMIT"
+      # 固定提交无法从名字判断血统，只能靠下面的分支复核（setup 之后用 git 实际
+      # checkout 结果比对）兜底。这里先提示一次，避免拿 main 血统的提交配 SUSFS。
+      if [ "${ENABLE_SUSFS}" = "true" ]; then
+        echo "::warning::SukiSU 固定提交 + SUSFS：请确认 $PINNED_COMMIT 属于 builtin 血统（kernel/feature/selinux_hide.c 中不应出现 ksu_patch_text），否则 SELinux 隐藏会失效"
+      fi
     else
       echo "::warning::忽略长度非 40/64 的 SukiSU 提交: $PINNED_COMMIT（改用默认分支）"
     fi
+  fi
+
+  # SUSFS 补丁把 selinuxfs.c 的 context_write / access_write / sel_open_handle_status
+  # 整支换成了 my_write_context / my_write_access / my_sel_open_handle_status；
+  # 而 SukiSU 的 main 分支用 ksu_patch_text 在运行时改写这三个函数的函数体开头
+  # （selinux_hide.c 的 356 / 366 / 404 行）。同一组函数被两套机制各改一次，
+  # 结果是 SELinux 隐藏失效——u:r:ksu:s0 这类真实上下文会泄漏出去。
+  # builtin 分支的 selinux_hide.c 里 ksu_patch_text 出现 0 次，只提供 fake_state
+  # 把 LSM 层交给 SUSFS 补丁处理，才是配套组合。
+  # 所以「main + SUSFS」这个必然产出坏内核的组合要显式确认才能继续。
+  if [ "$variant_input" = "SukiSU" ] && [ "$BRANCH" = "main" ] \
+     && [ "${ENABLE_SUSFS}" = "true" ] && [ "${ALLOW_SUSFS_WITH_MAIN:-0}" != "1" ]; then
+    echo "::error::SukiSU main 分支不能配 SUSFS：main 用 ksu_patch_text 改写 context_write/access_write/sel_open_handle_status，与 SUSFS 补丁的 my_* 替换互相覆盖，SELinux 隐藏会失效"
+    echo "::error::请改用 builtin（auto 模式在 ENABLE_SUSFS=true 时自动选 builtin）或关闭 SUSFS；确知后果要继续请设 ALLOW_SUSFS_WITH_MAIN=1"
+    return 1
   fi
 
   # BRANCH 为纯 ref（分支名或 commit hash），不再带 "-s" 前缀。
@@ -944,6 +964,19 @@ stage_add_kernelsu() {
       return 1
     fi
     echo "KernelSU 分支校验通过：$BRANCH（HEAD=${KSU_ACTUAL_HEAD:0:9}）"
+
+    # 终极防线：直接看源码有没有 ksu_patch_text。分支名/提交号都可能骗人，
+    # 但"这段内核里到底有没有在运行时改写 context_write/access_write/
+    # sel_open_handle_status"骗不了人——有就和 SUSFS 的 my_* 替换打架。
+    if [ "${ENABLE_SUSFS}" = "true" ] && [ -f "KernelSU/kernel/feature/selinux_hide.c" ]; then
+      if grep -q "ksu_patch_text" KernelSU/kernel/feature/selinux_hide.c; then
+        echo "::error::KernelSU 源码含 ksu_patch_text（main 血统），与 SUSFS 的 SELinux 补丁冲突，隐藏必然失效"
+        echo "::error::请切到 builtin 分支；确知后果要继续请设 ALLOW_SUSFS_WITH_MAIN=1"
+        [ "${ALLOW_SUSFS_WITH_MAIN:-0}" = "1" ] || return 1
+      else
+        echo "SELinux 兼容性校验通过：selinux_hide.c 无 ksu_patch_text（与 SUSFS 补丁配套）"
+      fi
+    fi
   fi
 
   if [ -d "KernelSU/.git" ]; then
