@@ -504,11 +504,12 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 | [simonpunk/susfs4ksu](https://gitlab.com/simonpunk/susfs4ksu) | SUSFS 补丁集 | GPL-3.0 |
 | [WildKernels/AnyKernel3](https://github.com/WildKernels/AnyKernel3) | 刷机包模板 | **BSD-3-Clause 风格**（osm0sis 的 AK3 脚本许可；其中 `magiskboot` / `magiskpolicy` 为 **GPL-3.0+**） |
 
-**本仓库主体采用 GPL-2.0**，与主要上游保持一致；其中本仓库新增的脚本与文档部分
-按 GPL-2.0-or-later 分发，以便与 GPL-3.0 组件共存。
+**本仓库主体（自身新增的代码与文档）采用 GPL-2.0-or-later**，以便与仓库内含的 GPL-3.0
+组件（SukiSU-Ultra、SUSFS、Droidspaces 等）兼容、合法整体分发；基座 zzh20188 标注 GPL-2.0，
+本仓库作为其衍生作品在 GPL-2.0-or-later 条款下分发。
 
-[LICENSE](LICENSE) 保持 GPL-2.0 原文不做改动（改动会让 GitHub 识别不出许可证），
-归属与兼容性说明全部写在 [NOTICE](NOTICE) 里。
+[LICENSE](LICENSE) 保留 GNU GPL v2 条款正文（不作删改），文件头部以 SPDX 标识声明
+本仓库按 GPL-2.0-or-later 分发；归属与兼容性说明全部写在 [NOTICE](NOTICE) 里。
 
 如果你是上游作者，认为归属描述有误，请在本仓库提 Issue，我会立即更正。
 

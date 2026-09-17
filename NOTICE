@@ -8,11 +8,11 @@ GKI_SUKISU_SUSFS_for_Lokita
 一、本仓库自身许可证
 ================================================================================
 
-本仓库主体采用 GNU General Public License v2.0（GPL-2.0），完整文本见 LICENSE。
-该选择用于与主要上游 zzh20188/GKI_KernelSU_SUSFS 保持一致。
+本仓库自身的全部新增代码与文档采用 GNU General Public License v2.0-or-later（GPL-2.0-or-later），完整条款文本见 LICENSE。
+选择「or-later」是为与仓库内含的 GPL-3.0 上游组件（SukiSU-Ultra、SUSFS、Droidspaces、Re-Kernel 等）兼容，使整体可合法分发；基座 zzh20188/GKI_KernelSU_SUSFS 标注为 GPL-2.0，本仓库作为其衍生作品在 GPL-2.0-or-later 条款下分发。
 
-注意：LICENSE 文件保持 GPL-2.0 原文、不做任何增删改，以便 GitHub 的许可证
-识别工具能正确判定；所有补充说明都放在本文件（NOTICE）与 README 中。
+注意：LICENSE 文件保留 GNU GPL v2 条款正文不作删改（GitHub 据以识别为 GPL-2.0），并在文件头部以 SPDX-License-Identifier 声明本仓库按 GPL-2.0-or-later 分发；
+本 NOTICE 与 README 中的补充说明不替代该条款文本，仅作兼容性说明与来源归属。
 
 构建产物（内核镜像、AnyKernel3 刷机包、boot 镜像）由下列上游代码编译而来，
 其分发行受各自许可证约束，且受 Linux 内核 GPL-2.0 的衍生作品条款约束。
@@ -76,12 +76,17 @@ GKI_SUKISU_SUSFS_for_Lokita
                                                      AK3 脚本许可）
                               注：包内 magiskboot / magiskpolicy 来自 Magisk，为
                                   GPL-3.0+。
-  WildKernels/kernel_patches  三星 min_kdp 等补丁     未声明
-  Numbersf/Action-Build       Unicode 绕过修复补丁    自定义许可（非标准开源协议）
-  SukiSU-Ultra/SukiSU_patch   ZRAM / LZ4KD 补丁      未声明
+  WildKernels/kernel_patches  三星 min_kdp 等补丁     未声明（按上游当前状态使用；如作者提供许可或提出异议将调整/移除）
+  Numbersf/Action-Build       Unicode 绕过修复补丁    自定义许可（非标准开源协议，⚠ 与 GPL 再分发自由冲突，见下方说明）
+  SukiSU-Ultra/SukiSU_patch   ZRAM / LZ4KD 补丁      未声明（同上：按上游当前状态使用，如有异议将调整/移除）
                               KPM 镜像修补工具（patch_linux）
                               注：原名 ShirkNeko/SukiSU_patch，已改名；
                                   本仓库直接引用新名称，不再依赖旧地址跳转。
+
+  ⚠ 许可冲突声明：Numbersf/Action-Build 采用自定义许可（非 GPL 体系），其「禁止原样 fork
+  再分发或公开宣传」的限制与 GPL 的再分发自由相冲突。本仓库不以其 GPL 兼容方式再分发该
+  上游，仅以补丁形式引用其修复（构成独立的非标准许可来源），并如实披露于此；若你所在
+  法域或分发场景不允许此类非标准许可混入，请勿使用相关补丁产物。
 
   Numbersf/Action-Build 的自定义许可（要点摘录，非原文）：
     - 允许：查看、学习、修改（个人 / 内部 / 开发用途）；允许 fork 用于个人使用、
@@ -104,10 +109,11 @@ GKI_SUKISU_SUSFS_for_Lokita
 三、许可证兼容性说明
 ================================================================================
 
-本仓库混合了 GPL-2.0 与 GPL-3.0 组件。GPL-2.0-only 与 GPL-3.0 之间不兼容，
-因此涉及 GPL-3.0 组件（SukiSU-Ultra、SUSFS 镜像、Droidspaces）的部分，
-应在 GPL-3.0 条款下分发；本仓库自身新增的脚本与文档采用 GPL-2.0-or-later，
-以便在上述两种条款下均可分发。
+本仓库自身代码以 GPL-2.0-or-later 授权（兼容 GPL-3.0），与仓库内 GPL-3.0 上游组件
+（SukiSU-Ultra、SUSFS、Droidspaces、Re-Kernel 等）可合法共存：GPL-2.0-or-later 允许
+升级到 GPL-3.0，故整体可在 GPL-3.0（或视需要以 GPL-2.0）条款下分发。
+需特别说明：GPL-2.0-**only**（不含 or-later 选项）的代码不能与 GPL-3.0 合并——本仓库
+不采用 only 授权，正是为了避免这一不兼容缺口。
 
 若你是上游作者，认为此处对你的项目描述或归属有误，请在本仓库提交 Issue，
 我会立即更正或移除相关内容。

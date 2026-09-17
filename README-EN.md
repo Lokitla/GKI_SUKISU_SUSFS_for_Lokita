@@ -448,12 +448,14 @@ the core work comes from the upstream authors below. The full list lives in [NOT
 | [simonpunk/susfs4ksu](https://gitlab.com/simonpunk/susfs4ksu) | SUSFS patch set | GPL-3.0 |
 | [WildKernels/AnyKernel3](https://github.com/WildKernels/AnyKernel3) | Flashable package template | **BSD-3-Clause style** (osm0sis' AK3 script licence; bundled `magiskboot` / `magiskpolicy` are **GPL-3.0+**) |
 
-**This repository is GPL-2.0 as a whole**, matching its primary upstreams. The scripts and
-docs newly added here are distributed under GPL-2.0-or-later so they can coexist with the
-GPL-3.0 components.
+**This repository's own newly added code and docs are GPL-2.0-or-later**, so they can coexist
+with and be lawfully distributed alongside the in-repo GPL-3.0 components (SukiSU-Ultra, SUSFS,
+Droidspaces, etc.); the zzh20188 base is labelled GPL-2.0 and this repo distributes as a
+derivative under GPL-2.0-or-later.
 
-[LICENSE](LICENSE) is kept as the verbatim GPL-2.0 text (editing it breaks GitHub's licence
-detection); attribution and compatibility notes all live in [NOTICE](NOTICE).
+[LICENSE](LICENSE) keeps the verbatim GNU GPL v2 terms (unmodified), with a header
+SPDX-License-Identifier declaring this repo distributes under GPL-2.0-or-later; attribution
+and compatibility notes all live in [NOTICE](NOTICE).
 
 If you are an upstream author and believe any attribution is wrong, please open an issue
 here and it will be corrected immediately.
