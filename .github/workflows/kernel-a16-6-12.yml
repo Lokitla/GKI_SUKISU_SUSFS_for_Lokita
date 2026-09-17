@@ -214,22 +214,34 @@ on:
         type: string
         default: ""
 jobs:
+  # 矩阵改由 .github/workflows/config/matrix.json 生成。
+  # 自动更新走 auto（6.12 不在其中，故为空、行为等同跳过）；
+  # 手动触发走 full（23/30/38/58）。
+  prepare-matrix:
+    name: "生成构建矩阵"
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+      count: ${{ steps.gen.outputs.count }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: 生成构建矩阵
+        id: gen
+        env:
+          MODE: ${{ inputs.called_from_main && 'auto' || 'full' }}
+        run: |
+          set -euo pipefail
+          # auto 模式不含 6.12：脚本会输出空矩阵，下游 job 据此跳过
+          python3 scripts/gen_matrix.py --mode "$MODE" --android android16 --github-output
+
   build-kernels-a16-6-12:
+    needs: prepare-matrix
     name: "6.12.${{ matrix.sub_level }}-${{ matrix.os_patch_level }}"
+    if: needs.prepare-matrix.outputs.count != '0'
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - sub_level: "23"
-            os_patch_level: "2025-06"
-          - sub_level: "30"
-            os_patch_level: "2025-07"
-          - sub_level: "38"
-            os_patch_level: "2025-09"
-          - sub_level: "58"
-            os_patch_level: "2025-12"
-          # - sub_level: "X"
-          #   os_patch_level: "lts"
+        include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
