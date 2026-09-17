@@ -929,6 +929,23 @@ stage_add_kernelsu() {
       ;;
   esac
 
+  # setup.sh 内部是 `git checkout "$1" ... || echo "[-] Checkout default branch"`：
+  # 只要 ref 不存在（或像此前那样把 "-s builtin" 整个当 ref 传进去），切分支失败会被
+  # 这句静默吞掉，脚本照常收尾"成功"，实际却停在默认分支——此前"声称 builtin、
+  # 实际编的是 main"，SELinux 隐藏因此互相踩踏失效，就是被这一句藏住的。
+  # 所以这里复核 KernelSU 真实位置，对不上立刻终止。
+  if [ -d "KernelSU/.git" ] && [ -n "$BRANCH" ]; then
+    KSU_ACTUAL_BRANCH=$(git -C KernelSU rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+    KSU_ACTUAL_HEAD=$(git -C KernelSU rev-parse HEAD 2>/dev/null || echo "")
+    # BRANCH 既可能是分支名也可能是 40/64 位 commit（后者是 detached HEAD，
+    # --abbrev-ref 会返回 HEAD），两种形态都要认
+    if [ "$KSU_ACTUAL_BRANCH" != "$BRANCH" ] && [[ "$KSU_ACTUAL_HEAD" != "$BRANCH"* ]]; then
+      echo "::error::KernelSU 分支未生效：期望 $BRANCH，实际分支=$KSU_ACTUAL_BRANCH HEAD=$KSU_ACTUAL_HEAD"
+      return 1
+    fi
+    echo "KernelSU 分支校验通过：$BRANCH（HEAD=${KSU_ACTUAL_HEAD:0:9}）"
+  fi
+
   if [ -d "KernelSU/.git" ]; then
     KSU_LATEST_COMMIT_DATE=$(git -C KernelSU log -1 --date=format:'%Y-%m-%d %H:%M:%S %z' --format='%cd')
     export KSU_LATEST_COMMIT_DATE="$KSU_LATEST_COMMIT_DATE"
@@ -1390,11 +1407,19 @@ run_inject_ntsync() {
 stage_apply_unicode_fix() {
   log_stage "apply_unicode_fix" "应用 Unicode 绕过修复"
   local _pwd="$PWD"
+  local _rc=0
   cd ${KERNEL_ROOT}/common
   if [ "${KERNEL_VERSION}" = "5.10" ] || [ "${KERNEL_VERSION}" = "5.15" ]; then
-    patch -p1 --forward < "$ACTION_BUILD/patches/unicode_bypass_fix_6.1-.patch" || true
+    patch -p1 --forward < "$ACTION_BUILD/patches/unicode_bypass_fix_6.1-.patch" || _rc=$?
   else
-    patch -p1 --forward < "$ACTION_BUILD/patches/unicode_bypass_fix_6.1+.patch" || true
+    patch -p1 --forward < "$ACTION_BUILD/patches/unicode_bypass_fix_6.1+.patch" || _rc=$?
+  fi
+  # patch 退出码 1 = 该 hunk 已应用过（--forward 主动跳过），正常；>=2 才是真的没打上。
+  # 这个补丁属于 SUSFS 流程（仅在 ENABLE_SUSFS=true 时执行），静默失败会产出
+  # 缺少 Unicode 绕过修复却看不出异常的内核，所以这里必须区分。
+  if [ "$_rc" -ge 2 ]; then
+    echo "::error::Unicode 绕过修复补丁应用失败（patch 退出码 $_rc），构建终止"
+    exit 1
   fi
 
   cd "$_pwd"

@@ -7,6 +7,36 @@
 # 调用前必须将工作目录设为 $KERNEL_ROOT
 set -eo pipefail
 
+# 列出当前目录下不属于上游的 .rej（相对路径，已排序）。
+# 上游分支可能自带已提交的 .rej（如 android15-6.6-2026-04 的 mm/rmap.c.rej，
+# 是上游解决合并冲突时的残留），那不是本补丁的冲突；但 patch 失败时会覆盖同名文件，
+# 所以只有「被 git 跟踪且未改动」的才视为上游自带。
+# 不在 git 仓库里（本地 verify_context.sh）时 git 命令为空，退回全部 .rej
+list_upstream_rej() {
+  git ls-files -- '*.rej' 2>/dev/null | while IFS= read -r f; do
+    git diff --quiet -- "$f" 2>/dev/null && echo "$f"
+  done
+}
+list_untracked_rej() {
+  comm -23 \
+    <(find . -type f -name '*.rej' | sed 's|^\./||' | sort) \
+    <(list_upstream_rej | sort)
+}
+
+# patch 退出码：0=全部应用，1=部分/全部 hunk 被跳过（--forward 下表示已应用过），
+# >=2=真正的失败。把「已应用过」当成成功，其余一律终止构建。
+apply_patch_checked() {
+  local desc="$1" patch_file="$2"
+  shift 2
+  local rc=0
+  patch -p1 --forward "$@" < "$patch_file" || rc=$?
+  if [ "$rc" -ge 2 ]; then
+    echo "::error title=$desc::补丁 $patch_file 应用失败（patch 退出码 $rc），构建终止"
+    exit 1
+  fi
+  return 0
+}
+
 echo "应用 SUSFS 补丁..."
 
 SUSFS_PATCH="50_add_susfs_in_gki-$ANDROID_VERSION-$KERNEL_VERSION.patch"
@@ -18,7 +48,9 @@ case "$KSU_VARIANT" in
   "Official")
     cd ./KernelSU
     cp "$SUSFS4KSU"/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
-    patch -p1 --forward < 10_enable_susfs_for_ksu.patch || true
+    # 官方 KernelSU 需要这个补丁才有 SUSFS 支持，没打上等于 SUSFS 全程缺席，
+    # 但构建仍会跑完并产出能开机的内核，属于必须当场发现的静默降级
+    apply_patch_checked "KernelSU Official 的 SUSFS 启用补丁" 10_enable_susfs_for_ksu.patch
 
     cd ..
     ;;
@@ -127,7 +159,12 @@ if grep -q '^ static int thaw_super_locked' "$SUSFS_PATCH" \
   SUPER_FS_H_REMOVED=1
 fi
 
-patch -p1 < "$SUSFS_PATCH" || true
+# SUSFS 主补丁必须真正落地。此前这里写作 `patch -p1 < "$SUSFS_PATCH" || true`：
+# 补丁上下文一旦漂移（子版本升级、SUSFS 上游改补丁、KSU 分支切换），patch 会静默失败
+# 并留下 .rej，构建照常跑完、产出能开机的内核，而 SUSFS / SELinux 隐藏其实根本没生效
+# —— u:r:ksu:s0 之类的上下文泄漏就是这么来的，刷机上很难反推回这里。
+# 所以：patch 硬失败当场终止；残留 .rej 也默认终止（除非显式 ALLOW_SUSFS_REJ=1）。
+apply_patch_checked "SUSFS 主补丁" "$SUSFS_PATCH"
 
 # 为尚未提供 SU 会话 FD 接口的 SukiSU/ReSukiSU 恢复旧版 exec hook 行为
 EXEC_HELPER=""
@@ -174,12 +211,49 @@ if [[ -f fs/susfs.c ]] && grep -qF 'security_sb_statfs(' fs/susfs.c \
   sed -i '0,/^#include <linux\/fs.h>$/s//#include <linux\/fs.h>\n#include <linux\/security.h>/' fs/susfs.c
 fi
 
-# 在编译前报告 SUSFS 主补丁产生的冲突文件
-SUSFS_REJ_COUNT=$(find . -name '*.rej' | wc -l)
+# patch 退出码 1 也可能只是「部分 hunk 被跳过」而不留 .rej，所以不能只看返回值，
+# 必须核对产物：SUSFS 是否真的进了编译、SELinux 钩子是否真的注入
+verify_susfs_landing() {
+  local missing=()
+
+  grep -q 'susfs' fs/Makefile 2>/dev/null \
+    || missing+=("fs/Makefile 没有引入 susfs.o，SUSFS 不会被编译")
+  [ -f fs/susfs.c ] \
+    || missing+=("fs/susfs.c 不存在，SUSFS 源文件未落地")
+
+  # 只在补丁确实要改这些文件时校验，避免补丁改版后误报
+  if grep -q 'b/security/selinux/hooks\.c' "$SUSFS_PATCH" 2>/dev/null \
+    && ! grep -q 'my_setprocattr' security/selinux/hooks.c 2>/dev/null; then
+    missing+=("security/selinux/hooks.c 未注入 my_setprocattr，SELinux 隐藏不会生效")
+  fi
+  if grep -q 'b/security/selinux/selinuxfs\.c' "$SUSFS_PATCH" 2>/dev/null \
+    && ! grep -qE 'my_sel_open_handle_status|my_write_access|my_write_context' security/selinux/selinuxfs.c 2>/dev/null; then
+    missing+=("security/selinux/selinuxfs.c 未注入 status/access/context 钩子，/sys/fs/selinux 会泄漏真实上下文")
+  fi
+
+  if [ "${#missing[@]}" -gt 0 ]; then
+    echo "::error title=SUSFS 未完整落地::检测到 ${#missing[@]} 处缺失，内核会假装正常但 SUSFS 实际不生效"
+    printf '  - %s\n' "${missing[@]}"
+    exit 1
+  fi
+  echo "SUSFS 落地校验通过：susfs.o 已进编译、SELinux 钩子已注入"
+}
+
+# 在编译前核对 SUSFS 主补丁的冲突文件，上游自带的 .rej 不计入
+mapfile -t SUSFS_REJ_FILES < <(list_untracked_rej)
+SUSFS_REJ_COUNT=${#SUSFS_REJ_FILES[@]}
 if [ "$SUSFS_REJ_COUNT" -gt 0 ]; then
-  echo "::warning title=SUSFS 补丁冲突::SUSFS 主补丁产生了 ${SUSFS_REJ_COUNT} 个 .rej 冲突文件，可能导致后续编译失败（详见 Rejects 产物）"
-  find . -name '*.rej' -print
+  if [ "${ALLOW_SUSFS_REJ:-0}" = "1" ]; then
+    echo "::warning title=SUSFS 补丁冲突::产生了 ${SUSFS_REJ_COUNT} 个 .rej（ALLOW_SUSFS_REJ=1，继续构建；详见 Rejects 产物）"
+    printf '%s\n' "${SUSFS_REJ_FILES[@]}"
+  else
+    echo "::error title=SUSFS 补丁冲突::有 ${SUSFS_REJ_COUNT} 处 hunk 未应用（列出如下）。确认可忽略时设 ALLOW_SUSFS_REJ=1"
+    printf '%s\n' "${SUSFS_REJ_FILES[@]}"
+    exit 1
+  fi
 fi
+
+verify_susfs_landing
 
 # 还原仅用于补丁匹配的临时源码调整
 if [[ "$ANDROID_VERSION" == "android12" && "$KERNEL_VERSION" == "5.10" ]]; then
