@@ -469,10 +469,18 @@ try:
     print(json.load(open('$LTS_JSON')).get('lts',''))
 except Exception:
     pass" 2>/dev/null)
-      if [ -n "$LTS_FULL" ]; then
+      # SUB_LEVEL 会被直接拼进产物文件名（anykernel3_zip_name / boot.*.img），
+      # 而 data json 的 lts 由 update_data.py 自动流程写入 —— 属于外部数据。
+      # 不做校验的话，一个 '6.1.177/../../evil' 的 lts 就能让 `cp ... ../$name`
+      # 落到预期目录之外；带空格/换行的值还会污染下游 unzip/upload-artifact。
+      # validate_inputs() 只覆盖了 OS_PATCH_LEVEL 与 REVISION，这里补上 SUB_LEVEL。
+      # 合法形态：纯数字子版本，允许 X/y（上游对 x.y 系列用 y 表示子版本）。
+      if [ -n "$LTS_FULL" ] && [[ "${LTS_FULL##*.}" =~ ^[0-9]+$ ]]; then
         SUB_LEVEL="${LTS_FULL##*.}"
         export SUB_LEVEL
         echo "LTS 真实版本: ${LTS_FULL}（sub level ${SUB_LEVEL}）"
+      elif [ -n "$LTS_FULL" ]; then
+        echo "::warning::data json 的 lts 字段非预期格式（期望 x.y.<数字>，实为 '${LTS_FULL}'），LTS 产物名保留字面量 X"
       else
         echo "::warning::data json 未含 lts 字段，LTS 产物名保留字面量 X"
       fi
@@ -722,11 +730,17 @@ stage_add_oneplus8e() {
     cp "${WORKSPACE}/hmbird_patch.c" ./hmbird_patch.c
   else
     echo "仓库内无副本，从上游获取 hmbird_patch.c..."
-    curl -fLSs "https://github.com/zzh20188/GKI_KernelSU_SUSFS/raw/refs/heads/dev/hmbird_patch.c" -o hmbird_patch.c || {
-      echo "::error::hmbird_patch.c 获取失败，一加 8E 支持无法启用"
+    # 这段代码会被编进内核。此前只判 curl 退出码，拿回 HTML 错误页会照样写进
+    # 源码树，构建到一半才以奇怪的编译错误暴露。按 C 源码特征校验后再使用。
+    if ! fetch_remote_script \
+        "https://github.com/zzh20188/GKI_KernelSU_SUSFS/raw/refs/heads/dev/hmbird_patch.c" \
+        hmbird_patch.c "hmbird_patch.c" \
+        '#include|static[[:space:]]+(int|void|struct)|HMBIRD'; then
+      echo "::error::hmbird_patch.c 获取或校验失败，一加 8E 支持无法启用"
       cd "$_pwd"
       return 1
-    }
+    fi
+    echo "::warning::hmbird_patch.c 取自上游 dev 分支（未钉 commit），内容随上游变动"
   fi
 
   # 重复运行时不要往 Makefile 里堆重复行
@@ -919,27 +933,60 @@ run_resolve_ksu_branch() {
   fi
 }
 
+# 下载上游脚本并做内容校验（供应链风险兜底）。
+#
+# curl -f / wget -q 只保证 HTTP 成功，不足以判断拿到的是脚本：CDN 错误页、
+# 被劫持的空壳、截断的半截文件都能以 200 返回。这里要求「非空 + 可读 + 含
+# shell 脚本痕迹」，不满足即拒绝（fail-closed），避免把来路不明的内容交给 bash。
+#
+# 提升到文件作用域：此前它嵌套在 stage_add_kernelsu 内部，导致 add_bbg 等
+# 同样"下载即执行"的阶段够不着，只能各自实现一份没有校验的弱化版。
+#
+# 用法: fetch_remote_script <url> <输出路径> <标签> [特征正则] [wget]
+#   特征正则默认匹配 shell/KernelSU/setup 字样；调用方应按被下载脚本的
+#   实际内容给出更贴合的特征，避免校验形同虚设。
+fetch_remote_script() {
+  local url="$1" out="$2" label="$3"
+  local pattern="${4:-'(^|[[:space:]])sh[[:space:]]|#!/|KernelSU|setup'}"
+  local use_wget="${5:-false}"
+
+  # 先清掉可能存在的旧文件：校验失败时若不删，磁盘上就会留一份"上一次成功下载
+  # 的脚本"，后续任何按 -f/-s 判断要不要执行的地方都可能误用它。
+  rm -f "$out"
+
+  local fetch_rc=0
+  if [ "$use_wget" = "true" ]; then
+    wget --tries=3 --timeout=30 -q -O "$out" "$url" || fetch_rc=$?
+  else
+    curl -LSsf --retry 3 --retry-delay 2 --connect-timeout 30 "$url" -o "$out" || fetch_rc=$?
+  fi
+  if [ "$fetch_rc" -ne 0 ]; then
+    echo "::error::下载 ${label} 失败（exit=$fetch_rc）: $url"
+    rm -f "$out"
+    return 1
+  fi
+  if [ ! -s "$out" ]; then
+    echo "::error::${label} 内容为空（疑似 CDN 错误页或下载截断），拒绝执行"
+    rm -f "$out"
+    return 1
+  fi
+  if ! grep -qE "$pattern" "$out"; then
+    echo "::error::${label} 内容不像预期脚本（未匹配特征 /${pattern}/），拒绝执行"
+    rm -f "$out"
+    return 1
+  fi
+  echo "${label} 校验通过（$(wc -c < "$out") 字节）"
+  return 0
+}
+
 stage_add_kernelsu() {
   log_stage "add_kernelsu" "添加 KernelSU"
   local _pwd="$PWD"
   cd ${KERNEL_ROOT}
   # P2-9 修复：上游 setup.sh 下载后先做内容校验再执行（供应链风险兜底）。
-  # curl -f 只保证 HTTP 成功，不足以判断拿到的是脚本：CDN 错误页、被劫持的空壳、
-  # 截断的半截文件都能以 200 返回。这里要求「非空 + 可读 + 含 shell 脚本痕迹」，
-  # 不满足即拒绝执行（fail-closed），避免把来路不明的内容直接交给 bash。
   fetch_ksu_setup() {
-    local url="$1" label="$2"
-    if ! curl -LSsf "$url" -o /tmp/ksu_setup.sh; then
-      echo "::error::下载 ${label} setup.sh 失败"; return 1
-    fi
-    if [ ! -s /tmp/ksu_setup.sh ]; then
-      echo "::error::${label} setup.sh 内容为空（疑似 CDN 错误页或下载截断），拒绝执行"; return 1
-    fi
-    if ! grep -qE '(^|[[:space:]])sh[[:space:]]|#!/|KernelSU|setup' /tmp/ksu_setup.sh; then
-      echo "::error::${label} setup.sh 内容不像脚本（未匹配到 shell/KernelSU 特征），拒绝执行"; return 1
-    fi
-    echo "${label} setup.sh 校验通过（$(wc -c < /tmp/ksu_setup.sh) 字节）"
-    return 0
+    fetch_remote_script "$1" /tmp/ksu_setup.sh "$2" \
+      '(^|[[:space:]])sh[[:space:]]|#!/|KernelSU|setup' || return 1
   }
 
   case "${KSU_VARIANT}" in
@@ -1547,8 +1594,19 @@ stage_inject_ntsync() {
   esac
 
   echo "自动选择 NTSync 补丁: ${NTSYNC_PATCH}.patch"
-  wget -q -O ntsync_base.patch "https://raw.githubusercontent.com/Goldzxcbug/Droidspaces_Kernel_patch/refs/heads/main/NTsync/ntsync_base.patch" || { echo "::error::下载 ntsync_base.patch 失败"; exit 1; }
-  wget -q -O "${NTSYNC_PATCH}.patch" "https://raw.githubusercontent.com/Goldzxcbug/Droidspaces_Kernel_patch/refs/heads/main/NTsync/${NTSYNC_PATCH}.patch" || { echo "::error::下载 ${NTSYNC_PATCH}.patch 失败"; exit 1; }
+  # 这两个补丁直接 `patch -p1` 进内核源码树，来路必须校验。此前只用 wget 的
+  # 退出码判断成功与否 —— raw.githubusercontent.com 出错时返回的是 HTML 错误页，
+  # wget 仍以 0 落盘，随后交给 patch 去解析。统一走 fetch_remote_script，
+  # 按 unified diff 的实际特征校验（diff --git / --- a/ / +++ b/ / @@ 块头）。
+  local NTSYNC_RE='^(diff --git |--- a/|\+\+\+ b/|@@ )'
+  fetch_remote_script \
+    "https://raw.githubusercontent.com/Goldzxcbug/Droidspaces_Kernel_patch/refs/heads/main/NTsync/ntsync_base.patch" \
+    ntsync_base.patch "ntsync_base.patch" "$NTSYNC_RE" true \
+    || { echo "::error::下载或校验 ntsync_base.patch 失败"; exit 1; }
+  fetch_remote_script \
+    "https://raw.githubusercontent.com/Goldzxcbug/Droidspaces_Kernel_patch/refs/heads/main/NTsync/${NTSYNC_PATCH}.patch" \
+    "${NTSYNC_PATCH}.patch" "${NTSYNC_PATCH}.patch" "$NTSYNC_RE" true \
+    || { echo "::error::下载或校验 ${NTSYNC_PATCH}.patch 失败"; exit 1; }
 
   # P2-2 修复：补丁来自未钉版本的 main 分支，下载/应用失败必须显式报错而非静默跳过
   patch -p1 --forward < "ntsync_base.patch" || { echo "::error::应用 ntsync_base.patch 失败"; exit 1; }
@@ -1783,9 +1841,14 @@ stage_add_bbg() {
   local _pwd="$PWD"
   cd ${KERNEL_ROOT}
   # P2-10 修复：下载/执行失败必须显式报错；Kconfig 修改前备份，失败/未命中即回滚提示
+  # 本轮修复：原先只做 wget 成功与否的判断就直接 `bash` —— 与 add_kernelsu 的
+  # fetch_ksu_setup 相比少了一层内容校验。BBG setup.sh 是要进内核源码树的补丁脚本，
+  # 拿到 CDN 错误页同样会以退出码 0 落盘，随后 bash 执行的是 HTML。统一走
+  # fetch_remote_script，按 BBG 自身内容特征校验（而非 KernelSU 特征）。
   BBG_SETUP="https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh"
-  if ! wget -q -O /tmp/bbg_setup.sh "$BBG_SETUP"; then
-    echo "::error::下载 BBG setup.sh 失败"; return 1
+  if ! fetch_remote_script "$BBG_SETUP" /tmp/bbg_setup.sh "BBG" \
+      'CONFIG_BBG|baseband|Baseband|^#!|^[[:space:]]*(set|function|if|for|KERNEL_ROOT)' true; then
+    echo "::error::BBG setup.sh 获取或校验失败"; return 1
   fi
   if ! bash /tmp/bbg_setup.sh; then
     echo "::error::BBG setup.sh 执行失败"; return 1
@@ -2754,6 +2817,10 @@ validate_inputs() {
       ;;
   esac
 
+  # SUB_LEVEL 会被拼进产物文件名（anykernel3_zip_name / boot.*.img 的 cp 目标），
+  # 同时也是 LTS 模式下由 data json 覆写的变量。这里对传入值做白名单；
+  # JSON 覆写路径另有针对性校验（见 sync_kernel_source 阶段）。
+  # 合法形态：数字子版本，或 LTS 占位符 X、x.y 系列的 y。
   for v in OS_PATCH_LEVEL REVISION; do
     val="${!v}"
     if [ -n "$val" ]; then
@@ -2762,6 +2829,13 @@ validate_inputs() {
       esac
     fi
   done
+
+  if [ -n "${SUB_LEVEL:-}" ]; then
+    case "$SUB_LEVEL" in
+      X) ;;  # LTS 占位符，后续会被 data json 覆写
+      *[!0-9A-Za-z]*) echo "::error::SUB_LEVEL 含非法字符：'${SUB_LEVEL}'（仅允许数字，或 LTS 占位符 X）"; exit 1 ;;
+    esac
+  fi
 }
 
 main() {

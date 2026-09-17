@@ -11,10 +11,15 @@ var modalBody = document.getElementById('modalBody');
 var modalClose = document.getElementById('modalClose');
 
 // 生成弹窗中的一行（普通文本或代码块）
+//
+// label 与 value 一样过 esc()：本函数是转义边界，不能把安全性押在"调用方只传
+// t.* 常量"上。当前 4 个 label 调用点确实都是 i18n 词条，但同函数的 value 与
+// modalSection* 都已转义，label 独独裸拼属于不一致的漏点 —— 一旦后续有人按
+// 位置参数的习惯把数据源字符串（如 patch 名）传进来，就是直接可用的 XSS。
 function modalRow(label, value, isCode) {
   if (isCode) {
     return '<div class="modal-row modal-row-code">' +
-        '<span class="modal-label">' + label + '</span>' +
+        '<span class="modal-label">' + esc(label) + '</span>' +
         '<div class="modal-code-wrapper">' +
           '<code class="modal-code">' + esc(value) + '</code>' +
           '<button class="modal-copy" data-copy="' + esc(value) + '">' + t.copy + '</button>' +
@@ -22,7 +27,7 @@ function modalRow(label, value, isCode) {
       '</div>';
   }
   return '<div class="modal-row">' +
-      '<span class="modal-label">' + label + '</span>' +
+      '<span class="modal-label">' + esc(label) + '</span>' +
       '<span class="modal-value-group">' +
         '<span class="modal-value">' + esc(value) + '</span>' +
         '<button class="modal-copy" data-copy="' + esc(value) + '">' + t.copy + '</button>' +

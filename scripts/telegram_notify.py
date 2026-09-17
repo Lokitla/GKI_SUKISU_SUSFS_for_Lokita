@@ -43,6 +43,25 @@ def env(name: str, default: str = "") -> str:
     return os.environ.get(name, default)
 
 
+def _sanitize_header_value(value: str) -> str:
+    """清理即将写进 multipart header 的值。
+
+    filename 与字段名都直接来自文件名/环境变量，而 multipart 的 header 以 CRLF
+    分行。一个名字里带 `\\r\\n` 的文件就能凭空插入额外的 header 或字段，改变这次
+    上传的语义（例如覆盖 parse_mode、伪造第二个 part）。当前调用链上的文件名由
+    构建脚本生成、chat_id 来自 secrets，属于可信输入，但这是**转义边界**：
+    函数本身必须对任何输入都安全，不能指望调用方永远不传脏数据。
+
+    处理方式：CR/LF 与 NUL 直接剥除（而不是替换，避免引入新字符），
+    双引号转义为 `\\"` 以免提前闭合 header 的引号包裹；截断到 200 字符。
+    """
+    cleaned = str(value)
+    for ch in ("\r", "\n", "\x00"):
+        cleaned = cleaned.replace(ch, "")
+    cleaned = cleaned.replace('"', '\\"')
+    return cleaned[:200]
+
+
 class TelegramNotifier:
     def __init__(self, bot_token: str = None, chat_id: str = None, thread_id: str = None):
         self.bot_token = bot_token or env("TELEGRAM_BOT_TOKEN")
@@ -106,15 +125,16 @@ class TelegramNotifier:
         body = bytearray()
         for key, value in fields.items():
             body += f"--{boundary}\r\n".encode()
-            body += f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode()
+            body += f'Content-Disposition: form-data; name="{_sanitize_header_value(key)}"\r\n\r\n'.encode()
             body += f"{value}\r\n".encode()
 
         filename = os.path.basename(file_path)
+        safe_filename = _sanitize_header_value(filename)
         with open(file_path, "rb") as f:
             content = f.read()
         body += f"--{boundary}\r\n".encode()
         body += (
-            f'Content-Disposition: form-data; name="document"; filename="{filename}"\r\n'
+            f'Content-Disposition: form-data; name="document"; filename="{safe_filename}"\r\n'
         ).encode()
         body += b"Content-Type: application/octet-stream\r\n\r\n"
         body += content + b"\r\n"
