@@ -267,24 +267,38 @@ jobs:
 
           calculate_run_ksu_version() {
             local head_sha="$1"
-            if ! git -C KernelSU cat-file -e "$head_sha^{commit}" 2>/dev/null; then
-              git -C KernelSU fetch --no-tags origin "$head_sha" >/dev/null 2>&1 || true
-            fi
-            if ! git -C KernelSU cat-file -e "$head_sha^{commit}" 2>/dev/null; then
-              return 1
-            fi
+            local git_version=""
 
-            local git_version
-            # Manager CI 只跑在 main 上，必须按 main 的计数口径算。
-            # 若该 commit 属于 builtin（独立分支，提交数仅 802），直接计数会得到
-            # 远低于实际的版本号，从而把"候选管理器版本"误判为低于内核版本，
-            # 最终选中一个过旧的 APK。
-            if [ "$KSU_VARIANT" = "SukiSU" ] && \
-               git -C KernelSU cat-file -e refs/remotes/origin/builtin^{commit} 2>/dev/null && \
-               git -C KernelSU merge-base --is-ancestor "$head_sha" refs/remotes/origin/builtin 2>/dev/null; then
-              git_version=$(git -C KernelSU rev-list --count refs/remotes/origin/main)
-            else
-              git_version=$(git -C KernelSU rev-list --count "$head_sha")
+            # 【口径必须与内核侧一致】build_kernel.sh 的 resolve_sukisu_version 是按
+            # GitHub API（commits?sha=main 的 Link rel=last）取提交数的，管理器这边
+            # 候选 run 的版本也必须走同一条路。
+            #
+            # 原先这里只用 git rev-list --count：KernelSU 是 fetch-depth:1 的浅克隆，
+            # rev-list 的结果取决于本地抓取深度，同一个 commit 两次运行能数出不同值
+            # —— 于是同一份脚本，一次严格命中 40922，一次退到 40879，稳定性为零。
+            # API 口径既稳定又与内核侧对齐；本地 git 仅作 API 拿不到时的兜底。
+            git_version=$(curl -sI -H "Authorization: token $GH_TOKEN" \
+                "https://api.github.com/repos/$REPO/commits?sha=$head_sha&per_page=1" 2>/dev/null |
+                grep -i "^link:" | sed -n 's/.*page=\([0-9]*\)>; rel="last".*/\1/p')
+
+            if [ -z "$git_version" ]; then
+              if ! git -C KernelSU cat-file -e "$head_sha^{commit}" 2>/dev/null; then
+                git -C KernelSU fetch --no-tags origin "$head_sha" >/dev/null 2>&1 || true
+              fi
+              if ! git -C KernelSU cat-file -e "$head_sha^{commit}" 2>/dev/null; then
+                return 1
+              fi
+              # Manager CI 只跑在 main 上，必须按 main 的计数口径算。
+              # 若该 commit 属于 builtin（独立分支，提交数仅 802），直接计数会得到
+              # 远低于实际的版本号，从而把"候选管理器版本"误判为低于内核版本，
+              # 最终选中一个过旧的 APK。
+              if [ "$KSU_VARIANT" = "SukiSU" ] && \
+                 git -C KernelSU cat-file -e refs/remotes/origin/builtin^{commit} 2>/dev/null && \
+                 git -C KernelSU merge-base --is-ancestor "$head_sha" refs/remotes/origin/builtin 2>/dev/null; then
+                git_version=$(git -C KernelSU rev-list --count refs/remotes/origin/main)
+              else
+                git_version=$(git -C KernelSU rev-list --count "$head_sha")
+              fi
             fi
 
             if [ "$KSU_VARIANT" = "SukiSU" ] && ! [ "$git_version" -gt 802 ] 2>/dev/null; then
@@ -388,7 +402,9 @@ jobs:
 
           if [ -z "$DOWNLOAD_LIST" ]; then
           echo "开始查找不高于 KSU $TARGET_KSU_VERSION 的 Manager 产物..."
-          for PAGE in $(seq 1 5); do
+          # 每个候选现在要打一次 API 取版号，翻页上限从 10 收到 3：
+          # 严格命中通常就落在第 1 页（最新的那批构建），扫不到才说明真没有。
+          for PAGE in $(seq 1 3); do
             echo "--------------------------------------------------"
             echo "正在检查第 ${PAGE} 页历史构建..."
             RUNS=$(curl -s -H "Authorization: token $GH_TOKEN" "$RUNS_URL&page=$PAGE")
