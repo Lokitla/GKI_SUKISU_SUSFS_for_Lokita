@@ -55,6 +55,7 @@ on:
         options:
           - 全部版本
           - 单版本冒烟
+          - 固定 5.10.236
           - 不构建
       include_612:
         description: 一并把 Android 16 (6.12) 的 4 个版本纳入（当前与最新 SukiSU 不兼容，默认跳过）
@@ -241,6 +242,13 @@ jobs:
               echo "6.12 纳入范围: $INCLUDE_612"
               TARGET_WF="main.yml"
               ;;
+            "固定 5.10.236")
+              # 走专用的固定 workflow（build-fixed-236.yml）：那边的参数全部写死，
+              # 不需要传任何 inputs，所以载荷只有 ref。产物留在 Actions artifacts，
+              # 不发 Release —— 它没有经过负责 gh release create 的 main.yml 编排层。
+              jq -n --arg ref "$REF_NAME" '{ ref: $ref }' > /tmp/dispatch.json
+              TARGET_WF="build-fixed-236.yml"
+              ;;
             *)
               # 单版本冒烟走「Android 内核构建-自定义」(kernel-custom.yml)：
               # 只有它支持精确到单个子版本，一次只编 1 个，几分钟就有结果。
@@ -290,3 +298,4 @@ jobs:
             --input /tmp/dispatch.json
 
           echo "已触发 $TARGET_WF"
+
