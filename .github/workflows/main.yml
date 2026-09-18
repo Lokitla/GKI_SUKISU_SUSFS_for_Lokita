@@ -149,6 +149,11 @@ on:
         required: false
         type: boolean
         default: false
+      use_release_cache:
+        description: "用 GitHub Release 存储 ccache"
+        required: false
+        type: boolean
+        default: false
       # ksu_mode 已从手动触发界面隐藏：本仓库的存在前提就是集成 KernelSU，
       # 不存在"不集成 KSU"的常规用法。功能代码未删除——build.yml 的
       # workflow_call 仍保留该输入，需要时取消下面注释并恢复 with: 透传即可。
@@ -1030,3 +1035,4 @@ jobs:
           echo "- **标签**: $NEW_TAG" >> $GITHUB_STEP_SUMMARY
           echo "- **类型**: ${{ inputs.release_type }}" >> $GITHUB_STEP_SUMMARY
           echo "- **链接**: https://github.com/$REPO_OWNER/$REPO_NAME/releases/tag/$NEW_TAG" >> $GITHUB_STEP_SUMMARY
+
