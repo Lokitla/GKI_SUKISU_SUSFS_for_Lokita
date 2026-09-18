@@ -118,6 +118,11 @@ permissions:
         required: false
         type: string
         default: ""
+      allow_susfs_with_main:
+        description: "允许 SukiSU main 分支配 SUSFS（默认禁止：两者都改 context_write/access_write/sel_open_handle_status，SELinux 隐藏会失效）。仅作对照组数据采集用，产物不可日常使用"
+        required: false
+        type: boolean
+        default: false
 jobs:
   build-kernel:
     name: ${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}-${{ inputs.ksu_variant }}
@@ -231,6 +236,10 @@ jobs:
         USE_BBR: ${{ inputs.use_bbr }}
         SUKISU_COMMIT: ${{ inputs.sukisu_commit }}
         KSU_BRANCH_MODE: ${{ inputs.ksu_branch_mode }}
+        # 逃生舱：设为 true 可越过 build_kernel.sh 的两道 main+SUSFS 防线
+        #（resolve_ksu_branch 的早检查、以及 selinux_hide.c 里的 ksu_patch_text 校验）。
+        # 仅用于对照组数据采集，产物 SELinux 隐藏必然失效。
+        ALLOW_SUSFS_WITH_MAIN: ${{ inputs.allow_susfs_with_main }}
         TOOLCHAIN_CACHE_HIT: ${{ steps.cache-toolchain.outputs.cache-hit }}
         WORKSPACE: ${{ github.workspace }}
     - name: 保存 Release 缓存（可选）
