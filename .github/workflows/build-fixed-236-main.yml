@@ -64,8 +64,13 @@ jobs:
       artifact_upload_mode: "上传全部"
       send_telegram: false
       use_release_cache: false
-      # ↓↓↓ 本文件唯一的实验变量 ↓↓↓
+      # ↓↓↓ 本文件的实验变量 ↓↓↓
       ksu_branch_mode: "main"
+      # 破护栏开关：main + SUSFS 被仓库两道防线禁止（build_kernel.sh:928 早检查
+      # 和 :1118 对 selinux_hide.c 的 ksu_patch_text 校验，不满足就 return 1）。
+      # 详见 build.yml 新增的 allow_susfs_with_main input 说明——
+      # 产物 SELinux 隐藏必然失效，只作对照数据。
+      allow_susfs_with_main: true
       sukisu_commit: ""
       susfs_commit: ""
       kpm_patch_sha256: ""
