@@ -1,26 +1,29 @@
-name: 固定构建-5.10.236-builtin上一个commit（对照组）
+name: 固定构建-5.10.236-builtin_08-27（对照组）
 
 # =============================================================================
-# 对照用的固定构建：与 build-fixed-236.yml 唯一的区别是【SukiSU 钉在 builtin
-# 的上一个 commit】。
+# 对照用的固定构建：把 SukiSU 钉到 builtin 上【2026-08-27 的那个正常提交】。
 #
-#   build-fixed-236.yml       sukisu_commit 留空 → builtin HEAD b20dee702035
-#   build-fixed-236-main.yml  ksu_branch_mode: "main"
-#   build-fixed-236-prev.yml  sukisu_commit: "e2912817f4e1"            ← 本文件
+#   build-fixed-236.yml       留空 → builtin HEAD b20dee702035（09-13）
+#   build-fixed-236-prev.yml  钉 6c5603f0c853...（08-27）                ← 本文件
 #
-# 被回退的那个 HEAD 提交是：
-#   b20dee702035  2026-09-13  kernel: restore missing kernel_umount_feature_set
-#                                     in kernel_umount.c (#964)
-# 退回到的上一个：
-#   e2912817f4e1  2026-09-01  bump version to 4.2.0
+# 为什么选 08-27 这个 commit（而不是上一个 e2912817f4e1）：
+#   上游 d13e8a75f818（09-01，"Sync with the official KernelSU main repo"）在同步时
+#   误删了 kernel_umount.c 里的 kernel_umount_feature_set 函数体，但保留了引用它的
+#   feature handler —— 实现没了、调用还在，builtin 分支从 09-01 到 09-13 整整 12 天
+#   编译不过。09-13 的 b20dee702035（#964 "restore missing kernel_umount_feature_set"）
+#   才把这 8 行加回来。
 #
-# 重要预期（不是 bug，别当成构建失败）：
-#   KSU 版本号 = 40000 + main 分支提交数 − 2815。
-#   它的输入是【main 的提交数】，跟内核源码 checkout 到 builtin 的哪个点无关
-#   （build_kernel.sh 的 resolve_sukisu_version 强制走 commits?sha=main 取数）。
-#   所以回退 builtin 的 commit 之后，产物上的版本号大概率【一点都不会变】。
-#   真正的差别只在 kernel/ 的那几个文件：少了 kernel_umount.c 里恢复的
-#   kernel_umount_feature_set。
+#   所以 builtin 的血缘是这样的：
+#     6c5603f0c853 (08-27, fix 2)          ← broken 之前最后一个正常提交，本文件钉它
+#       └ d13e8a75f818 (09-01, sync)       ← 误删，构建开始 broken
+#         └ e2912817f4e1 (09-01, bump)     ← 仍 broken（只改 Makefile）
+#           └ b20dee702035 (09-13, #964)   ← 修复
+#
+#   这也是第二个对照组（钉 e2912817f4e1）必然失败于 compile_kernel 的原因：它退到了
+#   broken 窗口里。而 6c5603f0c853 在窗口之前，理论上可编译。
+#
+# 预期版本号仍然不变：KSU 版本 = 40000 + main 提交数 − 2815，输入是 main 的提交数，
+# 跟内核 checkout 到 builtin 的哪个点无关（resolve_sukisu_version 强制按 main 取数）。
 #
 # 不发 Release：直接 uses: build.yml，绕开含 gh release create 的 main.yml 编排层。
 # =============================================================================
@@ -64,19 +67,18 @@ jobs:
       artifact_upload_mode: "上传全部"
       send_telegram: false
       use_release_cache: false
-      # ↓↓↓ 本文件唯一的实验变量：回退到 builtin 的上一个 commit ↓↓↓
-      # 必须是完整 40 位 SHA-1 —— 给短 hash 会被长度校验直接判非法并中断构建
-      # （第一次就是填了 12 位的 e2912817f4e1 而挂掉的）。
-      sukisu_commit: "e2912817f4e1b194e582a06e0b5eacf6a3fb7083"
+      # ↓↓↓ 本文件唯一的实验变量 ↓↓↓
+      # 必须是完整 40 位 SHA-1，短 hash 会被长度校验直接判非法并中断构建。
+      sukisu_commit: "6c5603f0c853a94256940273efc433cbbc85f57a"
       susfs_commit: ""
       kpm_patch_sha256: ""
 
   # 管理器刻意不跟内核一起钉这个 commit：
-  #   e2912817f4e1 是 builtin 分支上的提交，而 builtin 里压根没有 manager/ 目录，
-  #   上游也不会用 builtin 的 head_sha 跑 build-manager.yml —— 把 builtin 的 hash
-  #   传给这里，head_sha 精确查找必然落空（两条分支无共同祖先）。
-  #   所以留空继续走海选 + 严格对齐，保证和另外两组拿到同一个管理器 APK，
-  #   让三组对比的差异只落在内核上。
+  #   6c5603f0c853 属于 builtin 分支，而 builtin 里没有 manager/ 目录，上游也不会用
+  #   builtin 的 head_sha 跑 build-manager.yml —— 把 builtin 的 hash 传到这里，
+  #   head_sha 精确查找必然落空（两条分支无共同祖先）。
+  #   留空走自动查找 + 严格对齐即可：现在应该稳定命中 Build Manager #2681
+  #   （2026-09-13 / head 7755cdb36f63 / KSU 40922）。
   get-ksu-manager:
     uses: ./.github/workflows/get-manager.yml
     secrets: inherit
