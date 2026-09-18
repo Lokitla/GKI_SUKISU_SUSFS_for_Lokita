@@ -65,8 +65,9 @@ jobs:
       send_telegram: false
       use_release_cache: false
       # ↓↓↓ 本文件唯一的实验变量：回退到 builtin 的上一个 commit ↓↓↓
-      # 只作用于内核；管理器那边仍然留空走自动路径（见下方说明）。
-      sukisu_commit: "e2912817f4e1"
+      # 必须是完整 40 位 SHA-1 —— 给短 hash 会被长度校验直接判非法并中断构建
+      # （第一次就是填了 12 位的 e2912817f4e1 而挂掉的）。
+      sukisu_commit: "e2912817f4e1b194e582a06e0b5eacf6a3fb7083"
       susfs_commit: ""
       kpm_patch_sha256: ""
 
