@@ -323,10 +323,18 @@ jobs:
           BEST_VERSION=0
           BEST_BUILD_ID=""
           BEST_BRANCH=""
-          RUNS_URL="https://api.github.com/repos/$REPO/actions/workflows/$FILENAME/runs?status=success&per_page=30"
-          if [ "$KSU_VARIANT" == "Next" ]; then
-            RUNS_URL="https://api.github.com/repos/$REPO/actions/workflows/$FILENAME/runs?branch=$BRANCH&status=success&per_page=30"
-          fi
+          # 分支过滤（重要）：早期这里不加过滤，因为上游 Manager CI 一度只跑在
+          # 发布分支上（见下方 calculate_run_ksu_version 的说明）。但上游现在会在
+          # 各类功能/修复分支上触发 build-manager.yml —— 实测 SukiSU-Ultra 最近 30
+          # 次成功构建里 16 次来自 cpu_spoof / mount_hide / fix/* / chore/* 等分支。
+          # 这些 APK 携带分支特性，版本串或应用名里会出现 PR / 分支标记，
+          # 导致管理器版本与内核对不上。正式产物必须只在发布分支上找。
+          case "$KSU_VARIANT" in
+            "Next") RELEASE_BRANCH="dev" ;;
+            *)      RELEASE_BRANCH="main" ;;
+          esac
+          RUNS_URL="https://api.github.com/repos/$REPO/actions/workflows/$FILENAME/runs?branch=$RELEASE_BRANCH&status=success&per_page=30"
+          echo "Manager 查找范围: $REPO/$FILENAME @ $RELEASE_BRANCH"
 
           # 指定了 SukiSU 提交时，直接定位该提交触发的 Manager 构建：
           # Manager CI 的 head_sha 就是 SukiSU 的提交，因此可精确命中，
