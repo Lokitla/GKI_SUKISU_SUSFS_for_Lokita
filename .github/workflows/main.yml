@@ -165,15 +165,9 @@ on:
 #           - "关闭"
 #           - "禁用KSU"
 #         default: "关闭"
-      ksu_branch_mode:
-        description: "SukiSU 拉取分支（仅 SukiSU 变体生效）"
-        required: false
-        type: choice
-        options:
-          - "auto"
-          - "main"
-          - "builtin"
-        default: "auto"
+      # 注：ksu_branch_mode 已从手动触发界面移除 —— workflow_dispatch 上限 25 个 input，
+      # 自动触发（Auto_Trigger）已占满 24 个必需字段，手动专用项只能留一个（保留 version）。
+      # 其转发处用 ${{ inputs.ksu_branch_mode || 'auto' }} 兜底，不声明时自然回退 auto。
       kpm_patch_sha256:
         description: "KPM 修补工具 sha256 锚点（留空不校验）。main.yml 透传给各 kernel-* 构建，让自动触发的全量构建也能做 fail-closed 比对"
         required: false
