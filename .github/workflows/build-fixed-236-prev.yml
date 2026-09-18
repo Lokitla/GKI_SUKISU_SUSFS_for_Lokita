@@ -1,0 +1,85 @@
+name: 固定构建-5.10.236-builtin上一个commit（对照组）
+
+# =============================================================================
+# 对照用的固定构建：与 build-fixed-236.yml 唯一的区别是【SukiSU 钉在 builtin
+# 的上一个 commit】。
+#
+#   build-fixed-236.yml       sukisu_commit 留空 → builtin HEAD b20dee702035
+#   build-fixed-236-main.yml  ksu_branch_mode: "main"
+#   build-fixed-236-prev.yml  sukisu_commit: "e2912817f4e1"            ← 本文件
+#
+# 被回退的那个 HEAD 提交是：
+#   b20dee702035  2026-09-13  kernel: restore missing kernel_umount_feature_set
+#                                     in kernel_umount.c (#964)
+# 退回到的上一个：
+#   e2912817f4e1  2026-09-01  bump version to 4.2.0
+#
+# 重要预期（不是 bug，别当成构建失败）：
+#   KSU 版本号 = 40000 + main 分支提交数 − 2815。
+#   它的输入是【main 的提交数】，跟内核源码 checkout 到 builtin 的哪个点无关
+#   （build_kernel.sh 的 resolve_sukisu_version 强制走 commits?sha=main 取数）。
+#   所以回退 builtin 的 commit 之后，产物上的版本号大概率【一点都不会变】。
+#   真正的差别只在 kernel/ 的那几个文件：少了 kernel_umount.c 里恢复的
+#   kernel_umount_feature_set。
+#
+# 不发 Release：直接 uses: build.yml，绕开含 gh release create 的 main.yml 编排层。
+# =============================================================================
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: fixed-build-236-prev
+  cancel-in-progress: false
+
+jobs:
+  build-fixed:
+    name: "5.10.236-android12-2025-05 [prev]"
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      android_version: "android12"
+      kernel_version: "5.10"
+      sub_level: "236"
+      os_patch_level: "2025-05"
+      revision: "r1"
+      ksu_variant: "SukiSU"
+      version: "5.10.236-android12-9-00003-gfb24cf99ad97-ab14313284"
+      build_time: "Tue Oct 21 03:03:12 UTC 2025"
+      use_zram: true
+      use_bbr: true
+      use_bbg: false
+      use_kpm: "patched (开启并修补)"
+      use_rekernel: false
+      cve_2026_43499_patch: false
+      enable_susfs: true
+      export_susfs_patches: true
+      supp_op: false
+      droidspaces: "不启用"
+      droidspaces_ntsync: false
+      artifact_upload_mode: "上传全部"
+      send_telegram: false
+      use_release_cache: false
+      # ↓↓↓ 本文件唯一的实验变量：回退到 builtin 的上一个 commit ↓↓↓
+      # 只作用于内核；管理器那边仍然留空走自动路径（见下方说明）。
+      sukisu_commit: "e2912817f4e1"
+      susfs_commit: ""
+      kpm_patch_sha256: ""
+
+  # 管理器刻意不跟内核一起钉这个 commit：
+  #   e2912817f4e1 是 builtin 分支上的提交，而 builtin 里压根没有 manager/ 目录，
+  #   上游也不会用 builtin 的 head_sha 跑 build-manager.yml —— 把 builtin 的 hash
+  #   传给这里，head_sha 精确查找必然落空（两条分支无共同祖先）。
+  #   所以留空继续走海选 + 严格对齐，保证和另外两组拿到同一个管理器 APK，
+  #   让三组对比的差异只落在内核上。
+  get-ksu-manager:
+    uses: ./.github/workflows/get-manager.yml
+    secrets: inherit
+    with:
+      kernelsu_variant: "SukiSU"
+      manager_spoofed: true
+      sukisu_commit: ""
