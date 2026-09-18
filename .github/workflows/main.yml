@@ -169,6 +169,11 @@ on:
           - "main"
           - "builtin"
         default: "auto"
+      kpm_patch_sha256:
+        description: "KPM 修补工具 sha256 锚点（留空不校验）。main.yml 透传给各 kernel-* 构建，让自动触发的全量构建也能做 fail-closed 比对"
+        required: false
+        type: string
+        default: ""
 jobs:
   # ==================== 获取管理器 ====================
   # 下载最新的 KernelSU 管理器 APK 和 SUSFS 模块
