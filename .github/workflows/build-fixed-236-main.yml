@@ -1,0 +1,81 @@
+name: 固定构建-5.10.236-main分支（对照组）
+
+# =============================================================================
+# 对照用的固定构建：与 build-fixed-236.yml 唯一的区别是【SukiSU 走 main 分支】。
+#
+#   build-fixed-236.yml       ksu_branch_mode 未传 → 默认 auto → 开 SUSFS 走 builtin
+#   build-fixed-236-main.yml  ksu_branch_mode: "main"                 ← 本文件
+#   build-fixed-236-prev.yml  builtin 上一个 commit e2912817f4e1
+#
+# 三个文件除这一处外参数完全一致（同一套伪装版本名、构建时间、zram/bbr/SUSFS/KPM），
+# 目的是让自己能逐个人工对比：同样的 GKI 底座下，换 KernelSU 来源会差在哪。
+#
+# 为什么这里能写 ksu_branch_mode、而 main.yml 里没有：
+#   这个 input 在 build.yml（workflow_call）里一直存在。当初从 main.yml 删掉，
+#   纯粹是因为 workflow_dispatch 的 input 上限是 25 个，Auto_Trigger 把份额占满了
+#   （那次 422 就是这么来的）。本文件是 workflow_dispatch 且零 input，
+#   在 uses: 里显式传给 build.yml 完全没问题。
+#
+# 同样不发 Release：直接 uses: build.yml，绕开了负责 gh release create 的
+# main.yml 编排层，产物只落在 Actions artifacts。
+#
+# 风险提示：main 分支的内核侧相对 builtin 是「薄 hook 层」，SUSFS 所需的内核接口
+# 在 main 上未必齐全。若 mantle 补丁打不进去，构建会在 SUSFS 阶段失败——
+# 那本身就是一条有效的对比结论。
+# =============================================================================
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+# group 必须与其他两个固定构建区分开，否则同组会互相 cancel
+concurrency:
+  group: fixed-build-236-main
+  cancel-in-progress: false
+
+jobs:
+  build-fixed:
+    name: "5.10.236-android12-2025-05 [main]"
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      android_version: "android12"
+      kernel_version: "5.10"
+      sub_level: "236"
+      os_patch_level: "2025-05"
+      revision: "r1"
+      ksu_variant: "SukiSU"
+      version: "5.10.236-android12-9-00003-gfb24cf99ad97-ab14313284"
+      build_time: "Tue Oct 21 03:03:12 UTC 2025"
+      use_zram: true
+      use_bbr: true
+      use_bbg: false
+      use_kpm: "patched (开启并修补)"
+      use_rekernel: false
+      cve_2026_43499_patch: false
+      enable_susfs: true
+      export_susfs_patches: true
+      supp_op: false
+      droidspaces: "不启用"
+      droidspaces_ntsync: false
+      artifact_upload_mode: "上传全部"
+      send_telegram: false
+      use_release_cache: false
+      # ↓↓↓ 本文件唯一的实验变量 ↓↓↓
+      ksu_branch_mode: "main"
+      sukisu_commit: ""
+      susfs_commit: ""
+      kpm_patch_sha256: ""
+
+  # 与管理器的取值路径保持和另外两个完全一致（留空 = 自动海选 + 严格对齐），
+  # 这样三组拿到的是同一个 APK，差异就只剩内核本体，对比才干净。
+  get-ksu-manager:
+    uses: ./.github/workflows/get-manager.yml
+    secrets: inherit
+    with:
+      kernelsu_variant: "SukiSU"
+      manager_spoofed: true
+      sukisu_commit: ""
