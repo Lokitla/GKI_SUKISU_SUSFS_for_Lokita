@@ -1,0 +1,76 @@
+name: 固定构建-5.10.236（SukiSU+zram+bbr / 伪装版本）
+
+# =============================================================================
+# 参数全写死的个人专用构建：不带任何 inputs，触发即跑固定配置。
+#   5.10.236-android12-2025-05 / SukiSU + SUSFS / KPM 修补 / zram 与 bbr 启用
+#   版本名与构建时间固定为伪装串（见下方 with: 的 version / build_time）
+#
+# 为什么单独开一个文件、而不是给 kernel-custom.yml 传参：
+#   kernel-custom.yml 需要手填 os_patch_level 等一整串下拉框，而它的
+#   workflow_dispatch 份额已被 Auto_Trigger 占满（GitHub 上限 25 个 input，
+#   main.yml 那次超限导致 dispatch 被 422 拒掉就是栽在这上面）。
+#   这里把配置直接沉进文件，auto 只要 dispatch 一次即可，不必逐项传参。
+#
+# 不发 Release（这是刻意的设计，不是遗漏）：
+#   Release 由 main.yml 编排层的 gh release create/upload 负责
+#   （main.yml:973-1022）。本 workflow 直接 uses: build.yml ——
+#   build.yml 内部只有 actions/upload-artifact，没有任何 release 步骤，
+#   因此产物只留在 Actions artifacts 里，不会生成 Release。
+#
+# kpm_patch_sha256 留空是有意的：build_kernel.sh 在锚点为空时会回读
+# config/kpm_patch_sha256，等价于「始终跟随仓库锚点」，写死反而会漏掉
+# 上游变更带来的校验。
+# =============================================================================
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+# 触发就是跑一次内核构建，没必要互相取消
+concurrency:
+  group: fixed-build-236
+  cancel-in-progress: false
+
+jobs:
+  build-fixed:
+    name: "5.10.236-android12-2025-05"
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      android_version: "android12"
+      kernel_version: "5.10"
+      sub_level: "236"
+      os_patch_level: "2025-05"
+      revision: "r1"
+      ksu_variant: "SukiSU"
+      # ksu_mode 不传：build.yml 默认「关闭」= 正常集成 KernelSU
+      version: "5.10.236-android12-9-00003-gfb24cf99ad97-ab14313284"
+      build_time: "Tue Oct 21 03:03:12 UTC 2025"
+      use_zram: true
+      use_bbr: true
+      use_bbg: false
+      use_kpm: "patched (开启并修补)"
+      use_rekernel: false
+      cve_2026_43499_patch: false
+      enable_susfs: true
+      export_susfs_patches: true
+      supp_op: false
+      droidspaces: "不启用"
+      droidspaces_ntsync: false
+      artifact_upload_mode: "上传全部"
+      send_telegram: false
+      use_release_cache: false
+      sukisu_commit: ""
+      susfs_commit: ""
+      kpm_patch_sha256: ""
+
+  get-ksu-manager:
+    uses: ./.github/workflows/get-manager.yml
+    secrets: inherit
+    with:
+      kernelsu_variant: "SukiSU"
+      manager_spoofed: true
+      sukisu_commit: ""
