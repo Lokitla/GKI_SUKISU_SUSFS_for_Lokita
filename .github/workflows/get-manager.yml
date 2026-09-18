@@ -162,8 +162,20 @@ jobs:
           # 计算KSU版本号。
           # 基准固定为 main 分支的提交数，与内核侧 setup.sh 产出的版本口径一致。
           if [ "$KSU_VARIANT" == "SukiSU" ]; then
-            KSU_GIT_VERSION=$(git rev-list --count refs/remotes/origin/main 2>/dev/null || git rev-list --count HEAD)
-            echo "SukiSU: main 分支提交数 = $KSU_GIT_VERSION（分支模式输入: $KSU_BRANCH_MODE）"
+            # 与内核侧 setup.sh 完全一致的双路取大口径：
+            #   API 的 Link rel=last 分页数 vs 本地 git rev-list 计数，取较大者。
+            # 过去这里只用 git 计数，而内核侧用 max(API, git)——浅克隆时 git 计数偏小，
+            # 于是管理器算出的目标版本低于内核真实版本，挑出来的 APK 天然落后几版。
+            local_count=$(git rev-list --count refs/remotes/origin/main 2>/dev/null)
+            api_count=$(curl -sI "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/commits?sha=main&per_page=1" 2>/dev/null |
+              grep -i "^link:" | sed -n 's/.*page=\([0-9]*\)>; rel="last".*/\1/p')
+            KSU_GIT_VERSION="$local_count"
+            if [ -n "$api_count" ] && [ -n "$local_count" ] && [ "$api_count" -ge "$local_count" ] 2>/dev/null; then
+              KSU_GIT_VERSION="$api_count"
+            elif [ -z "$KSU_GIT_VERSION" ]; then
+              KSU_GIT_VERSION=$(git rev-list --count HEAD)
+            fi
+            echo "SukiSU: main 提交数 = $KSU_GIT_VERSION（api=$api_count local=$local_count，分支模式输入: $KSU_BRANCH_MODE）"
           else
             KSU_GIT_VERSION=$(git rev-list --count HEAD)
           fi
@@ -323,6 +335,11 @@ jobs:
           BEST_VERSION=0
           BEST_BUILD_ID=""
           BEST_BRANCH=""
+          # 严格对齐用：精确等于内核 KSU 版本的候选
+          EXACT_LIST=""
+          EXACT_ID=""
+          EXACT_BRANCH=""
+          EXACT_VERSION=0
           # 分支过滤（重要）：早期这里不加过滤，因为上游 Manager CI 一度只跑在
           # 发布分支上（见下方 calculate_run_ksu_version 的说明）。但上游现在会在
           # 各类功能/修复分支上触发 build-manager.yml —— 实测 SukiSU-Ultra 最近 30
@@ -395,19 +412,42 @@ jobs:
                 continue
               fi
 
+              # 严格对齐优先：版本号必须精确等于内核的 KSU 版本。
+              # 命中即收手，不再往下扫更旧的候选。
+              if [ "$RUN_KSU_VERSION" -eq "$TARGET_KSU_VERSION" ]; then
+                EXACT_LIST="$CANDIDATE_LIST"
+                EXACT_ID="$BUILD_ID"
+                EXACT_BRANCH="$HEAD_BRANCH"
+                EXACT_VERSION="$RUN_KSU_VERSION"
+                echo "候选 Manager(严格命中): 构建 $BUILD_ID ($HEAD_BRANCH), KSU $RUN_KSU_VERSION"
+                break 2
+              fi
+
+              # 未精确命中：先记下「不高于内核的最大值」备用，最终是否采用由下方裁决
               if [ -z "$DOWNLOAD_LIST" ] || [ "$RUN_KSU_VERSION" -gt "$BEST_VERSION" ]; then
                 DOWNLOAD_LIST="$CANDIDATE_LIST"
                 BEST_VERSION="$RUN_KSU_VERSION"
                 BEST_BUILD_ID="$BUILD_ID"
                 BEST_BRANCH="$HEAD_BRANCH"
-                echo "候选 Manager: 构建 $BUILD_ID ($HEAD_BRANCH), KSU $RUN_KSU_VERSION"
-              fi
-
-              if [ "$RUN_KSU_VERSION" -eq "$TARGET_KSU_VERSION" ]; then
-                break 2
+                echo "候选 Manager(备选): 构建 $BUILD_ID ($HEAD_BRANCH), KSU $RUN_KSU_VERSION"
               fi
             done
           done
+          fi
+
+          # ---------- 严格对齐裁决 ----------
+          # 过去的写法是「取不高于内核版本的最大值」，找不到相等就悄悄用一个
+          # 更旧的 APK —— 这正是「内核 40924 / 管理器被挑成 40922」这类错配的来源。
+          # 现在：有精确匹配就只用它；没有则明确告警，把落后幅度摆到台面上。
+          if [ -n "$EXACT_LIST" ]; then
+            DOWNLOAD_LIST="$EXACT_LIST"
+            BEST_BUILD_ID="$EXACT_ID"
+            BEST_BRANCH="$EXACT_BRANCH"
+            BEST_VERSION="$EXACT_VERSION"
+            echo "✓ 管理器与内核严格对齐: KSU $TARGET_KSU_VERSION（构建 $BEST_BUILD_ID @ $BEST_BRANCH）"
+          elif [ -n "$DOWNLOAD_LIST" ]; then
+            LAG=$((TARGET_KSU_VERSION - BEST_VERSION))
+            echo "::warning::未找到与内核 KSU $TARGET_KSU_VERSION 严格匹配的 Manager 构建，回退使用 $BEST_VERSION（构建 $BEST_BUILD_ID @ $BEST_BRANCH），版本落后 $LAG。管理器与内核版本不一致，刷入后可能提示版本不匹配。若经常发生，可显式填入 sukisu_commit 锁定同一个提交。"
           fi
 
           if [ -z "$DOWNLOAD_LIST" ]; then
