@@ -239,7 +239,10 @@ jobs:
         # 逃生舱：设为 true 可越过 build_kernel.sh 的两道 main+SUSFS 防线
         #（resolve_ksu_branch 的早检查、以及 selinux_hide.c 里的 ksu_patch_text 校验）。
         # 仅用于对照组数据采集，产物 SELinux 隐藏必然失效。
-        ALLOW_SUSFS_WITH_MAIN: ${{ inputs.allow_susfs_with_main }}
+        # 必须渲染成字面 '1'/'0'：build_kernel.sh 的判断是
+        # [ "${ALLOW_SUSFS_WITH_MAIN:-0}" != "1" ]，直接传布尔 input 会得到
+        # 字符串 "true"，"true" != "1" 成立 → 护栏照旧拦截（第二轮失败就是这么来的）。
+        ALLOW_SUSFS_WITH_MAIN: ${{ inputs.allow_susfs_with_main && '1' || '0' }}
         TOOLCHAIN_CACHE_HIT: ${{ steps.cache-toolchain.outputs.cache-hit }}
         WORKSPACE: ${{ github.workspace }}
     - name: 保存 Release 缓存（可选）
