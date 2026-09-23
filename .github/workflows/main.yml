@@ -144,8 +144,12 @@ on:
         required: false
         type: boolean
         default: true
-      supp_op:
-        description: "启用一加 8E 支持（非一加勿开）"
+      # supp_op（一加 8E 支持）已从手动触发界面移除：workflow_dispatch 上限 25 个 input，
+      # 名额让给 use_nomount。自动触发经 API 传 false，与此处默认值一致，隐藏后由
+      # 透传处的 ${{ inputs.supp_op || false }} 兜底，行为不变。需要开一加 8E 时直接跑
+      # kernel-a1*.yml 单独工作流（那边仍保留该开关）。
+      use_nomount:
+        description: "启用 NoMount 挂载元模块"
         required: false
         type: boolean
         default: false
@@ -197,6 +201,7 @@ jobs:
       use_bbg: ${{ inputs.use_bbg }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
+      use_nomount: ${{ inputs.use_nomount || false }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
       enable_susfs: ${{ inputs.enable_susfs }}
@@ -207,7 +212,7 @@ jobs:
       use_bbr: ${{ inputs.use_bbr || false }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
-      supp_op: ${{ inputs.supp_op }}
+      supp_op: ${{ inputs.supp_op || false }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
       # ksu_mode 不传：build.yml 默认「关闭」（正常集成 KernelSU）。
@@ -225,6 +230,7 @@ jobs:
       use_bbg: ${{ inputs.use_bbg }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
+      use_nomount: ${{ inputs.use_nomount || false }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
       enable_susfs: ${{ inputs.enable_susfs }}
@@ -235,7 +241,7 @@ jobs:
       use_bbr: ${{ inputs.use_bbr || false }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
-      supp_op: ${{ inputs.supp_op }}
+      supp_op: ${{ inputs.supp_op || false }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
@@ -252,6 +258,7 @@ jobs:
       use_bbg: ${{ inputs.use_bbg }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
+      use_nomount: ${{ inputs.use_nomount || false }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
       enable_susfs: ${{ inputs.enable_susfs }}
@@ -262,7 +269,7 @@ jobs:
       use_bbr: ${{ inputs.use_bbr || false }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
-      supp_op: ${{ inputs.supp_op }}
+      supp_op: ${{ inputs.supp_op || false }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
@@ -279,6 +286,7 @@ jobs:
       use_bbg: ${{ inputs.use_bbg }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
+      use_nomount: ${{ inputs.use_nomount || false }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
       enable_susfs: ${{ inputs.enable_susfs }}
@@ -289,7 +297,7 @@ jobs:
       use_bbr: ${{ inputs.use_bbr || false }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
-      supp_op: ${{ inputs.supp_op }}
+      supp_op: ${{ inputs.supp_op || false }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
@@ -306,6 +314,7 @@ jobs:
       use_bbg: ${{ inputs.use_bbg }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
+      use_nomount: ${{ inputs.use_nomount || false }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
       enable_susfs: ${{ inputs.enable_susfs }}
@@ -316,7 +325,7 @@ jobs:
       use_bbr: ${{ inputs.use_bbr || false }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
-      supp_op: ${{ inputs.supp_op }}
+      supp_op: ${{ inputs.supp_op || false }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
@@ -324,7 +333,7 @@ jobs:
   # 汇总所有构建任务中的 .rej 文件，方便调试补丁问题
   collect-rejects:
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs:
       - build-a12-5-10
       - build-a13-5-15
@@ -363,7 +372,7 @@ jobs:
   # 按构建名称汇总所有失败日志，方便统一下载和定位问题
   collect-build-logs:
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs:
       - build-a12-5-10
       - build-a13-5-15
@@ -443,7 +452,7 @@ jobs:
   # 仅 SukiSU / ReSukiSU 且启用 SUSFS 时有产物
   collect-susfs-patches:
     if: ${{ !cancelled() && inputs.export_susfs_patches && inputs.enable_susfs && (inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'ReSukiSU') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs:
       - build-a12-5-10
       - build-a13-5-15
@@ -609,7 +618,7 @@ jobs:
     # [融合] 原条件硬编码 upstream 仓库，导致 fork 后永远不发布 Release；
     # 现在只保留“发布类型 != Actions”这一个判断，任何 fork 都能按选择发布。
     if: ${{ always() && !cancelled() && inputs.release_type != 'Actions' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
       actions: write

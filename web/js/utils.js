@@ -2,12 +2,13 @@
  * 通用工具函数
  */
 
-import { RUNTIME_CACHE_KEY, SUSFS_COMPAT_MIN } from './config.js';
+import { RUNTIME_CACHE_KEY } from './config.js';
 
-// HTML 转义，防止 XSS
-// 注意：textContent → innerHTML 只会转义 & < >，不碰引号。而本文件 escape 出来的值
-// 大量被拼进 title="..." / data-xxx="..." 这类 HTML 属性里，含双引号的数据会直接
-// 截断属性、拼出 onerror= 之类的东西。所以这里补上引号转义，属性上下文才安全。
+// 将文本转换为安全的 HTML 内容
+// [本地加固] textContent → innerHTML 只转义 & < >，不碰引号。而本文件 esc() 出来的值
+// 大量被拼进 title="..." / data-copy="..." / data-android="..." 这类 HTML 属性里
+// （modal.js、render.js 合计 75 处），只要数据里带一个双引号就能截断属性、
+// 拼出 onerror= 之类的东西。上游版本没有这一层，这里补上引号转义，属性上下文才安全。
 export function esc(str) {
   var el = document.createElement('span');
   el.textContent = str == null ? '' : String(str);
@@ -23,33 +24,45 @@ export function copyText(text) {
   }
   var ta = document.createElement('textarea');
   ta.value = text;
+  ta.setAttribute('readonly', '');
   ta.style.position = 'fixed';
   ta.style.opacity = '0';
   document.body.appendChild(ta);
   ta.select();
-  document.execCommand('copy');
+  try { document.execCommand('copy'); } catch (e) { /* 旧浏览器不支持时静默 */ }
   document.body.removeChild(ta);
   return Promise.resolve();
 }
 
-// 给 URL 追加缓存破坏参数
+// 给 URL 追加运行时缓存键
 export function withCacheKey(url) {
   return url + (url.indexOf('?') === -1 ? '?' : '&') + 'v=' + encodeURIComponent(RUNTIME_CACHE_KEY);
 }
 
-// 强制无缓存请求 JSON
+// 绕过缓存获取 JSON
 export async function fetchJsonFresh(url) {
   var r = await fetch(withCacheKey(url), { cache: 'no-store' });
   if (!r.ok) throw new Error('HTTP ' + r.status);
   return r.json();
 }
 
-// 判断内核版本是否兼容 SUSFS
-export function isSusfsCompat(kernelStr) {
-  var parts = kernelStr.split('.');
-  var major = parts[0] + '.' + parts[1];
-  var min = SUSFS_COMPAT_MIN[major];
-  if (min == null) return false;
-  var sublevel = parseInt(parts[2], 10);
-  return sublevel >= min;
+// localStorage 在隐私模式或禁用 Cookie 时会抛异常，统一在这里兜底
+export function getStored(key) {
+  try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+
+export function setStored(key, value) {
+  try { localStorage.setItem(key, value); } catch (e) { /* 存储不可用时静默 */ }
+}
+
+// 是否偏好减少动效
+export function prefersReducedMotion() {
+  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+
+// 简单模板替换：fmt('{a} / {b}', { a: 1, b: 2 })
+export function fmt(template, vars) {
+  return String(template).replace(/\{(\w+)\}/g, function (_, key) {
+    return vars && vars[key] != null ? vars[key] : '';
+  });
 }

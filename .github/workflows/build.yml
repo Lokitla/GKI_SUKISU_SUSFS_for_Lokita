@@ -56,6 +56,14 @@ permissions:
         required: false
         type: boolean
         default: false
+      # [移植] 27e129e NoMount 挂载元模块。二进制布尔，默认关闭；由 kernel-a1*.yml /
+      # kernel-custom.yml 透传。main.yml 因 workflow_dispatch 的 25 input 上限已满，
+      # 暂不在手动界面暴露（编排路径恒定 false）。
+      use_nomount:
+        description: "启用 NoMount 挂载元模块"
+        required: false
+        type: boolean
+        default: false
       cve_2026_43499_patch:
         required: false
         type: boolean
@@ -121,7 +129,7 @@ permissions:
 jobs:
   build-kernel:
     name: ${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}-${{ inputs.ksu_variant }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
       CCACHE_COMPILERCHECK: '%compiler% -dumpmachine; %compiler% -dumpversion'
@@ -220,6 +228,7 @@ jobs:
         USE_BBG: ${{ inputs.use_bbg }}
         USE_KPM: ${{ inputs.use_kpm }}
         USE_REKERNEL: ${{ inputs.use_rekernel }}
+        USE_NOMOUNT: ${{ inputs.use_nomount || false }}
         CVE_2026_43499_PATCH: ${{ inputs.cve_2026_43499_patch }}
         EXPORT_SUSFS_PATCHES: ${{ inputs.export_susfs_patches }}
         EXPECTED_KPM_PATCH_SHA256: ${{ inputs.kpm_patch_sha256 }}

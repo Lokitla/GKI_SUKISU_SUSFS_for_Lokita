@@ -82,7 +82,7 @@ concurrency:
 
 jobs:
   check-and-trigger:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # [融合] 仓库所有者白名单：fork 后需把自己的用户名加进来，否则自动构建永不触发
     if: contains(fromJSON('["zzh20188", "elysias123", "Lokitla"]'), github.repository_owner)
     steps:
