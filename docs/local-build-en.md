@@ -81,7 +81,8 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 | `--kpm` | KPM module support, default `patched`; accepts `disabled` / `enabled` / `patched` |
 | `--kpm-patch-sha256` | sha256 anchor for the KPM patch tool (`patch_linux`). When set it is checked **fail-closed** — a mismatch aborts the build (blank = no check) |
 | `--bbg` | Enable Baseband-guard |
-| `--rekernel` | Enable the Re-Kernel driver |
+| `--rekernel` | Enable the Re-Kernel driver (tombstone/freeze support) |
+| `--nomount` | Enable the NoMount mount meta-module; the matching NoMount module must be flashed separately |
 | `--op8e` | Enable OnePlus 8E support (do not enable on other devices) |
 | `--cve-patch` | Apply the CVE-2026-43499 (GhostLock) fix chain |
 | `--droidspaces` | Droidspaces container support (`disabled` / `678` / `123` / `345`), experimental |
