@@ -7,11 +7,15 @@ import time
 from gki_fetch import (
     TARGETS,
     make_date_range, get_end_date,
-    fetch_makefile, fetch_lts, parse_version, json_path,
+    fetch_makefile, fetch_lts, fetch_refs, refresh_refs,
+    parse_version, json_path,
 )
 
 
 def fetch_all():
+    refs = fetch_refs()
+    if refs is None:
+        print("WARNING: failed to fetch upstream refs, falling back to path probing")
     for (android_ver, kernel_ver), (date_start, date_end, dep_cutoff) in TARGETS.items():
         print(f"\n=== {android_ver} / {kernel_ver} ===")
 
@@ -21,7 +25,7 @@ def fetch_all():
             label = f"{android_ver}-{kernel_ver}-{date}"
             print(f"  [{label}] ", end="", flush=True)
 
-            text = fetch_makefile(android_ver, kernel_ver, date, dep_cutoff)
+            text = fetch_makefile(android_ver, kernel_ver, date, dep_cutoff, refs)
             if text is None:
                 print("not found, skip")
                 continue
@@ -36,6 +40,9 @@ def fetch_all():
             entries.append({"date": date, "kernel": detail})
             print(f"-> {detail}")
             time.sleep(0.2)
+
+        if refs is not None:
+            refresh_refs(entries, android_ver, kernel_ver, refs)
 
         # 抓取 LTS
         lts_label = f"{android_ver}-{kernel_ver}-lts"
