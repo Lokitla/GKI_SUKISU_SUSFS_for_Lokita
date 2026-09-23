@@ -1492,7 +1492,12 @@ stage_integrate_nomount() {
     cd "$_pwd"
     return 1
   fi
-  echo "NoMount 集成完成，commit: $(git -C NoMount rev-parse HEAD)"
+  local nm_commit
+  nm_commit=$(git -C NoMount rev-parse HEAD)
+  echo "NoMount 集成完成，commit: $nm_commit"
+  # ::notice:: 会写进 GitHub 的 annotations（CI 走可读 API），日志本体不便离线取回时，
+  # 据此即可确证本阶段真的执行过 —— 而不是被条件包装器静默跳过。
+  echo "::notice::NoMount 集成成功：fs/nomount 已就位, commit=${nm_commit}"
 
   # 启用 defconfig（幂等）
   if ! grep -q '^CONFIG_NOMOUNT=y' "$DEFCONFIG"; then
