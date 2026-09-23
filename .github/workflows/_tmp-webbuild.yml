@@ -1,19 +1,20 @@
 name: Temp Web Build Check
 
-# 临时验证用：只跑 webpack 编译，不部署、不触碰 github-pages 环境。
-# 目的是在合回 main 前确证双入口（app / guide）能编出来。验证完即删除。
+# 临时验证用：只跑 webpack 编译，不部署、不触碰 github-pages 环境
+# （该环境带 branch_policy 白名单，beta 不在其中，走 deploy-pages 会在分配 runner 前被拒）。
+# 目的是在合回 main 前确证双入口（app / guide）能编出来。验证完即删除本文件。
 on:
-  workflow_dispatch:
+  push:
+    branches: [beta]
+    paths:
+      - 'web/**'
+      - '.github/workflows/_tmp-webbuild.yml'
 
 jobs:
   build:
     runs-on: ubuntu-24.04
-    env:
-      REF_NAME: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.ref_name }}
 
       - uses: actions/setup-node@v4
         with:
