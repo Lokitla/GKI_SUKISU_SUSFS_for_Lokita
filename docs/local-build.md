@@ -81,7 +81,8 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 | `--kpm` | KPM 模块支持，默认 `patched`（开启并修补）；可带值 `disabled` / `enabled` / `patched` |
 | `--kpm-patch-sha256` | KPM 修补工具（`patch_linux`）的 sha256 锚点。传入后做 **fail-closed** 比对，不符即拒绝执行（留空不校验） |
 | `--bbg` | 启用 Baseband-guard 防格机 |
-| `--rekernel` | 启用 Re-Kernel 驱动 |
+| `--rekernel` | 启用 Re-Kernel 驱动（墓碑/冻结支持） |
+| `--nomount` | 启用 NoMount 挂载元模块，需自行刷入配套 NoMount 模块 |
 | `--op8e` | 启用一加 8E 支持（非一加设备勿开） |
 | `--cve-patch` | 应用 CVE-2026-43499（GhostLock）修复链 |
 | `--droidspaces` | Droidspaces 容器支持（`不启用` / `678` / `123` / `345`），实验性 |
