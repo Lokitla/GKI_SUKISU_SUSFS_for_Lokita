@@ -1,8 +1,11 @@
 # 🧩 Advanced Features
 
-> This page collects four advanced topics: GhostLock Security Fix, Droidspaces Container
-> Support, Custom Commit Pinning, and Spoofing `/proc/config.gz`.
+> This page collects six advanced topics: GhostLock Security Fix, Re-Kernel, the NoMount
+> metamodule, Droidspaces Container Support, Custom Commit Pinning, and Spoofing `/proc/config.gz`.
 > All are off by default. Mirrors the "Advanced Features" section in the main [README.md](../README.md).
+>
+> For local CLI usage see [💻 Local build docs](local-build-en.md); the Actions input name is
+> listed in the "Actions input" column of each table below.
 
 ---
 
@@ -22,6 +25,82 @@ The vulnerability cannot be triggered directly over the network. However, a mali
 This project can check and apply the complete fix when building kernels 5.10, 5.15, 6.1, 6.6, and 6.12. The option is **disabled by default** (ShirkNeko upstream does not carry this fix). Enable `CVE-2026-43499 rtmutex fix chain` when starting a build to include GhostLock protection. Both vulnerability fixes must be present together, and the workflow handles this automatically. Kernels that already contain the complete fix are not patched again.
 
 The fix has passed a [full build validation covering 84 kernel versions](https://github.com/zzh20188/GKI_KernelSU_SUSFS/actions/runs/29509099128). For vulnerability details, affected systems, public exploits, and mitigation guidance, read CIQ's article: [GhostLock Mitigation](https://kb.ciq.com/article/rocky-linux/rl-ghostlock-mitigation).
+
+---
+
+## 🔌 Re-Kernel (tombstone / freeze support)
+
+> **Tip:** Re-Kernel provides kernel-side support for "tombstone"-style modules (apps that freeze
+> other apps). Upstream is [Sakion-Team/Re-Kernel](https://github.com/Sakion-Team/Re-Kernel);
+> this repo tracks its mainline version.
+
+A frozen process cannot respond normally. Re-Kernel watches three kinds of events in-kernel and
+reports them to userspace:
+
+| Type | Trigger | Use case |
+|---|---|---|
+| Binder | A frozen process receives a Binder call | System services or other apps reaching a frozen process |
+| Signal | A frozen process receives a key signal such as SIGKILL | Detect process kills |
+| Network | A monitored UID receives an inbound packet | Messaging apps receiving pushes |
+
+### How to enable
+
+| Entry point | Argument |
+|---|---|
+| Actions | `use_rekernel` (**off** by default) |
+| Local CLI | `--rekernel` |
+
+### Implementation notes
+
+During the build the sources are placed in `common/drivers/rekernel/` and compiled **into the
+kernel** (not as an external module), controlled by `CONFIG_REKERNEL`:
+
+- `obj-m := rekernel.o` is rewritten to `obj-$(CONFIG_REKERNEL) += rekernel.o`
+- `depends on MODULES` is removed (not needed for a built-in driver)
+- hooked into the driver tree via `source "drivers/rekernel/Kconfig"`
+- `CONFIG_REKERNEL=y` and `CONFIG_REKERNEL_NETWORK=y` are appended to the defconfig
+
+> **Why built-in:** Re-Kernel depends on internal symbols such as `kallsyms_lookup_name`, which
+> GKI hides from **external modules**. In-tree compilation can see them, so this repo builds it in
+> rather than shipping an LKM.
+
+---
+
+## 📦 NoMount metamodule
+
+> Ported from upstream `zzh20188/GKI_KernelSU_SUSFS` commit `27e129e`.
+
+[NoMount](https://github.com/maxsteeel/nomount) is a mount metamodule providing module mounting
+**without a traditional mount point**. It registers its own subsystem under `fs/` and takes a
+**different path from SUSFS `sus_mount`**, so it coexists with any KernelSU variant and with SUSFS.
+
+### How to enable
+
+| Entry point | Argument |
+|---|---|
+| Actions | `use_nomount` (**off** by default) |
+| Local CLI | `--nomount` |
+
+> ⚠️ After enabling you must **flash the matching NoMount module yourself** — the kernel side only
+> provides the support.
+
+### Implementation notes
+
+The build fetches `setup.sh` from upstream and runs it, then verifies the `fs/nomount` symlink is
+in place before appending `CONFIG_NOMOUNT=y` to the defconfig.
+
+This phase (`integrate_nomount`) is #25 of the 46 build phases, and its **position is a hard
+constraint**:
+
+- it must run **after** `gen_susfs_patch` — otherwise its changes leak into the exported `susfs.patch`
+- it must run **after** `backup_defconfig` — otherwise `CONFIG_NOMOUNT` is missed by the bazel
+  fragment diff
+
+### Supply-chain anchor (optional)
+
+`setup.sh` is fetched over the network, so its sha256 can be pinned with the `NOMOUNT_SETUP_SHA256`
+environment variable. When set, the build checks it **fail-closed** and aborts on mismatch; blank
+means no check (the default).
 
 ---
 
