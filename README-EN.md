@@ -68,6 +68,7 @@ English | [**简体中文**](README.md)
 | BBR | Set as the default congestion algorithm | Off |
 | BBG | Baseband-guard anti-wipe protection | Off |
 | Re-Kernel | Re-Kernel driver | Off |
+| NoMount | Mount metamodule: integrates [maxsteeel/NoMount](https://github.com/maxsteeel/nomount) at the `fs/` layer. It takes a different path from SUSFS sus_mount and coexists with any KSU variant; flash the matching NoMount module yourself | Off |
 | Droidspaces | LXC-style container support (experimental) | Disabled |
 | NTSync | Requires Droidspaces | Off |
 | CVE-2026-43499 | rtmutex fix chain | Off |
