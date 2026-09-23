@@ -130,6 +130,9 @@ def build_env(args, android, kernel, sub_level, os_patch):
         "USE_KPM": KPM_MODES.get(args.kpm or "", "disabled (关闭)"),
         "USE_BBG": str(args.bbg).lower(),
         "USE_REKERNEL": str(args.rekernel).lower(),
+        # [移植] NoMount 挂载元模块：与 Actions 的 use_nomount 对齐，
+        # 否则本地 CLI 无法开启该阶段（USE_NOMOUNT 恒为 false）。
+        "USE_NOMOUNT": str(getattr(args, "nomount", False)).lower(),
         "ENABLE_SUSFS": str(not args.no_susfs).lower(),
         "SUPP_OP": str(args.op8e).lower(),
         "DROIDSPACES": args.droidspaces,
@@ -201,6 +204,7 @@ def main():
                         "传入后做 fail-closed 比对，不符即拒绝执行（留空则不校验）")
     parser.add_argument("--bbg", action="store_true", help="启用 Baseband-guard")
     parser.add_argument("--rekernel", action="store_true", help="启用 Re-Kernel")
+    parser.add_argument("--nomount", action="store_true", help="启用 NoMount 挂载元模块")
     parser.add_argument("--no-susfs", action="store_true", help="禁用 SUSFS")
     parser.add_argument("--op8e", action="store_true", help="启用一加 8E 支持（非一加勿开）")
     parser.add_argument("--droidspaces", default="不启用", choices=DROIDSPACES_CHOICES,
