@@ -48,9 +48,10 @@ English | [**简体中文**](README.md)
 
 ## 🚀 Quick Navigation
 
-- 📖 [Documentation](https://github.com/zzh20188/GKI_KernelSU_SUSFS/wiki)
+- 📖 [Documentation](docs/advanced-features-en.md)
 - 📥 [Downloads](https://github.com/Lokitla/GKI_SUKISU_SUSFS_for_Lokita/releases)
-- 🔰 [Tutorial](https://zzh20188.github.io/GKI_KernelSU_SUSFS/guide.html)
+- 🔰 [Tutorial](https://lokitla.github.io/GKI_SUKISU_SUSFS_for_Lokita/guide.html)
+- 📊 [Version lookup](https://lokitla.github.io/GKI_SUKISU_SUSFS_for_Lokita/)
 - 📄 [Upstream sources & licences](NOTICE)
 
 ---
@@ -122,14 +123,20 @@ Try `boot-lz4.img` first on modern devices; if it hangs on the first screen, swi
 
 ## 📚 Documentation & Guides
 
-For detailed instructions, please refer to the [**GitHub Wiki (bilingual CN/EN)**](https://github.com/zzh20188/GKI_KernelSU_SUSFS/wiki)
+This repo keeps its documentation in [`docs/`](docs/), reviewed and updated together with the code:
 
-Wiki covers:
-- [**🔰 Tutorial**](https://zzh20188.github.io/GKI_KernelSU_SUSFS/guide.html)
-- 📥 Download / Flash kernel
-- 💡 Tips & Tricks
-- 🆘 Brick Recovery Guide
-- 📊 Kernel Version Compatibility
+| Document | Contents |
+|---|---|
+| 🧩 [**Advanced features**](docs/advanced-features-en.md) | GhostLock fixes, Droidspaces containers, NoMount metamodule, Re-Kernel, custom commits, spoofing `/proc/config.gz` |
+| 💻 [**Local CLI build**](docs/local-build-en.md) | Full argument reference for building on your own machine, resuming, and debugging |
+
+- 🔰 [**Beginner tutorial**](https://lokitla.github.io/GKI_SUKISU_SUSFS_for_Lokita/guide.html): step-by-step Fork and custom build guide (GitHub Pages)
+- 📊 [**Kernel version lookup**](https://lokitla.github.io/GKI_SUKISU_SUSFS_for_Lokita/): security patch month → kernel sublevel, with copy-ready build parameters
+- 中文：[进阶功能](docs/advanced-features.md) / [本地构建](docs/local-build.md)
+
+> The upstream [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) Wiki
+> targets the original repo and does not cover this fork's additions (SukiSU variants, KPM image
+> patching, Release cache, NoMount, …). Use this repo's `docs/` as the source of truth.
 - 🧩 [**Advanced Features (in-repo doc)**](docs/advanced-features-en.md): GhostLock Security Fix, Droidspaces Container Support, Custom Commit Pinning, Spoofing `/proc/config.gz`
 
 ---
@@ -296,60 +303,17 @@ Full details: [**docs/advanced-features-en.md**](docs/advanced-features-en.md).
 
 ## 💻 Local Build (CLI)
 
-Besides GitHub Actions, kernels can now be built locally. **Both paths share the same
-build logic** (`scripts/build_kernel.sh`), so local and cloud builds behave identically —
-there is no second implementation to keep in sync.
-
-### Requirements
-
-- Linux (Ubuntu 22.04+ recommended), `sudo` needed to install build dependencies
-- At least **40 GB** of free disk space
-- Python 3.8+
-
-### Quick start
+Besides GitHub Actions, you can build directly on your machine. **Both share the same build
+logic** (`scripts/build_kernel.sh`), so local and cloud builds behave identically — there is no
+second implementation to drift apart.
 
 ```bash
-# List supported version combinations (data comes from data/)
-python3 build.py --list-configs
-
 # Build a single version
 python3 build.py --android android14 --kernel 6.1 --sub-level 124 --os-patch 2025-02
-
-# Build every sub-level of a combination
-python3 build.py --matrix android14-6.1
-
-# Build everything (very long, use with care)
-python3 build.py --all
-
-# Validate parameters without building
-python3 build.py --android android14 --kernel 6.1 --dry-run
 ```
 
-### Common options
-
-| Option | Description |
-|---|---|
-| `--ksu-variant` | KernelSU variant, defaults to `SukiSU`: `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` |
-| `--zram` / `--no-zram` | ZRAM (LZ4KD) enhancement (on by default) |
-| `--bbr` | Set BBR as the default congestion algorithm |
-| `--kpm` | KPM module support, defaults to `patched` (on + patched); optional value `disabled` / `enabled` / `patched` |
-| `--bbg` | Enable Baseband-guard |
-| `--rekernel` | Enable Re-Kernel |
-| `--no-susfs` | Skip SUSFS integration (integrated by default) |
-| `--op8e` | Enable OnePlus 8E support (OnePlus only) |
-| `--cve-patch` | Apply the CVE-2026-43499 fix |
-| `--droidspaces` | Droidspaces container support (`不启用` / `678` / `123` / `345`) |
-| `--ntsync` | Enable NTSync (requires `--droidspaces`) |
-| `--only <phase>` | Run a single phase (for debugging) |
-| `--from <phase>` | Resume from a given phase |
-| `--list-phases` | List all build phases |
-
-> **Tip:** use `--only <phase>` to re-run a single step, e.g.
-> `python3 build.py --android android14 --kernel 6.1 --only compile_kernel`,
-> instead of restarting from a full source clone.
-
-> **Note:** the "free disk space" step only runs on GitHub Actions runners.
-> Local builds skip it so your own files are never deleted.
+For the full argument reference (46 build phases, resuming with `--from`, single-step reruns with
+`--only`, every feature switch), see 💻 [**Local CLI build docs**](docs/local-build-en.md).
 
 ---
 
