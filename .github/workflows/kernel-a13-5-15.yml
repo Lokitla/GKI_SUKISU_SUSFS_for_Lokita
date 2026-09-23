@@ -252,7 +252,7 @@ on:
 jobs:
   prepare-matrix:
     name: "生成构建矩阵"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.gen.outputs.matrix }}
       count: ${{ steps.gen.outputs.count }}
