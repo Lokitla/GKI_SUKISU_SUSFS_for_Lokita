@@ -32,6 +32,10 @@ set -eo pipefail
 : "${USE_BBG:=false}"
 : "${USE_KPM:=false}"
 : "${USE_REKERNEL:=false}"
+# [移植] NoMount 挂载元模块，移植自上游 zzh20188/GKI_KernelSU_SUSFS commit 27e129e
+# （feat(ci): add optional NoMount metamodule integration，2026-09-19）。
+# NoMount 在 fs/ 下注册子系统，与 SUSFS sus_mount 各走各的路径，可和任意 KSU 变体共存。
+: "${USE_NOMOUNT:=false}"
 : "${CVE_2026_43499_PATCH:=false}"
 : "${EXPORT_SUSFS_PATCHES:=false}"
 : "${ENABLE_SUSFS:=true}"
@@ -105,6 +109,7 @@ export USE_BBR
 export USE_BBG
 export USE_KPM
 export USE_REKERNEL
+export USE_NOMOUNT
 export CVE_2026_43499_PATCH
 export EXPORT_SUSFS_PATCHES
 export ENABLE_SUSFS
@@ -148,6 +153,7 @@ stage_summary() {
   echo "BBG 补丁      : ${USE_BBG}"
   echo "KPM 功能      : ${USE_KPM}"
   echo "Re-Kernel     : ${USE_REKERNEL}"
+  echo "NoMount       : ${USE_NOMOUNT}"
   echo "CVE-2026-43499: ${CVE_2026_43499_PATCH}"
   echo "SUSFS 集成补丁导出: ${EXPORT_SUSFS_PATCHES}"
   echo "Droidspaces   : ${DROIDSPACES}"
@@ -1438,6 +1444,73 @@ stage_backup_defconfig() {
 }
 
 run_backup_defconfig() { stage_backup_defconfig "$@"; }
+
+# ---------------------------- NoMount 集成 ----------------------------
+# [移植] 来源：上游 commit 27e129e（feat(ci): add optional NoMount metamodule integration）。
+#
+# 位置不能挪动，上游注释给了两条硬约束：
+#   1. 必须在「生成 SUSFS 集成补丁」(gen_susfs_patch) 之后 ——
+#      否则 NoMount 对 fs/ 的改动会被算进 susfs.patch，导出给别人一个残缺补丁；
+#   2. 必须在「备份基准 defconfig」(backup_defconfig) 之后 ——
+#      追加 CONFIG_NOMOUNT=y 才能让 6.1+ 的 bazel fragment diff 抓到这一项。
+# 放在 PHASES 的 backup_defconfig 与 integrate_droidspaces 之间，两条同时满足。
+#
+# NoMount 在 fs/ 下注册子系统，与 SUSFS 的 sus_mount 各走各的路径，
+# 因此可以和任意 KSU 变体共存。
+stage_integrate_nomount() {
+  log_stage "integrate_nomount" "集成 NoMount 挂载元模块"
+  local _pwd="$PWD"
+  cd ${KERNEL_ROOT}/common
+
+  local setup_url="https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh"
+  local setup_file="${WORKSPACE}/nomount-setup.sh"
+
+  # setup.sh 内部会克隆 NoMount 仓库、建立 fs/nomount 软链接并注册
+  # Kconfig/Makefile，自带幂等守卫，重复执行是安全的。
+  curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors "$setup_url" -o "$setup_file"
+
+  # 供应链锚点（可选）：仓库对 KPM 修补工具已有 EXPECTED_KPM_PATCH_SHA256 的校验先例，
+  # 这里同样支持 NOMOUNT_SETUP_SHA256。留空则与上游行为一致（不校验）。
+  # 注意这里没有再占用 workflow_dispatch 的 input 名额（那配额已满 25），
+  # 走环境变量即可。
+  if [ -n "${NOMOUNT_SETUP_SHA256:-}" ]; then
+    local actual
+    actual=$(sha256sum "$setup_file" | awk '{print $1}')
+    if [ "$actual" != "$NOMOUNT_SETUP_SHA256" ]; then
+      echo "::error::NoMount setup.sh sha256 不匹配：期望 $NOMOUNT_SETUP_SHA256，实际 $actual"
+      cd "$_pwd"
+      return 1
+    fi
+    echo "NoMount setup.sh sha256 校验通过"
+  fi
+
+  # 上游是 `curl ... | bash -s dev`；写成文件模式后位置参数少一层 -s。
+  bash "$setup_file" dev
+
+  if [ ! -L "fs/nomount" ]; then
+    echo "::error::NoMount 集成失败：fs/nomount 软链接缺失"
+    cd "$_pwd"
+    return 1
+  fi
+  echo "NoMount 集成完成，commit: $(git -C NoMount rev-parse HEAD)"
+
+  # 启用 defconfig（幂等）
+  if ! grep -q '^CONFIG_NOMOUNT=y' "$DEFCONFIG"; then
+    echo "CONFIG_NOMOUNT=y" >> "$DEFCONFIG"
+    echo "已启用 CONFIG_NOMOUNT=y"
+  else
+    echo "CONFIG_NOMOUNT=y 已存在，跳过"
+  fi
+  cd "$_pwd"
+}
+
+run_integrate_nomount() {
+  if [ "$USE_NOMOUNT" = "true" ]; then
+    stage_integrate_nomount "$@"
+  else
+    echo "跳过阶段: integrate_nomount（条件不满足）"
+  fi
+}
 
 stage_integrate_droidspaces() {
   log_stage "integrate_droidspaces" "集成 Droidspaces 支持"
@@ -2842,6 +2915,7 @@ PHASES=(
   gen_susfs_patch
   clone_droidspaces
   backup_defconfig
+  integrate_nomount
   integrate_droidspaces
   inject_ntsync
   apply_unicode_fix
@@ -2886,7 +2960,7 @@ usage() {
 参数通过环境变量传入，常用:
   ANDROID_VERSION KERNEL_VERSION SUB_LEVEL OS_PATCH_LEVEL
   KSU_VARIANT KSU_MODE ENABLE_SUSFS USE_ZRAM USE_BBR USE_KPM
-  USE_BBG USE_REKERNEL SUPP_OP DROIDSPACES DROIDSPACES_NTSYNC
+  USE_BBG USE_REKERNEL USE_NOMOUNT SUPP_OP DROIDSPACES DROIDSPACES_NTSYNC
   CVE_2026_43499_PATCH EXPORT_SUSFS_PATCHES ARTIFACT_UPLOAD_MODE
 EOF
 }
