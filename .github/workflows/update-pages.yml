@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   update-data:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       data-changed: ${{ steps.commit.outputs.changed }}
     steps:
@@ -74,7 +74,7 @@ jobs:
     # [融合] 原为硬编码上游仓库，fork 后 Pages 部署永不执行；改为当前仓库即可
     if: ${{ contains(fromJSON('["zzh20188/GKI_KernelSU_SUSFS", "Lokitla/GKI_SUKISU_SUSFS_for_Lokita"]'), github.repository) }}
     needs: update-data
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       # 经 job 级 env 转一手，避免把 ${{ }} 直接内插进 run 块（与全仓其余
       # 工作流保持同一种写法）。
