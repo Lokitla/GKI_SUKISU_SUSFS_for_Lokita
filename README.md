@@ -63,6 +63,7 @@ GitHub Actions 与本地 `build.py` 共用这一份 45 阶段脚本，不存在�
 | BBR | 设为默认拥塞算法 | 关闭 |
 | BBG | Baseband-guard 防格机 | 关闭 |
 | Re-Kernel | Re-Kernel 驱动 | 关闭 |
+| NoMount | 挂载元模块：在 `fs/` 层集成 [maxsteeel/NoMount](https://github.com/maxsteeel/nomount)，与 SUSFS sus_mount 各走各的路径，可与任意 KSU 变体共存；需自行刷入配套 NoMount 模块 | 关闭 |
 | Droidspaces | LXC 式容器支持（实验性） | 不启用 |
 | NTSync | 需先启用 Droidspaces | 关闭 |
 | CVE-2026-43499 | rtmutex 修复链 | 关闭 |
