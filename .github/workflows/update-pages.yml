@@ -10,6 +10,9 @@ on:
       - 'data/**'
       - 'web/**'
       - 'scripts/**'
+      # [移植] 9c6d1f8：scripts/susfs_fixes/ 是构建期由 build.yml 调用的补丁修复脚本，
+      # 与版本数据抓取无关，改它不该触发数据刷新 + Pages 重部署
+      - '!scripts/susfs_fixes/**'
 
 permissions:
   contents: write
@@ -103,6 +106,11 @@ jobs:
       - name: Build web assets
         working-directory: web
         run: npm ci && npx webpack --mode production
+
+      # [移植] 448d9ee：Pages 产物只需要页面、dist/、data/ 与 assets/，
+      # node_modules 有 40MB 以上，上传前清掉
+      - name: Trim Pages artifact
+        run: rm -rf web/node_modules
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
