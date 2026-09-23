@@ -1,0 +1,28 @@
+name: Temp Web Build Check
+
+# 临时验证用：只跑 webpack 编译，不部署、不触碰 github-pages 环境。
+# 目的是在合回 main 前确证双入口（app / guide）能编出来。验证完即删除。
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    env:
+      REF_NAME: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build web assets
+        working-directory: web
+        run: npm ci && npx webpack --mode production
+
+      - name: Show dist
+        working-directory: web
+        run: ls -la dist
