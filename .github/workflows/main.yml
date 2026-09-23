@@ -324,7 +324,7 @@ jobs:
   # 汇总所有构建任务中的 .rej 文件，方便调试补丁问题
   collect-rejects:
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs:
       - build-a12-5-10
       - build-a13-5-15
@@ -363,7 +363,7 @@ jobs:
   # 按构建名称汇总所有失败日志，方便统一下载和定位问题
   collect-build-logs:
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs:
       - build-a12-5-10
       - build-a13-5-15
@@ -443,7 +443,7 @@ jobs:
   # 仅 SukiSU / ReSukiSU 且启用 SUSFS 时有产物
   collect-susfs-patches:
     if: ${{ !cancelled() && inputs.export_susfs_patches && inputs.enable_susfs && (inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'ReSukiSU') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs:
       - build-a12-5-10
       - build-a13-5-15
@@ -609,7 +609,7 @@ jobs:
     # [融合] 原条件硬编码 upstream 仓库，导致 fork 后永远不发布 Release；
     # 现在只保留“发布类型 != Actions”这一个判断，任何 fork 都能按选择发布。
     if: ${{ always() && !cancelled() && inputs.release_type != 'Actions' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
       actions: write
