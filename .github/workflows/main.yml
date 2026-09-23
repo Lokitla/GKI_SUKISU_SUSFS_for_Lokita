@@ -197,6 +197,8 @@ jobs:
       use_bbg: ${{ inputs.use_bbg }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
+      # NoMount：main.yml 的 workflow_dispatch 25 个 input 配额已满，暂不暴露该开关，编排路径恒定 false；配额腾出后改回 ${{ inputs.use_nomount }}。
+      use_nomount: false
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
       enable_susfs: ${{ inputs.enable_susfs }}
@@ -225,6 +227,8 @@ jobs:
       use_bbg: ${{ inputs.use_bbg }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
+      # NoMount：main.yml 的 workflow_dispatch 25 个 input 配额已满，暂不暴露该开关，编排路径恒定 false；配额腾出后改回 ${{ inputs.use_nomount }}。
+      use_nomount: false
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
       enable_susfs: ${{ inputs.enable_susfs }}
@@ -252,6 +256,8 @@ jobs:
       use_bbg: ${{ inputs.use_bbg }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
+      # NoMount：main.yml 的 workflow_dispatch 25 个 input 配额已满，暂不暴露该开关，编排路径恒定 false；配额腾出后改回 ${{ inputs.use_nomount }}。
+      use_nomount: false
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
       enable_susfs: ${{ inputs.enable_susfs }}
@@ -279,6 +285,8 @@ jobs:
       use_bbg: ${{ inputs.use_bbg }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
+      # NoMount：main.yml 的 workflow_dispatch 25 个 input 配额已满，暂不暴露该开关，编排路径恒定 false；配额腾出后改回 ${{ inputs.use_nomount }}。
+      use_nomount: false
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
       enable_susfs: ${{ inputs.enable_susfs }}
@@ -306,6 +314,8 @@ jobs:
       use_bbg: ${{ inputs.use_bbg }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
+      # NoMount：main.yml 的 workflow_dispatch 25 个 input 配额已满，暂不暴露该开关，编排路径恒定 false；配额腾出后改回 ${{ inputs.use_nomount }}。
+      use_nomount: false
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
       enable_susfs: ${{ inputs.enable_susfs }}
