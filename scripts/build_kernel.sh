@@ -22,7 +22,7 @@ set -eo pipefail
 : "${KERNEL_VERSION:=6.1}"
 : "${SUB_LEVEL:=124}"
 : "${OS_PATCH_LEVEL:=2025-02}"
-: "${KSU_VARIANT:=SukiSU}"
+: "${KSU_VARIANT:=ReSukiSU}"
 : "${KSU_MODE:=关闭}"
 : "${VERSION:=}"
 : "${REVISION:=}"
@@ -1168,9 +1168,29 @@ stage_add_kernelsu() {
   # KPM 是 SukiSU-Ultra 独有的模块加载功能，KernelSU 官方 / ReSukiSU / KernelSU-Next
   # 都没移植（它们的 Kconfig 里没有 `config KPM`）。此前这个组合要到 config_kernel
   # 阶段才报错，而那时克隆、打补丁、写 defconfig 全都跑完了——一次白等十几分钟。
-  # 这里在 KernelSU 源码就位后立刻查，几秒内失败并直说该换哪个变体。
+  # 这里在 KernelSU 源码就位后立刻查。
+  #
+  # 要区分两种「没有 KPM」：
+  #   1) 变体本身就不提供（ReSukiSU / Official / Next）——这是上游的既定事实，
+  #      警告后跳过即可。默认变体已切到 ReSukiSU，而 use_kpm 默认仍是「patched」，
+  #      硬失败会让整条默认链路（含自动更新）一次都跑不起来。
+  #   2) SukiSU 系却找不到 `config KPM`——那是异常（上游该有却没有），照旧报错。
+  #
+  # 结论写进 KPM_SUPPORTED，供后面「写 defconfig」与「修补 Image」两个阶段复用，
+  # 免得各 grep 一遍漏拦其中一环，也免得同一件事在三处各写一遍规则。
+  KPM_SUPPORTED=1
   if [ -d "KernelSU" ] && { [[ "${USE_KPM}" == enabled* ]] || [[ "${USE_KPM}" == patched* ]]; }; then
-    if ! grep -RqsE '^[[:space:]]*config[[:space:]]+KPM([[:space:]]|$)' KernelSU 2>/dev/null; then
+    case "${KSU_VARIANT}" in
+      ReSukiSU|Official|Next)
+        KPM_SUPPORTED=0
+        echo "::warning::变体 ${KSU_VARIANT} 的内核不提供 KPM（Kconfig 里没有 config KPM）"
+        echo "::warning::本次构建已按 ${USE_KPM} 请求 KPM，但 KPM 相关阶段会全部跳过："
+        echo "::warning::  · 内核可正常编译，KPM 模块也加载不了；如需 KPM 请换回 SukiSU 变体"
+        ;;
+    esac
+    if [ "${KPM_SUPPORTED}" = "1" ] \
+      && ! grep -RqsE '^[[:space:]]*config[[:space:]]+KPM([[:space:]]|$)' KernelSU 2>/dev/null; then
+      KPM_SUPPORTED=0
       echo "::error::已请求启用 KPM，但变体 ${KSU_VARIANT} 的 KernelSU 未声明 CONFIG_KPM"
       echo "::error::KPM 目前只有 SukiSU / SukiSU 固定提交变体提供；请改用这两个变体，或把 KPM 关掉"
       return 1
@@ -2206,12 +2226,12 @@ EOF
     echo "CONFIG_KSU=y" >> "$DEFCONFIG"
   fi
 
-  if [ "${KSU_MODE}" != "禁用KSU" ] && { [ "${KSU_VARIANT}" == "SukiSU" ] || [ "${KSU_VARIANT}" == "SukiSU(40726)" ] || [ "${KSU_VARIANT}" == "SukiSU(40548)" ] || [ "${KSU_VARIANT}" == "ReSukiSU" ] || [ "${KSU_VARIANT}" == "Next" ]; }; then
-    if [[ "${USE_KPM}" == enabled* ]] || [[ "${USE_KPM}" == patched* ]]; then
-      if ! grep -RqsE '^[[:space:]]*config[[:space:]]+KPM([[:space:]]|$)' common KernelSU 2>/dev/null; then
-        echo "错误: 已请求启用 KPM，但当前 KernelSU 代码未声明 CONFIG_KPM" >&2
-        exit 1
-      fi
+  # CONFIG_KPM=y 只在变体确实提供 KPM 时才写。KPM_SUPPORTED 由 stage_add_kernelsu
+  # 在源码就位后算好（那里已经对不支持的变体打过警告）。此前这里对 ReSukiSU / Next
+  # 一律 exit 1，与上一处重复拦一道，且把默认链路整个堵死。
+  if [ "${KSU_MODE}" != "禁用KSU" ] \
+     && { [ "${KSU_VARIANT}" == "SukiSU" ] || [ "${KSU_VARIANT}" == "SukiSU(40726)" ] || [ "${KSU_VARIANT}" == "SukiSU(40548)" ] || [ "${KSU_VARIANT}" == "ReSukiSU" ] || [ "${KSU_VARIANT}" == "Next" ]; }; then
+    if { [[ "${USE_KPM}" == enabled* ]] || [[ "${USE_KPM}" == patched* ]]; } && [ "${KPM_SUPPORTED:-1}" = "1" ]; then
       echo "CONFIG_KPM=y" >> "$DEFCONFIG"
     fi
   fi
@@ -2616,6 +2636,14 @@ stage_patch_kpm_image() {
       return 0
       ;;
   esac
+
+  # 变体内核不提供 KPM 时整段跳过：Image 里压根没有 KPM 支持，修补毫无意义，
+  # 反而可能改坏产物。KPM_SUPPORTED 由 stage_add_kernelsu 算好。
+  if [ "${KPM_SUPPORTED:-1}" = "0" ]; then
+    echo "跳过 KPM 镜像修补：变体 ${KSU_VARIANT} 的内核不提供 KPM（见 stage_add_kernelsu 的告警）"
+    cd "$_pwd"
+    return 0
+  fi
 
   if [ "${KERNEL_VERSION}" = "6.6" ]; then
     echo "6.6 内核不支持 KPM 镜像修补，跳过"
