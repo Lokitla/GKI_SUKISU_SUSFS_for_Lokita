@@ -55,6 +55,34 @@ GhostLock 是影响 Linux 内核的一组高风险漏洞，包括 `CVE-2026-4349
 - `obj-m := rekernel.o` 被改写为 `obj-$(CONFIG_REKERNEL) += rekernel.o`
 - `depends on MODULES` 被移除（内置编译不需要模块支持）
 - 通过 `source "drivers/rekernel/Kconfig"` 挂进驱动树
+
+---
+
+## 🌐 网络增强（可选）
+
+一次性启用若干**内核既有**的网络能力，不涉及第三方代码，全部通过 defconfig 写入：
+
+| 类别 | 内容 |
+|---|---|
+| 拥塞控制 | `CONFIG_TCP_CONG_BBR=y` + `CONFIG_DEFAULT_BBR=y`（BBR 设为默认），另内建 BIC / CUBIC / WESTWOOD / HTCP |
+| 队列调度 | `CONFIG_NET_SCH_FQ=y`、`CONFIG_NET_SCH_FQ_CODEL=y` |
+| IPSet | `CONFIG_IP_SET=y`，集合上限 `CONFIG_IP_SET_MAX=65534`，并启用全部 bitmap / hash / list 类型 |
+| Netfilter | `CONFIG_NETFILTER_XT_SET`、`CONFIG_NETFILTER_XT_MATCH_ADDRTYPE` |
+| IPv6 NAT | `CONFIG_IP6_NF_NAT=y`、`CONFIG_IP6_NF_TARGET_MASQUERADE=y` |
+
+**为什么强制内建（`=y`）而不是模块（`=m`）**：BIC / WESTWOOD / HTCP 在 mainline Kconfig 里
+是 `default m`，一旦编成 `tcp_bic.ko` 这类模块，而 GKI 的 `module_outs` 并未声明它们，
+bazel 会直接构建失败。所以本阶段写入时会把已存在的 `=m` 一并改成 `=y`。
+
+**开启方式**
+
+| 入口 | 参数 |
+|---|---|
+| Actions | `use_net_enhance`（**默认关闭**） |
+| 本地 CLI | `--net-enhance` |
+
+> 用户态需自行准备 `ipset` 工具：内核只提供能力，不附带用户态程序。
+> IPSet 的 `CONFIG_IP_SET_MAX=65534` 落在内核 Kconfig 的 range（2–65534）内，无需改源码。
 - defconfig 追加 `CONFIG_REKERNEL=y` 与 `CONFIG_REKERNEL_NETWORK=y`
 
 > **为什么要内置：** Re-Kernel 依赖 `kallsyms_lookup_name` 等内核内部符号，

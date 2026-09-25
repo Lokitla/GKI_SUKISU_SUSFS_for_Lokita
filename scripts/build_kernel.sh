@@ -32,6 +32,12 @@ set -eo pipefail
 : "${USE_BBG:=false}"
 : "${USE_KPM:=false}"
 : "${USE_REKERNEL:=false}"
+# [移植] 网络增强：IPSet 全类型 + BBR + FQ/FQ_CODEL 队列 + IPv6 NAT + 附加拥塞算法。
+# 全部走 defconfig 写入，不引入第三方代码，默认关闭。
+: "${USE_NET_ENHANCE:=false}"
+# [移植] 兼容跳过：可选功能失败时降级为警告并继续构建，而非中断整个构建。
+# 可跳过的阶段由 phase_skippable 白名单控制，SUSFS 与一加 8E 不在其中。
+: "${SKIP_INCOMPATIBLE:=false}"
 # [移植] NoMount 挂载元模块，移植自上游 zzh20188/GKI_KernelSU_SUSFS commit 27e129e
 # （feat(ci): add optional NoMount metamodule integration，2026-09-19）。
 # NoMount 在 fs/ 下注册子系统，与 SUSFS sus_mount 各走各的路径，可和任意 KSU 变体共存。
@@ -109,6 +115,8 @@ export USE_BBR
 export USE_BBG
 export USE_KPM
 export USE_REKERNEL
+export USE_NET_ENHANCE
+export SKIP_INCOMPATIBLE
 export USE_NOMOUNT
 export CVE_2026_43499_PATCH
 export EXPORT_SUSFS_PATCHES
@@ -154,6 +162,8 @@ stage_summary() {
   echo "KPM 功能      : ${USE_KPM}"
   echo "Re-Kernel     : ${USE_REKERNEL}"
   echo "NoMount       : ${USE_NOMOUNT}"
+  echo "网络增强      : ${USE_NET_ENHANCE}"
+  echo "兼容跳过      : ${SKIP_INCOMPATIBLE}"
   echo "CVE-2026-43499: ${CVE_2026_43499_PATCH}"
   echo "SUSFS 集成补丁导出: ${EXPORT_SUSFS_PATCHES}"
   echo "Droidspaces   : ${DROIDSPACES}"
@@ -2021,6 +2031,98 @@ run_apply_rekernel() {
   fi
 }
 
+stage_config_net_enhance() {
+  log_stage "config_net_enhance" "写入网络增强配置（IPSet + BBR）"
+
+  # 幂等写入：行已存在则跳过；符号已有赋值（含 =m）或 "# not set" 则原地替换；否则追加。
+  # **必须**把 =m 一并替换成 =y：BIC / WESTWOOD / HTCP 在 mainline Kconfig 里 default m，
+  # 一旦编成 tcp_bic.ko 这类模块，而 GKI 的 module_outs 并未声明它们，bazel 会直接失败。
+  # 这个问题只在本阶段开关打开时出现，所以内建是硬要求而非偏好。
+  ensure_net_cfg() {
+    local line="$1" cfg="${1%%=*}"
+    if grep -qxF "$line" "$DEFCONFIG"; then
+      return 0
+    fi
+    if grep -Eq "^${cfg}=|^# ${cfg} is not set$" "$DEFCONFIG"; then
+      sed -i -E "s|^${cfg}=.*|${line}|; s|^# ${cfg} is not set$|${line}|" "$DEFCONFIG"
+    else
+      echo "$line" >> "$DEFCONFIG"
+    fi
+  }
+
+  # 兼容性检查：子系统不存在时，后面写进去也只是无效配置，直接失败交由调度器裁决
+  if [ ! -f "${KERNEL_ROOT}/common/net/ipv4/tcp_bbr.c" ]; then
+    echo "::error::内核源码缺少 net/ipv4/tcp_bbr.c，无法启用 BBR"
+    return 1
+  fi
+  if [ ! -d "${KERNEL_ROOT}/common/net/netfilter/ipset" ]; then
+    echo "::error::内核源码缺少 net/netfilter/ipset，无法启用 IPSet"
+    return 1
+  fi
+
+  # BBR 与队列调度。5.10/5.15/6.1 上 DEFAULT_BBR 受 TCP_CONG_ADVANCED 门控，
+  # 6.6/6.12 已内建；ensure_net_cfg 对已存在的行自动跳过，无需按版本分支。
+  ensure_net_cfg "CONFIG_TCP_CONG_ADVANCED=y"
+  ensure_net_cfg "CONFIG_TCP_CONG_BBR=y"
+  ensure_net_cfg "CONFIG_DEFAULT_BBR=y"
+  ensure_net_cfg "CONFIG_NET_SCH_FQ=y"
+  ensure_net_cfg "CONFIG_NET_SCH_FQ_CODEL=y"
+
+  # IPSet：GKI 各版本均未启用，全新内建。
+  # IP_SET_MAX 的 65534 在内核 Kconfig 的 range（2–65534）内，无需改源码。
+  ensure_net_cfg "CONFIG_IP_SET=y"
+  ensure_net_cfg "CONFIG_IP_SET_MAX=65534"
+  ensure_net_cfg "CONFIG_IP_SET_BITMAP_IP=y"
+  ensure_net_cfg "CONFIG_IP_SET_BITMAP_IPMAC=y"
+  ensure_net_cfg "CONFIG_IP_SET_BITMAP_PORT=y"
+  ensure_net_cfg "CONFIG_IP_SET_HASH_IP=y"
+  ensure_net_cfg "CONFIG_IP_SET_HASH_IPMAC=y"
+  ensure_net_cfg "CONFIG_IP_SET_HASH_IPMARK=y"
+  ensure_net_cfg "CONFIG_IP_SET_HASH_IPPORT=y"
+  ensure_net_cfg "CONFIG_IP_SET_HASH_IPPORTIP=y"
+  ensure_net_cfg "CONFIG_IP_SET_HASH_IPPORTNET=y"
+  ensure_net_cfg "CONFIG_IP_SET_HASH_MAC=y"
+  ensure_net_cfg "CONFIG_IP_SET_HASH_NET=y"
+  ensure_net_cfg "CONFIG_IP_SET_HASH_NETIFACE=y"
+  ensure_net_cfg "CONFIG_IP_SET_HASH_NETNET=y"
+  ensure_net_cfg "CONFIG_IP_SET_HASH_NETPORT=y"
+  ensure_net_cfg "CONFIG_IP_SET_HASH_NETPORTNET=y"
+  ensure_net_cfg "CONFIG_IP_SET_LIST_SET=y"
+  ensure_net_cfg "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y"
+  ensure_net_cfg "CONFIG_NETFILTER_XT_SET=y"
+
+  # IPv6 NAT / 伪装
+  ensure_net_cfg "CONFIG_IP6_NF_NAT=y"
+  ensure_net_cfg "CONFIG_IP6_NF_TARGET_MASQUERADE=y"
+
+  # 附加拥塞算法：理由见 ensure_net_cfg 上方注释，必须 =y
+  ensure_net_cfg "CONFIG_TCP_CONG_BIC=y"
+  ensure_net_cfg "CONFIG_TCP_CONG_CUBIC=y"
+  ensure_net_cfg "CONFIG_TCP_CONG_WESTWOOD=y"
+  ensure_net_cfg "CONFIG_TCP_CONG_HTCP=y"
+
+  # 写后校验：关键符号必须真的落盘
+  local miss=()
+  grep -q '^CONFIG_DEFAULT_BBR=y$' "$DEFCONFIG" || miss+=("CONFIG_DEFAULT_BBR")
+  grep -q '^CONFIG_IP_SET=y$' "$DEFCONFIG" || miss+=("CONFIG_IP_SET")
+  grep -q '^CONFIG_IP_SET_MAX=65534$' "$DEFCONFIG" || miss+=("CONFIG_IP_SET_MAX")
+  grep -q '^CONFIG_NET_SCH_FQ=y$' "$DEFCONFIG" || miss+=("CONFIG_NET_SCH_FQ")
+  grep -q '^CONFIG_NETFILTER_XT_SET=y$' "$DEFCONFIG" || miss+=("CONFIG_NETFILTER_XT_SET")
+  if [ "${#miss[@]}" -gt 0 ]; then
+    echo "::error::网络增强配置写入校验失败，以下符号未落盘: ${miss[*]}"
+    return 1
+  fi
+  echo "网络增强配置已写入 defconfig"
+}
+
+run_config_net_enhance() {
+  if [ "$USE_NET_ENHANCE" = "true" ]; then
+    stage_config_net_enhance "$@"
+  else
+    echo "跳过阶段: config_net_enhance（条件不满足）"
+  fi
+}
+
 stage_config_kernel() {
   log_stage "config_kernel" "配置内核选项"
   local _pwd="$PWD"
@@ -2930,6 +3032,7 @@ PHASES=(
   add_bbg
   apply_rekernel
   config_kernel
+  config_net_enhance
   config_susfs
   config_kernel_name
   set_build_time
@@ -2965,7 +3068,7 @@ usage() {
 参数通过环境变量传入，常用:
   ANDROID_VERSION KERNEL_VERSION SUB_LEVEL OS_PATCH_LEVEL
   KSU_VARIANT KSU_MODE ENABLE_SUSFS USE_ZRAM USE_BBR USE_KPM
-  USE_BBG USE_REKERNEL USE_NOMOUNT SUPP_OP DROIDSPACES DROIDSPACES_NTSYNC
+  USE_BBG USE_REKERNEL USE_NET_ENHANCE SKIP_INCOMPATIBLE USE_NOMOUNT SUPP_OP DROIDSPACES DROIDSPACES_NTSYNC
   CVE_2026_43499_PATCH EXPORT_SUSFS_PATCHES ARTIFACT_UPLOAD_MODE
 EOF
 }
@@ -3016,6 +3119,23 @@ validate_inputs() {
   fi
 }
 
+# 允许被「兼容跳过」降级处理的阶段白名单。
+# 只收录「这项没了内核照样能正常编出来」的可选增强项。以下刻意**不在**名单内：
+#   - susfs_baseline / apply_susfs / config_susfs：SUSFS 是本仓库的核心能力，
+#     半途跳过会产出一个「能开机、但根本没隐藏」的内核，比直接失败危险得多；
+#   - add_oneplus8e：跳过会产出对一加设备不完整的内核；
+#   - compile_kernel 等主干阶段：失败就是失败，没有跳过的余地。
+phase_skippable() {
+  case "$1" in
+    setup_zram_lz4|config_zram) return 0 ;;
+    add_bbg|apply_rekernel|integrate_nomount) return 0 ;;
+    clone_droidspaces|integrate_droidspaces|inject_ntsync) return 0 ;;
+    apply_cve_patch|apply_unicode_fix|patch_kpm_image) return 0 ;;
+    config_net_enhance) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 main() {
   validate_inputs
   local mode="all" target=""
@@ -3047,6 +3167,17 @@ main() {
       if [ "$started" != true ]; then continue; fi
     fi
     if ! "run_${p}"; then
+      # 兼容跳过：只对白名单内的可选增强项生效，且必须由调用方显式开启。
+      # 命中时打印告警、写进 step summary 与产物说明，然后继续下一个阶段。
+      if [ "$SKIP_INCOMPATIBLE" = "true" ] && phase_skippable "$p"; then
+        echo "::warning title=阶段已跳过::$p 执行失败，已跳过该功能（构建未中断）"
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+          echo "> ⏭️ **$p** 已自动跳过：执行失败（构建未中断）" >> "$GITHUB_STEP_SUMMARY"
+        fi
+        # 本地构建（无 GITHUB_ENV）时丢弃，避免污染文件系统
+        echo "SKIPPED_PHASES=${SKIPPED_PHASES:+$SKIPPED_PHASES }$p" >> "${GITHUB_ENV:-/dev/null}"
+        continue
+      fi
       echo "::error::阶段 $p 执行失败"
       failed_phase="$p"
       break
@@ -3067,4 +3198,3 @@ main() {
 }
 
 main "$@"
-
