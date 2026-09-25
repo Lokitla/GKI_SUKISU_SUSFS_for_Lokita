@@ -11,14 +11,28 @@ GKI_SUKISU_SUSFS_for_Lokita
 一、本仓库自身许可证
 ================================================================================
 
-本仓库自身的全部新增代码与文档采用 GNU General Public License v2.0-or-later（GPL-2.0-or-later），完整条款文本见 LICENSE。
-选择「or-later」是为与仓库内含的 GPL-3.0 上游组件（SukiSU-Ultra、SUSFS、Droidspaces、Re-Kernel 等）兼容，使整体可合法分发；基座 zzh20188/GKI_KernelSU_SUSFS 标注为 GPL-2.0，本仓库作为其衍生作品在 GPL-2.0-or-later 条款下分发。
+本仓库采用**分层授权**，不同来源的代码适用不同条款（分层声明见 LICENSE 文件头部）：
 
-注意：LICENSE 文件保留 GNU GPL v2 条款正文不作删改（GitHub 据以识别为 GPL-2.0），并在文件头部以 SPDX-License-Identifier 声明本仓库按 GPL-2.0-or-later 分发；
-本 NOTICE 与 README 中的补充说明不替代该条款文本，仅作兼容性说明与来源归属。
+  1. 上游继承部分 —— 衍生自上游 zzh20188/GKI_KernelSU_SUSFS 及其上游的代码，
+     **GPL-2.0**。上游未声明 "or-later"，本仓库沿用其原授权版本，不单方面升级。
 
-构建产物（内核镜像、AnyKernel3 刷机包、boot 镜像）由下列上游代码编译而来，
-其分发行受各自许可证约束，且受 Linux 内核 GPL-2.0 的衍生作品条款约束。
+  2. 本仓库新增部分 —— 自身编写的构建脚本、工作流与文档，**GPL-2.0-or-later**。
+
+  3. 构建产物 —— 内核镜像、AnyKernel3 刷机包、boot 镜像，**GPL-2.0**，
+     受 Linux 内核 GPL-2.0（含 syscall 例外）约束。
+
+     ⚠ 内核**不可**升级到 GPL-3.0，因此**编入内核镜像的组件必须为 GPL-2.0 兼容许可**。
+     以 GPL-3.0 授权的代码进入内核镜像构成许可冲突；本仓库对此类组件的
+     引入位置、许可状态与退出方式逐项披露于 THIRD_PARTY_NOTICES.md。
+
+  4. 第三方组件 —— 构建期拉取的各组件保留其原有许可，不因被本仓库引用而改变，
+     逐项归属见第二节与 THIRD_PARTY_NOTICES.md。
+
+注意：LICENSE 文件保留 GNU GPL v2 条款正文不作删改（GitHub 据以识别为 GPL-2.0），
+文件头部另附分层授权声明；本 NOTICE 与 README 中的说明不替代该条款文本，
+仅作分层归属与来源披露之用。
+
+构建产物由下列上游代码编译而来，其分发行为同时受上述第 3 条约束。
 
 ================================================================================
 二、上游项目与依赖组件
@@ -55,19 +69,33 @@ GKI_SUKISU_SUSFS_for_Lokita
 
   SukiSU-Ultra/SukiSU-Ultra
     用途：KernelSU 变体本体（SukiSU / SukiSU(40726) / SukiSU(40548)）
-    许可：GPL-3.0
+    许可：仓库根 GPL-3.0；**kernel/ 目录单独为 GPL-2.0**（已核实 kernel/LICENSE）
+          本仓库仅将其 kernel/ 部分编入内核，该部分按 GPL-2.0 适用，与内核许可一致
 
   ReSukiSU/ReSukiSU
     用途：KernelSU 变体（ReSukiSU）
-    许可：以其仓库声明为准
+    许可：仓库根 GPL-3.0；**kernel/ 目录单独为 GPL-2.0**（已核实 kernel/LICENSE）
+          本仓库仅将其 kernel/ 部分编入内核，该部分按 GPL-2.0 适用，与内核许可一致
 
   tiann/KernelSU
     用途：KernelSU 官方版（Official 变体）
-    许可：GPL-3.0
+    许可：GPL-3.0（仓库级声明）
+          注：编入内核的 kernel/ 部分是否另有 GPL-2.0 分层尚未逐项核实
+
+  KernelSU-Next/KernelSU-Next
+    用途：KernelSU 变体（Next），取 dev_susfs 分支
+    许可：GPL-3.0（仓库级声明）
+          注：编入内核的 kernel/ 部分是否另有 GPL-2.0 分层尚未逐项核实
 
   simonpunk/susfs4ksu（GitLab）、ShirkNeko/susfs4ksu
     用途：SUSFS for KernelSU 补丁集
     许可：ShirkNeko 镜像为 GPL-3.0
+
+  sidex15/susfs4ksu-module
+    用途：SUSFS 用户态模块（随产物一并分发，不编入内核）
+    许可：AGPL-3.0（仓库级声明）
+          注：作为独立模块与内核镜像一同分发，属聚合分发而非衍生合并；
+              其 AGPL 条款对该模块自身有效，不延伸至内核镜像
 
   AOSP kernel/common（android.googlesource.com）
     用途：GKI 内核源码
@@ -113,8 +141,15 @@ GKI_SUKISU_SUSFS_for_Lokita
 
   ravindu644/Droidspaces-OSS       Droidspaces 容器支持      GPL-3.0
   Sakion-Team/Re-Kernel            Re-Kernel 驱动            GPL-2.0
+  myflavor/ReKernel-X              ReKernel-X 驱动           GPL-2.0
+                                   （Re-Kernel 的 fork，实验性，
+                                     说明见 docs/advanced-features.md）
   vc-teahouse/Baseband-guard       BBG 防格机                GPL-2.0
   zzh20188/GKI_KernelSU_SUSFS      hmbird_patch.c            GPL-2.0
+  maxsteeel/nomount                NoMount 挂载元模块        GPL-3.0  ⚠ 编入内核
+                                   → 与内核 GPL-2.0 存在许可冲突风险；
+                                     引入位置 / 核实方式 / 退出方案见
+                                     THIRD_PARTY_NOTICES.md 第 2.4 节
 
 [文档站点服务]
 
@@ -128,11 +163,22 @@ GKI_SUKISU_SUSFS_for_Lokita
 三、许可证兼容性说明
 ================================================================================
 
-本仓库自身代码以 GPL-2.0-or-later 授权（兼容 GPL-3.0），与仓库内 GPL-3.0 上游组件
-（SukiSU-Ultra、SUSFS、Droidspaces、Re-Kernel 等）可合法共存：GPL-2.0-or-later 允许
-升级到 GPL-3.0，故整体可在 GPL-3.0（或视需要以 GPL-2.0）条款下分发。
-需特别说明：GPL-2.0-**only**（不含 or-later 选项）的代码不能与 GPL-3.0 合并——本仓库
-不采用 only 授权，正是为了避免这一不兼容缺口。
+本仓库按第一节的四层分别适用许可，兼容性结论如下：
+
+  1. 上游继承部分（GPL-2.0）与本仓库新增部分（GPL-2.0-or-later）
+     方向一致：GPL-2.0-or-later 可向下按 GPL-2.0 使用，两者无冲突。
+
+  2. 内核镜像（GPL-2.0，含 syscall 例外）
+     **不可升级到 GPL-3.0**。因此只有 GPL-2.0 兼容许可的代码可以编入内核；
+     GPL-3.0 授权的组件编入内核即构成许可冲突。当前已知的此类组件为
+     NoMount（maxsteeel/nomount），详见 THIRD_PARTY_NOTICES.md 第 2.4 节。
+
+  3. 不编入内核、仅随产物聚合分发的用户态组件（管理器 APK、SUSFS 模块等）
+     各自独立适用其许可（含 GPL-3.0 / AGPL-3.0）；聚合分发不使其条款
+     延伸至内核镜像，反之亦然。
+
+  4. 构建脚本与工作流（GPL-2.0-or-later）
+     仅在构建期运行，不进入产物，不参与内核镜像的许可判定。
 
 若你是上游作者，认为此处对你的项目描述或归属有误，请在本仓库提交 Issue，
 我会立即更正或移除相关内容。
