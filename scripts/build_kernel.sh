@@ -1195,6 +1195,26 @@ stage_add_kernelsu() {
       echo "::error::KPM 目前只有 SukiSU / SukiSU 固定提交变体提供；请改用这两个变体，或把 KPM 关掉"
       return 1
     fi
+
+    # 变体确实提供 KPM，但内核版本太新：6.10+ 上 SukiSU 的
+    # drivers/kernelsu/kpm/super_access.c 用了 netlink_kernel_cfg.cb_mutex 与
+    # DYNAMIC_STRUCT_END(netlink_kernel_cfg)，那个成员在新内核里已经没了。
+    # 实测 6.12.30：第一次构建跑满 18 分钟后报
+    # `no member named 'cb_mutex' in 'struct netlink_kernel_cfg'`。
+    #
+    # 与其让它失败、再由 stage_compile_kernel 的重试丢弃 ksu.fragment 兜底
+    # （等于每版白烧 18 分钟），不如在这里就关掉：KPM 相关阶段全部跳过，
+    # defconfig 里也不写 CONFIG_KPM —— 与重试路径的落点完全一致，只是不用先炸一次。
+    kv_major="${KERNEL_VERSION%%.*}"
+    kv_minor="${KERNEL_VERSION#*.}"; kv_minor="${kv_minor%%.*}"
+    if [ "${KPM_SUPPORTED}" = "1" ] \
+       && { [ "${kv_major}" -gt 6 ] \
+            || { [ "${kv_major}" -eq 6 ] && [ "${kv_minor:-0}" -ge 10 ]; }; }; then
+      KPM_SUPPORTED=0
+      echo "::warning::内核 ${KERNEL_VERSION} 上 KPM 代码编译不过（kpm/super_access.c 用了新内核已移除的 netlink_kernel_cfg.cb_mutex）"
+      echo "::warning::已自动关闭 KPM（与构建失败后重试丢弃 ksu.fragment 的落点相同，但省掉一轮约 18 分钟的失败编译）"
+      echo "::warning::KPM 相关阶段将全部跳过；如需 KPM 请改用 ≤ 6.6 的内核"
+    fi
   fi
 
   if [ -d "KernelSU/.git" ]; then

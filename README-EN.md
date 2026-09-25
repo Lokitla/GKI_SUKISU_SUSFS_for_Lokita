@@ -241,10 +241,16 @@ The patch stage fills in the argument macro per kernel version: `&ksu_lsm_id` wi
 
 The second hurdle is KPM: SukiSU's `drivers/kernelsu/kpm/super_access.c` uses
 `netlink_kernel_cfg.cb_mutex` and `DYNAMIC_STRUCT_END(netlink_kernel_cfg)`, which do not
-compile on 6.12 (`no member named 'cb_mutex' in 'struct netlink_kernel_cfg'`). With KPM
-enabled the **first build attempt always fails**; the built-in retry then drops
-`ksu.fragment` (which disables KPM) and only the second attempt produces a kernel, costing
-roughly 18 extra minutes.
+compile on 6.10+ (`no member named 'cb_mutex' in 'struct netlink_kernel_cfg'`).
+**KPM is switched off automatically** instead of burning a doomed build: when
+`KERNEL_VERSION >= 6.10` and KPM is requested, the early gate sets `KPM_SUPPORTED=0` and
+every KPM stage (including the `CONFIG_KPM=y` defconfig write) is skipped.
+> Measured on run `36198392724`: forcing it through costs 18 minutes for a failed first
+> attempt, then the built-in retry drops `ksu.fragment` (also disabling KPM) to produce a
+> kernel — roughly 20 extra minutes per version. The automatic switch lands in the same
+> state without the wasted attempt.
+> Side effect: on 6.12 KPM is off whether you asked for it or not — use a **≤ 6.6 kernel**
+> if you need KPM. The default `ReSukiSU` variant carries no KPM code and is unaffected.
 > So today only "SukiSU variant + KPM" is verified on 6.12, and only because of that retry.
 > **Whether the default `ReSukiSU` variant (no KPM code) builds first try is still untested** —
 > check the variant is `ReSukiSU` before ticking `include_612`.

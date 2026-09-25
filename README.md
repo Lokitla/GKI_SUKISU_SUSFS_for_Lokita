@@ -264,16 +264,16 @@ GitHub Actions 与本地 `build.py` 共用这一份 47 阶段脚本，不存在�
 字面量**。
 
 第二道坎跟 KPM 有关：SukiSU 的 `drivers/kernelsu/kpm/super_access.c` 用了
-`netlink_kernel_cfg.cb_mutex` 与 `DYNAMIC_STRUCT_END(netlink_kernel_cfg)`，在 6.12 上
-编译不过（`no member named 'cb_mutex' in 'struct netlink_kernel_cfg'`）。启用 KPM 时
-**第一次构建必失败**，靠脚本自带的「编译失败自动重试」丢掉 `ksu.fragment`（KPM 随之
-关闭）才编得出包，代价是多花约 18 分钟。实测 run `36198392724`
-（6.12.30 + SukiSU + KPM 开启）就是这条路径：第一次 18 分钟失败，第二次打出
-`KPM is disabled` 才过。
-
-> 也就是说 6.12 现在只有「SukiSU 变体 + KPM」被验证过，而且是重试兜出来的；
-> **默认变体 `ReSukiSU`（无 KPM 代码）能否一次过还没测**。要把 6.12 放进自动矩阵，
-> 建议先确保变体是 `ReSukiSU` 再勾 `include_612`。
+`netlink_kernel_cfg.cb_mutex` 与 `DYNAMIC_STRUCT_END(netlink_kernel_cfg)`，在 6.10+ 上
+编译不过（`no member named 'cb_mutex' in 'struct netlink_kernel_cfg'`）。
+**脚本会自动关掉 KPM，不再硬跑那轮注定失败的编译**：`KERNEL_VERSION ≥ 6.10` 且请求了
+KPM 时，早期闸门直接把 `KPM_SUPPORTED` 置 0，KPM 相关阶段与 `CONFIG_KPM=y` 全部跳过。
+> 实测 run `36198392724` 硬跑的代价是：第一次构建 18 分钟后失败，再靠脚本自带的
+> 「编译失败自动重试」丢弃 `ksu.fragment`（KPM 随之关闭）兜底才出包，一个版本多花
+> 近 20 分钟。自动关闭与重试落点相同，只是不用先炸一次。
+>
+> 副作用：6.12 上 KPM 是被自动关掉的，想要 KPM 请改用 **≤ 6.6 的内核**。
+> 默认变体 `ReSukiSU` 本身不带 KPM 代码，不受这条影响。
 >
 > 另注：`struct lsm_id` 的字段一直是 `name`，不是 `lsm` —— 照着新签名想当然写 `.lsm`
 > 会在编译期报 `field designator 'lsm' does not refer to any field`。

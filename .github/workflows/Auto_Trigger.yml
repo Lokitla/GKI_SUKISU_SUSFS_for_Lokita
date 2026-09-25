@@ -37,10 +37,11 @@
 #   传字符串字面量 —— 所以 6.12 不再是「怎么都编不过」。
 # 但 6.12 上还有第二道坎：SukiSU 的 drivers/kernelsu/kpm/super_access.c 用了
 #   netlink_kernel_cfg.cb_mutex 与 DYNAMIC_STRUCT_END(netlink_kernel_cfg)，
-#   在 6.12 上编不过（no member named 'cb_mutex'）。启用 KPM 时第一次构建必失败，
-#   靠 COMPILE_MAX_ATTEMPTS 重试丢掉 ksu.fragment（KPM 随之关闭）才出包。
-#   实测 run 36198392724（6.12.30 + SukiSU + KPM）就是这条路径，多花约 18 分钟。
-#   → 要把 6.12 纳入自动矩阵，先确认变体是 ReSukiSU（无 KPM 代码）再勾 include_612。
+#   在 6.10+ 上编不过（no member named 'cb_mutex'）。原本启用 KPM 时第一次构建必失败，
+#   要靠 COMPILE_MAX_ATTEMPTS 重试丢掉 ksu.fragment（KPM 随之关闭）才出包，每版多花
+#   约 18 分钟（实测 run 36198392724）；现在早期闸门直接把 KPM_SUPPORTED 置 0 自动关闭，
+#   不再白跑那轮失败编译。
+#   → KPM 在 6.12 上等于不可用，需要 KPM 只能用 ≤ 6.6 的内核。
 # =============================================================================
 name: Auto Trigger on SukiSU Update
 
