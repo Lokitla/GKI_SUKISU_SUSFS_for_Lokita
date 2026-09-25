@@ -55,7 +55,7 @@ GitHub Actions 与本地 `build.py` 共用这一份 45 阶段脚本，不存在�
 
 | 能力 | 说明 | 默认 |
 |---|---|---|
-| KernelSU 变体 | `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` | `SukiSU` |
+| KernelSU 变体 | `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` | `ReSukiSU` |
 | SUSFS | 集成 SUSFS 补丁集，支持 inline hook | 开启 |
 | KPM | 编译后修补 Image 使其可加载 KPM 模块（6.6 内核不支持） | `patched（开启并修补）` |
 | Hook 类型 | SUSFS Inline Hooks，编译期手写 syscall 拦截，不留 kprobe 痕迹 | — |
@@ -73,8 +73,12 @@ GitHub Actions 与本地 `build.py` 共用这一份 45 阶段脚本，不存在�
 | Telegram 通知 | 构建完成后推送通知 | 开启 |
 | 自定义构建时间 | 固定内核 `UTS_VERSION` 时间戳 | 留空 |
 
-> 除 SukiSU、SUSFS、KPM、Spoofed 管理器和 Telegram 通知外，其余开关默认关闭，
+> 除 ReSukiSU 变体、SUSFS、KPM、Spoofed 管理器和 Telegram 通知外，其余开关默认关闭，
 > 与 ShirkNeko **原仓库**的默认值保持一致。
+>
+> 注：KPM 只有 SukiSU 变体提供，ReSukiSU / Official / Next 的内核 Kconfig 里没有
+> `config KPM`。默认 ReSukiSU 变体下 KPM 会被自动跳过——构建不中断，但内核无法加载
+> KPM 模块；需要 KPM 请手动把变体切回 `SukiSU`。
 
 ---
 
