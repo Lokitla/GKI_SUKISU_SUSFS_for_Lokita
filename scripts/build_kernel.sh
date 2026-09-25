@@ -880,7 +880,12 @@ stage_resolve_ksu_branch() {
       esac
       ;;
     "Next")
-      BRANCH="dev_susfs"
+      # 曾写 dev_susfs：KernelSU-Next 的 setup.sh 用的是
+      # `git checkout "$1" || echo "[-] Checkout default branch"`，ref 不存在会被
+      # 静默吞掉、回落到默认分支，写错分支名照样"成功"收尾。上游 dev 分支下
+      # kernel/Kconfig 里现在已无 KSU_SUSFS_* 开关，dev_susfs 这个 ref 也不存在
+      # （实测 404），所以直接写死实际存在的 dev，失败要炸出来而不是静默回落。
+      BRANCH="dev"
       ;;
     *)
       if [ -z "$LEGACY_SUKISU_CONFIG" ] || [ ! -f "$LEGACY_SUKISU_CONFIG" ]; then
@@ -930,6 +935,15 @@ stage_resolve_ksu_branch() {
         echo "::warning::SukiSU 固定提交 + SUSFS：请确认 $PINNED_COMMIT 属于 builtin 血统（kernel/feature/selinux_hide.c 中不应出现 ksu_patch_text），否则 SELinux 隐藏会失效"
       fi
     fi
+  fi
+
+  # KernelSU-Next 的 dev 分支没有 KSU_SUSFS_* 开关，勾了 SUSFS 只会走到
+  # verify_susfs_kconfig 抛"未声明 N/N 个 SUSFS 开关"，看不出是变体选错了。
+  # 这里提前拦掉，并直说该换哪个变体。
+  if [ "$variant_input" = "Next" ] && [ "${ENABLE_SUSFS}" = "true" ]; then
+    echo "::error::KernelSU-Next（dev 分支）未提供 SUSFS 开关，不能同时勾选「集成 SUSFS」"
+    echo "::error::需要 SUSFS 请改用 ReSukiSU 或 SukiSU（auto 模式会自动选 builtin）"
+    return 1
   fi
 
   # SUSFS 补丁把 selinuxfs.c 的 context_write / access_write / sel_open_handle_status
@@ -1151,6 +1165,18 @@ stage_add_kernelsu() {
     fi
   fi
 
+  # KPM 是 SukiSU-Ultra 独有的模块加载功能，KernelSU 官方 / ReSukiSU / KernelSU-Next
+  # 都没移植（它们的 Kconfig 里没有 `config KPM`）。此前这个组合要到 config_kernel
+  # 阶段才报错，而那时克隆、打补丁、写 defconfig 全都跑完了——一次白等十几分钟。
+  # 这里在 KernelSU 源码就位后立刻查，几秒内失败并直说该换哪个变体。
+  if [ -d "KernelSU" ] && { [[ "${USE_KPM}" == enabled* ]] || [[ "${USE_KPM}" == patched* ]]; }; then
+    if ! grep -RqsE '^[[:space:]]*config[[:space:]]+KPM([[:space:]]|$)' KernelSU 2>/dev/null; then
+      echo "::error::已请求启用 KPM，但变体 ${KSU_VARIANT} 的 KernelSU 未声明 CONFIG_KPM"
+      echo "::error::KPM 目前只有 SukiSU / SukiSU 固定提交变体提供；请改用这两个变体，或把 KPM 关掉"
+      return 1
+    fi
+  fi
+
   if [ -d "KernelSU/.git" ]; then
     KSU_LATEST_COMMIT_DATE=$(git -C KernelSU log -1 --date=format:'%Y-%m-%d %H:%M:%S %z' --format='%cd')
     export KSU_LATEST_COMMIT_DATE="$KSU_LATEST_COMMIT_DATE"
@@ -1349,9 +1375,17 @@ stage_apply_susfs() {
 # ——宏没定义时 ReSukiSU 的 ksu_patch_text 会照常编进来，和 SUSFS 的替换互相
 # 踩踏，表现就是 SELinux 隐藏失效，且只在真机上才暴露。
 verify_susfs_selinux_compat() {
-  local hooks_c="${KERNEL_ROOT}/security/selinux/hooks.c"
-  if [ ! -f "$hooks_c" ]; then
-    echo "::warning::未找到 ${hooks_c}，跳过 SELinux 兼容宏前置条件检查"
+  # KERNEL_ROOT 下内核源码不一定在根：GKI 分支里实际在 <KERNEL_ROOT>/common。
+  # 直接拼 ${KERNEL_ROOT}/security/selinux/hooks.c 会一路径不对就整个跳过检查，
+  # 静默漏掉宏没定义的情况（实测 6.12 矩阵就是这么哑火了）。
+  local hooks_c=""
+  local cand
+  for cand in "${KERNEL_ROOT}/security/selinux/hooks.c" \
+              "${KERNEL_ROOT}/common/security/selinux/hooks.c"; do
+    [ -f "$cand" ] && { hooks_c="$cand"; break; }
+  done
+  if [ -z "$hooks_c" ]; then
+    echo "::warning::未找到 security/selinux/hooks.c（已试 ${KERNEL_ROOT} 与 ${KERNEL_ROOT}/common），跳过 SELinux 兼容宏前置条件检查"
     return 0
   fi
   if grep -q "ksu_selinux_hide_running" "$hooks_c"; then
