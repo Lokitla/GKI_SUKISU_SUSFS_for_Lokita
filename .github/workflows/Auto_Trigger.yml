@@ -214,7 +214,7 @@ jobs:
                   ref: $ref,
                   inputs: {
                     release_type: $release_type,
-                    kernelsu_variant: "SukiSU",
+                    kernelsu_variant: "ReSukiSU",
                     enable_susfs: true,
                     use_kpm: "patched (开启并修补)",
                     droidspaces: "不启用",
@@ -261,7 +261,7 @@ jobs:
                   ref: $ref,
                   inputs: {
                     kernel_version: "5.10",
-                    kernelsu_variant: "SukiSU",
+                    kernelsu_variant: "ReSukiSU",
                     enable_susfs: true,
                     use_kpm: "patched (开启并修补)",
                     droidspaces: "不启用",
