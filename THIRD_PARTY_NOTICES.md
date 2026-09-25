@@ -18,9 +18,15 @@
 | `min_kdp.c` + 三星符号 | `WildKernels/kernel_patches` | 6.6 WiFi/蓝牙兼容性（三星） | **未声明** | ✅ 编进内核（`drivers/min_kdp.c`） | ⛔ 跳过 |
 | Unicode 绕过修复补丁 | `Numbersf/Action-Build` | SUSFS 的 Unicode 绕过修复 | **自定义许可（非 GPL）** | ✅ 打进内核源码 | ⛔ 跳过 |
 | `patch_linux` | `SukiSU-Ultra/SukiSU_patch` | KPM 镜像修补工具 | **未声明** | ⚠ 构建工具，不进源码，但会改写产物 `Image` | ⛔ 跳过（保留原始 Image） |
+| NoMount 子系统 | `maxsteeel/nomount` | 无需挂载点的模块挂载方案 | **GPL-3.0（与内核 GPL-2.0 冲突）** | ✅ 编进内核（`fs/nomount/`） | ⛔ 跳过（⚠ 开关待实现） |
 
-三者都不是「不用就编不出来」的必需项，而是**功能增强项**：剔除后内核仍可正常构建与启动，
-代价分别是三星兼容性修复失效、SUSFS Unicode 隐藏能力减弱、KPM 模块加载能力失效。
+四者都不是「不用就编不出来」的必需项，而是**功能增强项**：剔除后内核仍可正常构建与启动，
+代价分别是三星兼容性修复失效、SUSFS Unicode 隐藏能力减弱、KPM 模块加载能力失效、
+NoMount 模块挂载能力失效。
+
+> ⚠ **NoMount 的退出开关尚未实现**：`STRICT_LICENSE_MODE=true` 目前只覆盖前三项，
+> NoMount 仍会照常编入内核。这是当前已知的唯一「已识别风险但无法用开关剔除」的组件，
+> 在开关实现前，如需产出不含该组件的内核，请保持 `use_nomount=false`（默认即为关闭）。
 
 ---
 
@@ -121,6 +127,55 @@ curl -s https://api.github.com/repos/SukiSU-Ultra/SukiSU_patch | jq '.license'
 
 ---
 
+### 2.4 `maxsteeel/nomount` — NoMount 挂载元模块（**GPL-3.0，与内核许可冲突**）
+
+**引入位置**
+
+| 环节 | 位置 |
+|---|---|
+| 拉取 | `stage_integrate_nomount`：`curl` 下载 `…/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh` 后 `bash` 执行 |
+| 落地 | 该 setup.sh 克隆仓库并在内核源码树建立 `fs/nomount` 软链接，随内核一起编译 |
+| defconfig | 追加 `CONFIG_NOMOUNT=y` |
+| 触发条件 | 仅 `USE_NOMOUNT=true` 时执行（默认关闭） |
+
+**许可状态**：**GPL-3.0**（仓库根 LICENSE）。已逐层核实：
+
+- `kernel/` 目录下**没有** LICENSE 做分层（只有 `README.md` / `setup.sh` / `src/`）；
+- `kernel/src/nomount.c`（61 KB）文件头**没有** SPDX-License-Identifier、
+  没有版权声明、没有 `MODULE_LICENSE`。
+
+即：其内核部分的实际授权就是仓库根的 **GPL-3.0**。
+
+**自行核实**
+
+```bash
+curl -s https://api.github.com/repos/maxsteeel/nomount | jq '.license.spdx_id'
+curl -s https://api.github.com/repos/maxsteeel/nomount/contents/kernel | jq '.[].name'
+curl -sL https://raw.githubusercontent.com/maxsteeel/nomount/master/kernel/src/nomount.c | head -20
+```
+
+**风险**：GPL-3.0 代码被编入 GPL-2.0（含 syscall 例外）的内核镜像。
+GPL-2.0-only 与 GPL-3.0 不能合并，且内核无法升级到 v3，
+因此该组合的对外再分发存在许可瑕疵。
+
+这是本仓库当前**唯一**「已识别为许可冲突、且代码进入产物」的组件——
+前三项属于「许可未明」，性质不同，严重程度也低于本项。
+
+**缓解**：
+
+- 默认关闭（`use_nomount` 默认 `false`），用户不主动开启则完全不涉及；
+- setup.sh 支持可选的 sha256 锚点（`NOMOUNT_SETUP_SHA256`），留空则不校验；
+- 已如实披露于 `NOTICE` 与本节。
+
+**退出**：⚠ **尚未纳入 `STRICT_LICENSE_MODE`**（待实现）。在开关落地前，
+保持 `use_nomount=false` 即可完全不涉及该组件。
+
+**建议**：向上游询问能否为 `kernel/` 单独提供 GPL-2.0 授权 ——
+SukiSU-Ultra 与 ReSukiSU 均采用「根 GPL-3.0 / `kernel/` GPL-2.0」的分层做法。
+若上游补上分层，本节风险即可解除。
+
+---
+
 ## 三、严格许可模式（统一退出开关）
 
 ```bash
@@ -131,7 +186,10 @@ STRICT_LICENSE_MODE=true ./scripts/build_kernel.sh …
 #   STRICT_LICENSE_MODE: true
 ```
 
-开启后本文件记录的三个组件**全部不参与构建**，产物只含 GPL 体系内可清晰追溯的代码。
+开启后第 2.1–2.3 节的三个组件**全部不参与构建**。
+
+⚠ 第 2.4 节的 NoMount **暂不受本开关控制**，需另行保持 `use_nomount=false`。
+
 构建日志会为每个被跳过的组件打印 `::warning::`，说明功能代价，不会静默降级。
 
 默认 `false`，即保持既有构建行为 —— 这是**可用性优先**的选择，风险已在上面逐项披露。
