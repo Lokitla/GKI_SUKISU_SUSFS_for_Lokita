@@ -22,7 +22,7 @@
 以其为主体，移植了 [ShirkNeko](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) 的 KPM 镜像修补与本地 CLI 设计，
 参考了 [coolzyd](https://github.com/coolzyd9107/GKI_SukiSU_Ultra_SUSFS) 的 Release 呈现方式，
 并把构建流程收敛到同一份 [`scripts/build_kernel.sh`](scripts/build_kernel.sh)：
-GitHub Actions 与本地 `build.py` 共用这一份 45 阶段脚本，不存在两套逻辑分叉。
+GitHub Actions 与本地 `build.py` 共用这一份 47 阶段脚本，不存在两套逻辑分叉。
 
 覆盖 Android 12 / 13 / 14 / 15 / 16（内核 5.10 / 5.15 / 6.1 / 6.6 / 6.12），
 每次构建产出 AnyKernel3 刷机包、三种压缩格式的 boot 镜像、KernelSU 管理器与 SUSFS 配套模块。
@@ -57,10 +57,10 @@ GitHub Actions 与本地 `build.py` 共用这一份 45 阶段脚本，不存在�
 |---|---|---|
 | KernelSU 变体 | `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` | `ReSukiSU` |
 | SUSFS | 集成 SUSFS 补丁集，支持 inline hook | 开启 |
-| KPM | 编译后修补 Image 使其可加载 KPM 模块（6.6 内核不支持） | `patched（开启并修补）` |
+| KPM | 编译后修补 Image 使其可加载 KPM 模块（6.6 内核不支持） | `patched（开启并修补）`※ |
 | Hook 类型 | SUSFS Inline Hooks，编译期手写 syscall 拦截，不留 kprobe 痕迹 | — |
 | Magic Mount | SukiSU 默认挂载方式 | 开启 |
-| ZRAM / LZ4KD | ZRAM 增强算法 | **开启** |
+| ZRAM / LZ4KD | ZRAM 增强算法（LZ4KD / LZ4K_OPLUS） | 关闭（见下方注） |
 | BBR | 设为默认拥塞算法 | 关闭 |
 | BBG | Baseband-guard 防格机 | 关闭 |
 | Re-Kernel | Re-Kernel 驱动 | 关闭 |
@@ -73,12 +73,20 @@ GitHub Actions 与本地 `build.py` 共用这一份 45 阶段脚本，不存在�
 | Telegram 通知 | 构建完成后推送通知 | 开启 |
 | 自定义构建时间 | 固定内核 `UTS_VERSION` 时间戳 | 留空 |
 
-> 除 ReSukiSU 变体、SUSFS、KPM、Spoofed 管理器和 Telegram 通知外，其余开关默认关闭，
+> 除 ReSukiSU 变体、SUSFS、Spoofed 管理器和 Telegram 通知外，其余开关默认关闭，
 > 与 ShirkNeko **原仓库**的默认值保持一致。
 >
-> 注：KPM 只有 SukiSU 变体提供，ReSukiSU / Official / Next 的内核 Kconfig 里没有
-> `config KPM`。默认 ReSukiSU 变体下 KPM 会被自动跳过——构建不中断，但内核无法加载
-> KPM 模块；需要 KPM 请手动把变体切回 `SukiSU`。
+> 注 1 · **变体已换血：** 默认从 `SukiSU` 换成 `ReSukiSU`（不需要额外拉取上游
+> 分支，构建更快），`.github/workflows/` 下 11 个入口的 `kernelsu_variant` /
+> `ksu_variant` 默认值与 `scripts/build_kernel.sh` 的 `KSU_VARIANT` 均已同步。
+>
+> 注 2 · **KPM 在默认变体下不生效：** KPM 只有 SukiSU 变体提供，ReSukiSU / Official /
+> Next 的内核 Kconfig 里没有 `config KPM`。默认变体下相关阶段会被自动跳过——构建不
+> 中断，但内核加载不了 KPM 模块；需要 KPM 请手动把变体切回 `SukiSU`。
+>
+> 注 3 · **ZRAM 的默认值分三处：** 构建脚本与本地 CLI 默认 `false`，各 `kernel-*.yml`
+> 单版本入口同样默认 `false`，只有「构建内核」全矩阵入口（`main.yml`）默认 `true`。
+> 默认关掉时只有内核自带的压缩算法，开了才装配 LZ4KD / LZ4K_OPLUS。
 
 ---
 
@@ -145,9 +153,12 @@ GitHub Actions 与本地 `build.py` 共用这一份 45 阶段脚本，不存在�
 
 > **注意：** 目前不支持一加 ColorOS 14、15，刷入后可能需要清除数据开机。
 >
-> **SUKISU最新版:** 已经恢复构建，但不兼容6.12
+> **6.12：** 本仓库已为 6.10+ 的 `security_add_hooks` 新签名补上兼容补丁，
+> 勾 `include_612` 即可纳入矩阵，详见下方「SukiSU 上游更新自动触发」一节。
 >
-> 增加了了老版本SukiSU的构建，若使用老版本内核最好搭配同样版本的管理器，老版本完全使用以前的SUKISU和SUSFS代码，因此不包含最近的特性或bug
+> **老版本 SukiSU：** 保留了老版本变体（`SukiSU(40726)` / `SukiSU(40548)`）的构建；
+> 它们完全使用旧版 SUKISU 与 SUSFS 代码，不含最近的特性或 bug，
+> 搭配老版本内核时最好用对应版本的管理器。
 >
 > **rekernel 特性（beta）：** rekernel 特性现已支持（目前处于 beta 阶段）
 > 
@@ -186,7 +197,7 @@ GitHub Actions 与本地 `build.py` 共用这一份 45 阶段脚本，不存在�
 | **Telegram 通知** | 构建完成后推送消息与产物校验值到 TG | Actions: `send_telegram` |
 | **Release 缓存** | 用 GitHub Release 存 ccache，突破 `actions/cache` 的容量与过期限制 | Actions: `use_release_cache` |
 | **Spoofed 管理器开关** | 可单独控制是否一并拉取伪装官方包名的 SukiSU 管理器 APK | Actions: `manager_spoofed` |
-| **KPM 镜像修补** | 编译完成后对 `Image` 打 KPM 补丁（移植自 ShirkNeko 的 `patch_kpm_image`），5.x / 6.1 / 6.12 有效，6.6 自动跳过 | Actions: `use_kpm` 选 `enabled` / `patched` |
+| **KPM 镜像修补** | 编译完成后对 `Image` 打 KPM 补丁（移植自 ShirkNeko 的 `patch_kpm_image`）；6.6 内核不支持会自动跳过，非 SukiSU 变体（`ReSukiSU` / `Official` / `Next`）同样整段跳过 | Actions: `use_kpm` 选 `enabled` / `patched` |
 | **管理器拆分为两个产物** | 普通管理器与 Spoofed 管理器各自成为独立产物，不再混在一个压缩包里 | 默认生效 |
 | **SUSFS 独立开关** | 原「KernelSU / SUSFS 模式」三态选择简化为「集成 SUSFS」勾选框（不再提供纯净 GKI） | Actions: `enable_susfs` |
 
@@ -197,10 +208,10 @@ GitHub Actions 与本地 `build.py` 共用这一份 45 阶段脚本，不存在�
 
 | 选项 | 本分支默认 | ShirkNeko 原仓库 |
 |---|---|---|
-| KernelSU 变体 | **`SukiSU`** | `Stable(标准)`（无变体选项） |
+| KernelSU 变体 | **`ReSukiSU`** | `Stable(标准)`（无变体选项） |
 | 集成 SUSFS | **开启** | 内置，无独立开关 |
 | KPM | **`patched`（开启并修补镜像）** | `true` |
-| ZRAM (LZ4KD) | **开启** | `false` |
+| ZRAM (LZ4KD) | **开启**（仅「构建内核」全矩阵入口） | `false` |
 | BBG 安全补丁 | **关闭** | `false` |
 | CVE-2026-43499 修复 | **关闭** | 无此选项（本分支保留为可选） |
 | BBR 拥塞控制 | 关闭 | `false` |
@@ -238,16 +249,34 @@ GitHub Actions 与本地 `build.py` 共用这一份 45 阶段脚本，不存在�
 
 **默认跑「全部版本」**：5.10 + 5.15 + 6.1 + 6.6 的默认矩阵，共约
 **22 + 20 + 23 + 15 = 80 个内核版本**（与上游 zzh 每次 Release 的数量一致）。
-> 注：以上仅含默认启用的 5.10–6.6 矩阵；勾选 `include_612` 会再纳入 6.12 的 4 个版本。
+> 注：以上仅含默认启用的 5.10–6.6 矩阵；勾选 `include_612` 会再纳入 6.12 的全部 8 个版本。
 > `data/` 目录下共 **127 条**版本定义（5.10=36 / 5.15=35 / 6.1=32 / 6.6=16 / 6.12=8），
 > 本地 `build.py --all` 即基于此全集构建。
-构建配置固定为 **KPM `patched`（开启并修补）+ ZRAM (LZ4KD) 开启**，其余增强项（BBG / Re-Kernel / BBR 等）关闭。
-想省时间时手动选「单版本冒烟」，只编 5.10.66 一个。
+构建配置固定为 **变体 `ReSukiSU`（KPM 随之被跳过）+ ZRAM (LZ4KD) 开启**，
+其余增强项（BBG / Re-Kernel / BBR 等）关闭。想省时间时手动选「单版本冒烟」，只编 5.10.66 一个。
 
-**6.12 默认不参与**：SukiSU 主线与 6.12 的 LSM hook 签名不兼容——
-`security_add_hooks` 的第三参数在 6.12 上是 `const struct lsm_id *`，SukiSU 仍按老签名
-传字符串（`hook/lsm_hook.c:191`），关掉 KPM 同样编不过。这是上游问题，等 SukiSU 修好
-或改用老版本变体（40726 / 40548）再开；勾上 `include_612` 就能加回来，不用改代码。
+**6.12 默认不参与，想加回来勾 `include_612`。** 有先后两道坎，第一道已经翻过去：
+
+`security_add_hooks` 的第三参数自 v6.10 起改成 `const struct lsm_id *`，而 KernelSU 各
+变体仍按老签名传字符串（`hook/lsm_hook.c` 里的
+`security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu")`）。打补丁阶段会按内核
+版本补实参宏：**v6.10 起传 `&ksu_lsm_id`（`.name = "ksu"`），更早的内核照旧传字符串
+字面量**。
+
+第二道坎跟 KPM 有关：SukiSU 的 `drivers/kernelsu/kpm/super_access.c` 用了
+`netlink_kernel_cfg.cb_mutex` 与 `DYNAMIC_STRUCT_END(netlink_kernel_cfg)`，在 6.12 上
+编译不过（`no member named 'cb_mutex' in 'struct netlink_kernel_cfg'`）。启用 KPM 时
+**第一次构建必失败**，靠脚本自带的「编译失败自动重试」丢掉 `ksu.fragment`（KPM 随之
+关闭）才编得出包，代价是多花约 18 分钟。实测 run `36198392724`
+（6.12.30 + SukiSU + KPM 开启）就是这条路径：第一次 18 分钟失败，第二次打出
+`KPM is disabled` 才过。
+
+> 也就是说 6.12 现在只有「SukiSU 变体 + KPM」被验证过，而且是重试兜出来的；
+> **默认变体 `ReSukiSU`（无 KPM 代码）能否一次过还没测**。要把 6.12 放进自动矩阵，
+> 建议先确保变体是 `ReSukiSU` 再勾 `include_612`。
+>
+> 另注：`struct lsm_id` 的字段一直是 `name`，不是 `lsm` —— 照着新签名想当然写 `.lsm`
+> 会在编译期报 `field designator 'lsm' does not refer to any field`。
 
 手动运行时可改这几个输入：
 
@@ -255,7 +284,7 @@ GitHub Actions 与本地 `build.py` 共用这一份 45 阶段脚本，不存在�
 |---|---|---|
 | `force` | 忽略「是否有新提交」，强制触发 | 否 |
 | `build_scope` | `全部版本` / `单版本冒烟` / `不构建` | `全部版本` |
-| `include_612` | 一并把 6.12 的 4 个版本纳入（当前与最新 SukiSU 不兼容） | 否 |
+| `include_612` | 一并把 6.12 的 8 个版本纳入（默认跳过；本仓库已打 LSM 兼容补丁） | 否 |
 | `ksu_branch_mode` | SukiSU 拉取分支：`auto`=跟随 SUSFS 开关自动选（开 SUSFS→builtin，关→main）/ `main`=纯管理器分支 / `builtin`=内核内置实现 | `auto` |
 | `release_type` | `Release` / `Pre-Release` / `Actions` | `Release` |
 
@@ -343,7 +372,7 @@ GitHub Actions 与本地 `build.py` 共用这一份 45 阶段脚本，不存在�
 python3 build.py --android android14 --kernel 6.1 --sub-level 124 --os-patch 2025-02
 ```
 
-完整参数（46 个构建阶段、断点续建 `--from` / 单步重跑 `--only`、全部功能开关）见
+完整参数（47 个构建阶段、断点续建 `--from` / 单步重跑 `--only`、全部功能开关）见
 💻 [**本地 CLI 构建文档**](docs/local-build.md)。
 
 ---
@@ -360,10 +389,10 @@ python3 build.py --android android14 --kernel 6.1 --sub-level 124 --os-patch 202
 | `.github/workflows/Auto_Trigger.yml` | 检测 SukiSU 上游更新并自动触发构建 |
 | `.github/workflows/get-manager.yml` | 抓取 KernelSU / SukiSU 管理器 APK |
 | `.github/workflows/update-pages.yml` | 更新 `data/` 版本数据并部署 GitHub Pages |
-| `config/` | 内核配置片段、`config/config` 提交锁定、SukiSU 变体配置 |
+| `config/` | 内核配置片段（如 `zram.config`）、`config/config` 提交锁定、SukiSU 变体配置 |
 | `data/` | 各 Android 版本可用的内核子版本与补丁级别数据（驱动版本矩阵） |
 | `security_patch/` | CVE-2026-43499（GhostLock）修复链与适配脚本 |
-| `zram/` | LZ4KD / ZRAM 增强算法补丁 |
+| `zram/` | LZ4 的 ARM64 NEON 加速实现（`apply_lz4_neon.sh`、`lz4/`、`include/linux/lz4.h`），与 ZRAM/LZ4KD 打在同一条补丁栈上 |
 | `web/` | GitHub Pages 站点源码（构建版本查询） |
 | `scripts/susfs_fixes/apply.sh` | SUSFS 补丁的适配与冲突修复 |
 | `scripts/telegram_notify.py` | Telegram 通知推送 |
