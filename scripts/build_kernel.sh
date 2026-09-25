@@ -1889,31 +1889,67 @@ stage_setup_zram_lz4() {
     echo "f2fs-\$(CONFIG_F2FS_IOSTAT) += iostat.o" >> "fs/f2fs/Makefile"
   fi
 
-  cp -r $SUKISU_PATCHES/other/zram/lz4k/include/linux/* ./include/linux/
-  cp -r $SUKISU_PATCHES/other/zram/lz4k/lib/* ./lib/
-  cp -r $SUKISU_PATCHES/other/zram/lz4k/crypto/* ./crypto/
-  cp -r $SUKISU_PATCHES/other/zram/lz4k_oplus ./lib/
+  # ---------- lz4k / lz4kd 补丁栈 ----------
+  # 这一段依赖 SukiSU_patch 按内核版本提供的 lz4kd.patch + lz4k_oplus.patch，
+  # 目前上游只有 5.10 / 5.15 / 6.1 / 6.6 四个目录，6.12 没有对应的。
+  #
+  # 原先这里无条件 cp + patch：6.12 上 cp 找不到源目录直接失败，patch 连输入
+  # 文件都不存在，两条失败都被 `if ! patch` 吞成一条 warning；真正的错误直到
+  # defconfig 校验才以 `CONFIG_CRYPTO_LZ4K: actual '', expected 'y'` 炸出来，
+  # 而那 5 个 CONFIG_CRYPTO_* 全由 lz4k 补丁提供，未打补丁的树上压根不存在 ——
+  # 报错位置离出错点十万八千里。这里改成先查上游有没有，没有就整段跳过。
+  #
+  # 结论写进 ZRAM_LZ4K_OK（全局，供 config_zram 复用），免得「打没打补丁」
+  # 这件事在两处各判断一遍、漏掉其中一处。
+  ZRAM_LZ4K_OK=0
+  if [ -d "${SUKISU_PATCHES}/other/zram/zram_patch/${KERNEL_VERSION}" ]; then
+    ZRAM_LZ4K_OK=1
+    cp -r $SUKISU_PATCHES/other/zram/lz4k/include/linux/* ./include/linux/
+    cp -r $SUKISU_PATCHES/other/zram/lz4k/lib/* ./lib/
+    cp -r $SUKISU_PATCHES/other/zram/lz4k/crypto/* ./crypto/
+    cp -r $SUKISU_PATCHES/other/zram/lz4k_oplus ./lib/
 
-  cp $SUKISU_PATCHES/other/zram/zram_patch/${KERNEL_VERSION}/lz4kd.patch ./
-  if ! patch -p1 -F 3 < lz4kd.patch; then
-    echo "::warning::lz4kd.patch 应用失败，可能已应用或上下文不匹配"
-  fi
+    cp $SUKISU_PATCHES/other/zram/zram_patch/${KERNEL_VERSION}/lz4kd.patch ./
+    if ! patch -p1 -F 3 < lz4kd.patch; then
+      echo "::warning::lz4kd.patch 应用失败，可能已应用或上下文不匹配"
+    fi
 
-  cp $SUKISU_PATCHES/other/zram/zram_patch/${KERNEL_VERSION}/lz4k_oplus.patch ./
-  if ! patch -p1 -F 3 < lz4k_oplus.patch; then
-    echo "::warning::lz4k_oplus.patch 应用失败，可能已应用或上下文不匹配"
+    cp $SUKISU_PATCHES/other/zram/zram_patch/${KERNEL_VERSION}/lz4k_oplus.patch ./
+    if ! patch -p1 -F 3 < lz4k_oplus.patch; then
+      echo "::warning::lz4k_oplus.patch 应用失败，可能已应用或上下文不匹配"
+    fi
+  else
+    # 正常路径在 run_setup_zram_lz4 就已经整段跳过，这里只对单独 --only 跑本阶段的情况兜底。
+    ZRAM_LZ4K_OK=0
+    echo "::warning::内核 ${KERNEL_VERSION} 无上游 lz4k 补丁栈，跳过 lz4k / lz4kd / lz4k_oplus 补丁"
   fi
 
   cd "$_pwd"
 }
 
+# 上游 SukiSU_patch 是否为这个内核版本提供了 lz4k / lz4kd 补丁栈
+zram_lz4k_available() {
+  [ -d "${SUKISU_PATCHES}/other/zram/zram_patch/${KERNEL_VERSION}" ]
+}
+
 # 条件执行（等价原工作流 if:）
 run_setup_zram_lz4() {
-  if [ "$USE_ZRAM" = "true" ]; then
-    stage_setup_zram_lz4 "$@"
-  else
+  if [ "$USE_ZRAM" != "true" ]; then
     echo "跳过阶段: setup_zram_lz4（条件不满足）"
+    return 0
   fi
+  # 这个内核版本没有上游 lz4k 补丁栈时整段跳过，而不是"打个折继续"。
+  # 上游只提供 5.10 / 5.15 / 6.1 / 6.6，6.12 不在其中：硬跑下去 cp 找不到源目录、
+  # patch 连输入文件都没有，失败被 `if ! patch` 吞成 warning，真正的错误拖到 defconfig
+  # 校验才以 `CONFIG_CRYPTO_LZ4K: actual '', expected 'y'` 炸出来。装半成品的 ZRAM
+  # 同样要踩那个校验，所以不如一开始就别开。
+  if ! zram_lz4k_available; then
+    ZRAM_LZ4K_OK=0
+    echo "::warning::内核 ${KERNEL_VERSION} 无上游 lz4k 补丁栈（SukiSU_patch 只提供 5.10 / 5.15 / 6.1 / 6.6）"
+    echo "::warning::本次已按 USE_ZRAM=${USE_ZRAM} 请求 ZRAM，但整段跳过：补丁栈缺失，ZRAM 相关阶段与 defconfig 配置全部不写入"
+    return 0
+  fi
+  stage_setup_zram_lz4 "$@"
 }
 
 stage_fix_66_wifi_bt() {
@@ -2011,11 +2047,20 @@ EOF
     sed -i 's/CONFIG_ZRAM=m/CONFIG_ZRAM=y/g' "$CONFIG_FILE"
   fi
 
-  if [ "${ANDROID_VERSION}" = "android14" ] || [ "${ANDROID_VERSION}" = "android15" ]; then
+  # ZRAM / ZSMALLOC 被编进内核（=y）时，modules.bzl 里不能再留它们的 .ko 条目，
+  # 否则模块清单检查会为找不到的产物报错。原先只覆盖 android14 / android15，
+  # android16（6.12）漏了 —— 那里的 ZRAM 同样会被上面的 sed 改成 =y。
+  if grep -q "^CONFIG_ZRAM=y" "$CONFIG_FILE" \
+     || [ "${ANDROID_VERSION}" = "android14" ] || [ "${ANDROID_VERSION}" = "android15" ]; then
     sed -i 's/"drivers\/block\/zram\/zram\.ko",//g; s/"mm\/zsmalloc\.ko",//g' "$KERNEL_ROOT/common/modules.bzl"
   fi
 
-  if grep -q "CONFIG_ZSMALLOC=y" "$CONFIG_FILE" && grep -q "CONFIG_ZRAM=y" "$CONFIG_FILE"; then
+  # zram.config 里的 5 个 CONFIG_CRYPTO_*（LZ4HC / LZ4K / LZ4KD / 842 / LZ4K_OPLUS）
+  # 全部由 setup_zram_lz4 打的 lz4k 补丁提供。补丁没打上就写进 defconfig，GKI 的
+  # defconfig 校验会以 `CONFIG_CRYPTO_LZ4K: actual '', expected 'y'` 中断构建。
+  # ZRAM_LZ4K_OK 由 setup_zram_lz4 算好（无上游 lz4k 补丁的内核为 0）。
+  if [ "${ZRAM_LZ4K_OK:-0}" = "1" ] \
+     && grep -q "CONFIG_ZSMALLOC=y" "$CONFIG_FILE" && grep -q "CONFIG_ZRAM=y" "$CONFIG_FILE"; then
     cat "$ZZH_PATCHES/config/zram.config" >> "$CONFIG_FILE"
   fi
 
@@ -2024,11 +2069,17 @@ EOF
 
 # 条件执行（等价原工作流 if:）
 run_config_zram() {
-  if [ "$USE_ZRAM" = "true" ]; then
-    stage_config_zram "$@"
-  else
+  if [ "$USE_ZRAM" != "true" ]; then
     echo "跳过阶段: config_zram（条件不满足）"
+    return 0
   fi
+  # 补丁栈缺失时连 defconfig 都不动：CONFIG_CRYPTO_LZ4K 之类的选项得有 lz4k 代码才存在，
+  # 写了就过不了 GKI 的 defconfig 校验。ZRAM_LZ4K_OK 由 setup_zram_lz4 算好。
+  if [ "${ZRAM_LZ4K_OK:-0}" != "1" ]; then
+    echo "跳过阶段: config_zram（${KERNEL_VERSION} 未提供 lz4k 补丁栈，见 setup_zram_lz4 的告警）"
+    return 0
+  fi
+  stage_config_zram "$@"
 }
 
 stage_add_bbg() {
