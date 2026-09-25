@@ -2257,10 +2257,45 @@ EOF
       grep -q 'KSU_LSM_ARG' "$LSM_HOOKS_C" && continue
       grep -q 'ARRAY_SIZE(ksu_hooks), "ksu"' "$LSM_HOOKS_C" || continue
       perl -0pi -e 's{security_add_hooks\(ksu_hooks,\s*ARRAY_SIZE\(ksu_hooks\),\s*"ksu"\)}{security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), KSU_LSM_ARG)}g' "$LSM_HOOKS_C"
-      # 锚点用 ksu_hooks 数组定义，不能用 #include <linux/lsm_hooks.h>：
+      # 补上宏/变量定义本体。用 python 而不是 perl：早先这里用 perl -0pi 插块，
+      # 结果整块文字被并进 `ksu_hooks[] = {` 那一行（预处理指令不在行首），
+      # 死在 `178:49: error: expected expression` + `#endif without #if`。
+      # 现在改成在数组定义前插入，定义用在哪（下面的 security_add_hooks 调用）
+      # 之前，顺序天然正确。
+      #
+      # 锚点依然是 ksu_hooks 数组定义而不是 #include <linux/lsm_hooks.h>：
       # SukiSU builtin 的 lsm_hook.c 是被 ksu.c 用 #include 文本并入的"碎片"，
       # 文件里根本没有那行 include，锚点选错就会静默哑火、KSU_LSM_ARG 未定义。
-      perl -0pi -e 's{^([ \t]*static struct security_hook_list[ \t]+ksu_hooks\[\] = \{)}{${1}#ifdef KSU_LSM_ARG\n#undef KSU_LSM_ARG\n#endif\n/* 补记：KernelSU 上游写死传字符串字面量 "ksu"。\n   内核 v6.10 起 security_add_hooks 第三参改成了 const struct lsm_id *lsmid，\n   传字符串会类型不匹配直接编不过（v5.19~v6.6 还是 const char *，\n   旧写法在那几个版本能凑合编过）。这里按内核版本补实参宏。 */\n#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 10, 0)\nstatic const struct lsm_id ksu_lsm_id = {\n    .lsm = "ksu"\n};\n#define KSU_LSM_ARG (&ksu_lsm_id)\n#else\n#define KSU_LSM_ARG "ksu"\n#endif\n}gm' "$LSM_HOOKS_C"
+      python3 - "$LSM_HOOKS_C" <<'PY'
+import io, re, sys
+
+path = sys.argv[1]
+with io.open(path, "r", encoding="utf-8", newline="") as f:
+    src = f.read()
+
+m = re.search(r"^[ \t]*static struct security_hook_list[ \t]+ksu_hooks\[\]", src, re.M)
+if not m:
+    sys.exit(3)
+
+block = (
+    "/* 补记：KernelSU 上游写死传字符串字面量 \"ksu\"。\n"
+    "   内核 v6.10 起 security_add_hooks 第三参改成了 const struct lsm_id *lsmid，\n"
+    "   传字符串会类型不匹配直接编不过（v5.19~v6.6 还是 const char *，\n"
+    "   旧写法在那几个版本能凑合编过）。这里按内核版本补实参宏。 */\n"
+    "#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 10, 0)\n"
+    "static const struct lsm_id ksu_lsm_id = {\n"
+    '    .lsm = "ksu"\n'
+    "};\n"
+    "#define KSU_LSM_ARG (&ksu_lsm_id)\n"
+    "#else\n"
+    '#define KSU_LSM_ARG "ksu"\n'
+    "#endif\n"
+)
+
+with io.open(path, "w", encoding="utf-8", newline="") as f:
+    f.write(src[: m.start()] + block + src[m.start():])
+PY
+      [ $? -eq 0 ] || echo "::error::为 ${LSM_HOOKS_C} 补充 security_add_hooks 宏定义失败"
       echo "已修复 6.10+ 的 security_add_hooks 签名：${LSM_HOOKS_C}"
     done
   fi
