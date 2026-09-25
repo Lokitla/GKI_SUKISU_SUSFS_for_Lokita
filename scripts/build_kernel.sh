@@ -2238,6 +2238,32 @@ EOF
 
   sed -i 's/check_defconfig//' ./common/build.config.gki
 
+  # 修复 6.10+ 的 security_add_hooks 签名。
+  #
+  # 内核 v6.10 起 security_add_hooks 第三参从 `const char *lsm` 改成
+  # `const struct lsm_id *lsmid`；KernelSU 系各变体却写死传字符串字面量，
+  # 保护它的 `#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)` 对我们编的
+  # 内核恒为真，于是 6.10+ 变成把字符串塞给 struct lsm_id *，类型不匹配直接编不过。
+  # v5.19~v6.6 那轮第三参还是 const char *，旧写法能凑合对上，所以雷只在 6.10 起爆。
+  # 这里用宏在编译期分流，让各版本都传对类型，不必按内核版本开关补丁。
+  #
+  # 两个文件名都要试（各变体命名不同，且不存在时跳过）：
+  #   lsm_hooks.c —— ReSukiSU / 官方系（Kbuild 里只在 < 6.8 时编，故实际不触发）
+  #   lsm_hook.c  —— SukiSU builtin（ksu.c 用 #include 无条件把它并进来，必触发）
+  if [ "${KSU_MODE}" != "禁用KSU" ]; then
+    for LSM_HOOKS_C in KernelSU/kernel/hook/lsm_hooks.c \
+                       KernelSU/kernel/hook/lsm_hook.c; do
+      [ -f "$LSM_HOOKS_C" ] || continue
+      grep -q 'KSU_LSM_ARG' "$LSM_HOOKS_C" && continue
+      grep -q 'ARRAY_SIZE(ksu_hooks), "ksu"' "$LSM_HOOKS_C" || continue
+      perl -0pi -e 's{security_add_hooks\(ksu_hooks,\s*ARRAY_SIZE\(ksu_hooks\),\s*"ksu"\)}{security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), KSU_LSM_ARG)}g' "$LSM_HOOKS_C"
+      # 锚点用 ksu_hooks 数组定义，不能用 #include <linux/lsm_hooks.h>：
+      # SukiSU builtin 的 lsm_hook.c 是被 ksu.c 用 #include 文本并入的"碎片"，
+      # 文件里根本没有那行 include，锚点选错就会静默哑火、KSU_LSM_ARG 未定义。
+      perl -0pi -e 's{^([ \t]*static struct security_hook_list[ \t]+ksu_hooks\[\] = \{)}{${1}#ifdef KSU_LSM_ARG\n#undef KSU_LSM_ARG\n#endif\n/* 补记：KernelSU 上游写死传字符串字面量 "ksu"。\n   内核 v6.10 起 security_add_hooks 第三参改成了 const struct lsm_id *lsmid，\n   传字符串会类型不匹配直接编不过（v5.19~v6.6 还是 const char *，\n   旧写法在那几个版本能凑合编过）。这里按内核版本补实参宏。 */\n#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 10, 0)\nstatic const struct lsm_id ksu_lsm_id = {\n    .lsm = "ksu"\n};\n#define KSU_LSM_ARG (&ksu_lsm_id)\n#else\n#define KSU_LSM_ARG "ksu"\n#endif\n}gm' "$LSM_HOOKS_C"
+      echo "已修复 6.10+ 的 security_add_hooks 签名：${LSM_HOOKS_C}"
+    done
+  fi
 
   # [融合] BBR 拥塞控制 —— 取自 ShirkNeko/GKI_KernelSU_SUSFS
   if [ "${USE_BBR}" = "true" ]; then
