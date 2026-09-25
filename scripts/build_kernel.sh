@@ -1128,8 +1128,20 @@ stage_add_kernelsu() {
     # 终极防线：直接看源码有没有 ksu_patch_text。分支名/提交号都可能骗人，
     # 但"这段内核里到底有没有在运行时改写 context_write/access_write/
     # sel_open_handle_status"骗不了人——有就和 SUSFS 的 my_* 替换打架。
+    #
+    # 例外：下游（ReSukiSU）官方为 SUSFS 做了共存适配——
+    #   kernel/tools/susfs_compat.mk 在 CONFIG_KSU_SUSFS 下检测
+    #   security/selinux/hooks.c 是否含 SUSFS 注入的 ksu_selinux_hide_running，
+    #   命中就加 -DKSU_COMPAT_HAS_SUSFS_FEATURE_SELINUX_HIDE，把 selinux_hide.c
+    #   里整段 ksu_patch_text 用 #ifndef 剔除。这类源码里 grep ksu_patch_text
+    #   必然命中，但编译出来是干净内核，按"main 血统"拦就是误报。
     if [ "${ENABLE_SUSFS}" = "true" ] && [ -f "KernelSU/kernel/feature/selinux_hide.c" ]; then
-      if grep -q "ksu_patch_text" KernelSU/kernel/feature/selinux_hide.c; then
+      KSU_HIDE_SRC="KernelSU/kernel/feature/selinux_hide.c"
+      if grep -q "KSU_COMPAT_HAS_SUSFS_FEATURE_SELINUX_HIDE" "$KSU_HIDE_SRC"; then
+        echo "SELinux 兼容性校验通过：selinux_hide.c 的 ksu_patch_text 受 KSU_COMPAT_HAS_SUSFS_FEATURE_SELINUX_HIDE 包裹"
+        echo "  SUSFS 补丁把 ksu_selinux_hide_running 注入 hooks.c 后，susfs_compat.mk 会定义该宏，"
+        echo "  上述补丁代码在编译期被 #ifndef 剔除（ReSukiSU 官方共存机制，非冲突）"
+      elif grep -q "ksu_patch_text" "$KSU_HIDE_SRC"; then
         echo "::error::KernelSU 源码含 ksu_patch_text（main 血统），与 SUSFS 的 SELinux 补丁冲突，隐藏必然失效"
         echo "::error::请切到 builtin 分支；确知后果要继续请设 ALLOW_SUSFS_WITH_MAIN=1"
         [ "${ALLOW_SUSFS_WITH_MAIN:-0}" = "1" ] || return 1
@@ -1326,6 +1338,29 @@ stage_apply_susfs() {
   # Kconfig 不认领的话 defconfig 写得再全也是白写。
   if [ "${ENABLE_SUSFS}" = "true" ] && [ "${KSU_MODE}" != "禁用KSU" ]; then
     verify_susfs_kconfig
+    verify_susfs_selinux_compat
+  fi
+}
+
+# ReSukiSU 的 KSU_COMPAT_HAS_SUSFS_FEATURE_SELINUX_HIDE 只能由 susfs_compat.mk
+# 在编译 Makefile 解析时定义，触发条件是 security/selinux/hooks.c 里出现
+# ksu_selinux_hide_running（SUSFS 补丁注入）。add_kernelsu 阶段做静态检查时
+# SUSFS 还没打，看不出这个宏到底成不成立；只有补丁落地后复查 hooks.c 才抓得到
+# ——宏没定义时 ReSukiSU 的 ksu_patch_text 会照常编进来，和 SUSFS 的替换互相
+# 踩踏，表现就是 SELinux 隐藏失效，且只在真机上才暴露。
+verify_susfs_selinux_compat() {
+  local hooks_c="${KERNEL_ROOT}/security/selinux/hooks.c"
+  if [ ! -f "$hooks_c" ]; then
+    echo "::warning::未找到 ${hooks_c}，跳过 SELinux 兼容宏前置条件检查"
+    return 0
+  fi
+  if grep -q "ksu_selinux_hide_running" "$hooks_c"; then
+    echo "SELinux 兼容宏前置条件就绪：hooks.c 已含 ksu_selinux_hide_running"
+  else
+    echo "::warning::security/selinux/hooks.c 未找到 ksu_selinux_hide_running"
+    echo "  SUSFS 的 SELinux 补丁可能没打上，或该 SUSFS 分支换了符号名"
+    echo "  结果：KSU_COMPAT_HAS_SUSFS_FEATURE_SELINUX_HIDE 不会被定义，ReSukiSU 的"
+    echo "  ksu_patch_text 会与 SUSFS 的 my_* 替换冲突，SELinux 隐藏可能失效"
   fi
 }
 
