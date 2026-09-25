@@ -30,7 +30,7 @@ on:
           - ReSukiSU
           - Official
           - Next
-        default: SukiSU
+        default: ReSukiSU
       enable_susfs:
         description: "集成 SUSFS"
         required: false
