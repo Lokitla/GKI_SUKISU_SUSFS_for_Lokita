@@ -32,6 +32,13 @@ set -eo pipefail
 : "${USE_BBG:=false}"
 : "${USE_KPM:=false}"
 : "${USE_REKERNEL:=false}"
+# [移植] ReKernel-X（myflavor 对 Re-Kernel 的 fork），与上面的 Sakion 主线二选一。
+# 相对 Sakion 的实质差异：free-async（binder 异步事务去重）默认开启且不依赖上层
+# 设置 TF_UPDATE_TXN —— 它直接 kprobe 挂在 binder_proc_transaction 入口，在报文投递
+# 前遍历 node->async_todo 淘汰过期事务。Sakion 虽有同名 register_binder_cleanup()，
+# 但属于 CLEAN_UP_ASYNC_BINDER 宏保护、默认不编译，且走 tracepoint + 待处理哈希表，
+# 需要用户态配合才能实现去重。详见 docs/advanced-features.md。
+: "${USE_REKERNEL_X:=false}"
 # [移植] NoMount 挂载元模块，移植自上游 zzh20188/GKI_KernelSU_SUSFS commit 27e129e
 # （feat(ci): add optional NoMount metamodule integration，2026-09-19）。
 # NoMount 在 fs/ 下注册子系统，与 SUSFS sus_mount 各走各的路径，可和任意 KSU 变体共存。
@@ -109,6 +116,7 @@ export USE_BBR
 export USE_BBG
 export USE_KPM
 export USE_REKERNEL
+export USE_REKERNEL_X
 export USE_NOMOUNT
 export CVE_2026_43499_PATCH
 export EXPORT_SUSFS_PATCHES
@@ -153,6 +161,7 @@ stage_summary() {
   echo "BBG 补丁      : ${USE_BBG}"
   echo "KPM 功能      : ${USE_KPM}"
   echo "Re-Kernel     : ${USE_REKERNEL}"
+  echo "ReKernel-X    : ${USE_REKERNEL_X}"
   echo "NoMount       : ${USE_NOMOUNT}"
   echo "CVE-2026-43499: ${CVE_2026_43499_PATCH}"
   echo "SUSFS 集成补丁导出: ${EXPORT_SUSFS_PATCHES}"
@@ -2021,6 +2030,97 @@ run_apply_rekernel() {
   fi
 }
 
+stage_apply_rekernel_x() {
+  log_stage "apply_rekernel_x" "应用 ReKernel-X"
+  local _pwd="$PWD"
+  cd ${KERNEL_ROOT}
+  set -e
+
+  # 与 Sakion Re-Kernel 互斥。两者同时编译不会报错（各注册一份 android_vh_binder_*
+  # 回调，符号命名空间也不冲突），但用户态只能对接其中一个 genl family
+  # （Sakion="rekernel" / RKX="rekernel_x2"），同开等于装了两个没人听的实现。
+  # 这里让 Sakion 优先，避免误以为"两个都开更保险"。
+  if [ "$USE_REKERNEL" = "true" ]; then
+    echo "已启用 Sakion Re-Kernel，跳过 ReKernel-X（两者互斥）"
+    cd "$_pwd"
+    return 0
+  fi
+
+  echo "Integrating ReKernel-X..."
+  TMP_RKX=/tmp/rekernel_x
+  rm -rf "$TMP_RKX"
+  git clone --depth 1 https://github.com/myflavor/ReKernel-X.git "$TMP_RKX"
+
+  rm -rf common/drivers/rekernel_x
+  mkdir -p common/drivers/rekernel_x
+  cp -a "$TMP_RKX/LKM-Source/." common/drivers/rekernel_x/
+
+  # 外置 LKM Makefile → 内核内置。
+  # 注意 rekernel_x 是复合对象（rekernel_x-y 聚合了 10 个 .o），改的是那个容器目标，
+  # 不能把子目标逐个摊平，否则链接时找不到入口。
+  RKX_MAKEFILE="common/drivers/rekernel_x/Makefile"
+  sed -i 's/^obj-m := rekernel_x\.o$/obj-$(CONFIG_REKERNEL_X) += rekernel_x.o/' "$RKX_MAKEFILE"
+  sed -i 's/^obj-m += rekernel_x\.o$/obj-$(CONFIG_REKERNEL_X) += rekernel_x.o/' "$RKX_MAKEFILE"
+  grep -q '^obj-\$(CONFIG_REKERNEL_X) += rekernel_x\.o$' "$RKX_MAKEFILE" || {
+    echo "ReKernel-X Makefile 结构已变化，未识别到 rekernel_x 根目标，中止集成" >&2
+    exit 1
+  }
+
+  # 上游不提供 Kconfig：它只做外部 LKM / Magisk 模块（insmod rekernel_x-*.ko），
+  # 走 DDK 容器里的 make M=... modules，压根不需要 Kconfig。内置编译必须自己补。
+  cat > common/drivers/rekernel_x/Kconfig <<'KCONFIG_EOF'
+menu "ReKernel-X"
+
+config REKERNEL_X
+	bool "ReKernel-X module (tombstone / freeze helper)"
+	default n
+	help
+	  ReKernel-X is a fork of Re-Kernel maintained by myflavor. On top of the
+	  upstream feature set it enables an always-on free-async binder cleanup:
+	  a kprobe on binder_proc_transaction walks node->async_todo before delivery
+	  and drops superseded async transactions for frozen processes. Upstream
+	  Re-Kernel has the same idea behind CLEAN_UP_ASYNC_BINDER, but it is off by
+	  default and relies on the sender setting TF_UPDATE_TXN.
+
+	  Built into the kernel rather than shipped as a LKM because it includes
+	  drivers/android/binder_internal.h, which external modules cannot reach.
+
+	  Note the userspace side must speak the "rekernel_x2" Generic Netlink
+	  family; a daemon talking to the original "rekernel" family will not be
+	  able to connect.
+
+endmenu
+KCONFIG_EOF
+
+  # 挂载到驱动树
+  if ! grep -qF 'source "drivers/rekernel_x/Kconfig"' common/drivers/Kconfig; then
+    sed -i '/^endmenu$/i source "drivers/rekernel_x/Kconfig"' common/drivers/Kconfig
+  fi
+  if ! grep -qF 'obj-$(CONFIG_REKERNEL_X) += rekernel_x/' common/drivers/Makefile; then
+    echo 'obj-$(CONFIG_REKERNEL_X) += rekernel_x/' >> common/drivers/Makefile
+  fi
+
+  # include 路径无需改写 —— 和 Sakion 处理前的形态不同，上游 RKX 直接写的就是
+  #   #include "../android/binder_internal.h"
+  # 带引号的相对形式。放在 drivers/rekernel_x/ 下展开为 drivers/android/binder_internal.h，
+  # 正是 GKI 源码树里的实际位置。Sakion 那边用的是尖括号 <../android/...>，所以要 sed。
+  # 同样不需要 Sakion 那样的 seq_file.h 补丁：RKX 没用 DEFINE_SHOW_ATTRIBUTE。
+
+  # 配置 defconfig（幂等）
+  grep -q '^CONFIG_REKERNEL_X=y$' "$DEFCONFIG" || echo "CONFIG_REKERNEL_X=y" >> "$DEFCONFIG"
+
+  cd "$_pwd"
+}
+
+# 条件执行（等价原工作流 if:）
+run_apply_rekernel_x() {
+  if [ "$USE_REKERNEL_X" = "true" ]; then
+    stage_apply_rekernel_x "$@"
+  else
+    echo "跳过阶段: apply_rekernel_x（条件不满足）"
+  fi
+}
+
 stage_config_kernel() {
   log_stage "config_kernel" "配置内核选项"
   local _pwd="$PWD"
@@ -2929,6 +3029,7 @@ PHASES=(
   config_zram
   add_bbg
   apply_rekernel
+  apply_rekernel_x
   config_kernel
   config_susfs
   config_kernel_name
@@ -2965,7 +3066,7 @@ usage() {
 参数通过环境变量传入，常用:
   ANDROID_VERSION KERNEL_VERSION SUB_LEVEL OS_PATCH_LEVEL
   KSU_VARIANT KSU_MODE ENABLE_SUSFS USE_ZRAM USE_BBR USE_KPM
-  USE_BBG USE_REKERNEL USE_NOMOUNT SUPP_OP DROIDSPACES DROIDSPACES_NTSYNC
+  USE_BBG USE_REKERNEL USE_REKERNEL_X USE_NOMOUNT SUPP_OP DROIDSPACES DROIDSPACES_NTSYNC
   CVE_2026_43499_PATCH EXPORT_SUSFS_PATCHES ARTIFACT_UPLOAD_MODE
 EOF
 }
@@ -3067,4 +3168,3 @@ main() {
 }
 
 main "$@"
-

@@ -3,7 +3,7 @@
 不依赖 GitHub Actions，直接在本机构建内核。
 
 **本地与云端共用同一份构建逻辑** —— 入口 `build.py` 只做参数解析，真正的步骤全部在
-[`scripts/build_kernel.sh`](../scripts/build_kernel.sh) 里（46 个阶段）。两者行为完全一致，
+[`scripts/build_kernel.sh`](../scripts/build_kernel.sh) 里（47 个阶段）。两者行为完全一致，
 不存在两套维护分叉。
 
 > 改构建行为请改 `scripts/build_kernel.sh`，不要在 `.github/workflows/build.yml` 里重写 shell ——
@@ -82,6 +82,7 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 | `--kpm-patch-sha256` | KPM 修补工具（`patch_linux`）的 sha256 锚点。传入后做 **fail-closed** 比对，不符即拒绝执行（留空不校验） |
 | `--bbg` | 启用 Baseband-guard 防格机 |
 | `--rekernel` | 启用 Re-Kernel 驱动（墓碑/冻结支持） |
+| `--rekernel-x` | 启用 ReKernel-X（Re-Kernel 的 myflavor fork，异步事务去重默认开；与 `--rekernel` 互斥，同时给出时以 Re-Kernel 为准） |
 | `--nomount` | 启用 NoMount 挂载元模块，需自行刷入配套 NoMount 模块 |
 | `--op8e` | 启用一加 8E 支持（非一加设备勿开） |
 | `--cve-patch` | 应用 CVE-2026-43499（GhostLock）修复链 |
@@ -103,7 +104,7 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 
 ## 断点续建与单步调试
 
-构建分为 46 个阶段，`--list-phases` 可查看完整列表与编号。内核构建动辄数十分钟，
+构建分为 47 个阶段，`--list-phases` 可查看完整列表与编号。内核构建动辄数十分钟，
 全量重跑代价很高，用这两个参数可以只重跑出问题的那一段：
 
 ```bash

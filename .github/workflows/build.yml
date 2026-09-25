@@ -56,6 +56,13 @@ permissions:
         required: false
         type: boolean
         default: false
+      # [移植] ReKernel-X（myflavor 对 Re-Kernel 的 fork）。与 use_rekernel 互斥
+      # —— 两者同时为 true 时 build_kernel.sh 让 Sakion 优先，RKX 阶段自动跳过。
+      # 这里不做 fail-fast 而是降级，因为自动编排路径恒定传 false，报错反而是噪音。
+      use_rekernel_x:
+        required: false
+        type: boolean
+        default: false
       # [移植] 27e129e NoMount 挂载元模块。二进制布尔，默认关闭；由 kernel-a1*.yml /
       # kernel-custom.yml 透传。main.yml 因 workflow_dispatch 的 25 input 上限已满，
       # 暂不在手动界面暴露（编排路径恒定 false）。
@@ -228,6 +235,7 @@ jobs:
         USE_BBG: ${{ inputs.use_bbg }}
         USE_KPM: ${{ inputs.use_kpm }}
         USE_REKERNEL: ${{ inputs.use_rekernel }}
+        USE_REKERNEL_X: ${{ inputs.use_rekernel_x || false }}
         USE_NOMOUNT: ${{ inputs.use_nomount || false }}
         CVE_2026_43499_PATCH: ${{ inputs.cve_2026_43499_patch }}
         EXPORT_SUSFS_PATCHES: ${{ inputs.export_susfs_patches }}
@@ -326,6 +334,7 @@ jobs:
         USE_BBG: ${{ inputs.use_bbg }}
         USE_KPM: ${{ inputs.use_kpm }}
         USE_REKERNEL: ${{ inputs.use_rekernel }}
+        USE_REKERNEL_X: ${{ inputs.use_rekernel_x || false }}
         CVE_2026_43499_PATCH: ${{ inputs.cve_2026_43499_patch }}
         EXPORT_SUSFS_PATCHES: ${{ inputs.export_susfs_patches }}
         ENABLE_SUSFS: ${{ inputs.enable_susfs }}

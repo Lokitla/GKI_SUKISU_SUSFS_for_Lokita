@@ -60,9 +60,68 @@ kernel** (not as an external module), controlled by `CONFIG_REKERNEL`:
 - hooked into the driver tree via `source "drivers/rekernel/Kconfig"`
 - `CONFIG_REKERNEL=y` and `CONFIG_REKERNEL_NETWORK=y` are appended to the defconfig
 
-> **Why built-in:** Re-Kernel depends on internal symbols such as `kallsyms_lookup_name`, which
-> GKI hides from **external modules**. In-tree compilation can see them, so this repo builds it in
-> rather than shipping an LKM.
+> **Why built-in:** the real reason is that `rekernel_binder.c` needs to include
+> `drivers/android/binder_internal.h` — a **private kernel header** that external LKMs cannot
+> reach. Only in-tree compilation can reference the internal layouts of `struct binder_proc` /
+> `struct binder_buffer`.
+>
+> Note that being built-in solves the **header** problem, not symbol linkage:
+> binder's `binder_alloc_free_buf` / `binder_stats` / `binder_proc_dec_tmpref` are not
+> `EXPORT_SYMBOL`ed on GKI, and a built-in module cannot link against them either. Both
+> implementations (including ReKernel-X below) therefore resolve them at runtime through
+> `register_kprobe(&kp_kallsyms_lookup_name)` and call them via function pointers — the same
+> workaround either way, unrelated to being built-in.
+
+---
+
+## 🧪 ReKernel-X (experimental)
+
+> **TIPS:** [ReKernel-X](https://github.com/myflavor/ReKernel-X) is myflavor's fork of
+> Re-Kernel. This repo carries it as an **optional alternative** alongside the Sakion tree
+> above. It is a **beta experiment — not recommended for daily use**.
+
+### Real differences from Sakion
+
+Both share the same tracepoint + genl skeleton. There is essentially one meaningful difference:
+
+| | Sakion tree | ReKernel-X |
+|---|---|---|
+| genl family | `rekernel` | `rekernel_x2` |
+| Async txn dedup | `register_binder_cleanup()` exists but sits behind the `CLEAN_UP_ASYNC_BINDER` macro and is **not compiled by default**; it works via tracepoints + a pending hash table and needs the sender to set `TF_UPDATE_TXN` | free-async **on by default**: a kprobe on `binder_proc_transaction` walks `node->async_todo` before delivery and drops superseded transactions |
+| Dedup granularity | no configuration interface | per `rpc_name` + `code` policy via genl (`SKIP` / `BY_CODE` / `BY_DATA`) |
+| Userspace side | third-party daemon | ships an Android AAR (`ReKernelX.java` + JNI) |
+
+So RKX's value is that it **deduplicates proactively without cooperation from above**, not that
+it adds many more features.
+
+### How to enable
+
+| Entry point | Argument |
+|---|---|
+| Actions (single-version workflows) | `use_rekernel_x` (**off** by default) |
+| Local CLI | `--rekernel-x` |
+
+> ⚠️ **Mutually exclusive**: passing both `--rekernel` and `--rekernel-x` makes **Re-Kernel win**
+> and silently skips the ReKernel-X phase. This degrades instead of failing fast because the
+> orchestration path always passes `false`, where erroring would only be noise.
+>
+> ⚠️ **Userspace incompatibility**: with RKX the kernel speaks `rekernel_x2` only, so a daemon
+> written for the `rekernel` family will not connect. Check which protocol your userspace uses
+> before switching.
+
+### Implementation notes
+
+Sources land in `common/drivers/rekernel_x/` and are built in, gated by `CONFIG_REKERNEL_X`:
+
+- `obj-m += rekernel_x.o` → `obj-$(CONFIG_REKERNEL_X) += rekernel_x.o`
+  (`rekernel_x` is a composite object aggregating 10 `.o` files — only the container target is
+  rewritten; flattening the sub-objects would lose the entry point)
+- **The Kconfig is written by this repo**: upstream only ships an external LKM / Magisk module
+  (`make M=...` inside a DDK container) and carries no Kconfig at all
+- No include-path rewrite is needed — upstream already uses the quoted
+  `"../android/binder_internal.h"`, which resolves to `drivers/android/binder_internal.h` from
+  `drivers/rekernel_x/`
+- Likewise no `seq_file.h` patch is needed here: RKX does not use `DEFINE_SHOW_ATTRIBUTE`
 
 ---
 

@@ -348,7 +348,7 @@ python3 build.py --android android14 --kernel 6.1 --sub-level 124 --os-patch 202
 
 | 路径 | 用途 |
 |---|---|
-| `scripts/build_kernel.sh` | **构建逻辑唯一来源**，46 个阶段；Actions 与本地 `build.py` 都调它 |
+| `scripts/build_kernel.sh` | **构建逻辑唯一来源**，47 个阶段；Actions 与本地 `build.py` 都调它 |
 | `build.py` | 本地 CLI 入口，只负责参数解析与调用 `scripts/build_kernel.sh` |
 | `.github/workflows/build.yml` | 可复用构建工作流，只保留缓存/产物/日志/通知等 Actions 专属能力 |
 | `.github/workflows/main.yml` | 「构建内核」总入口，负责展开版本矩阵并调用 `build.yml` |

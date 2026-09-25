@@ -130,6 +130,9 @@ def build_env(args, android, kernel, sub_level, os_patch):
         "USE_KPM": KPM_MODES.get(args.kpm or "", "disabled (关闭)"),
         "USE_BBG": str(args.bbg).lower(),
         "USE_REKERNEL": str(args.rekernel).lower(),
+        # [移植] ReKernel-X：myflavor 对 Re-Kernel 的 fork。与 Sakion 主线互斥，
+        # 两者同时为 true 时 build_kernel.sh 让 Sakion 优先（见 apply_rekernel_x）。
+        "USE_REKERNEL_X": str(getattr(args, "rekernel_x", False)).lower(),
         # [移植] NoMount 挂载元模块：与 Actions 的 use_nomount 对齐，
         # 否则本地 CLI 无法开启该阶段（USE_NOMOUNT 恒为 false）。
         "USE_NOMOUNT": str(getattr(args, "nomount", False)).lower(),
@@ -204,6 +207,12 @@ def main():
                         "传入后做 fail-closed 比对，不符即拒绝执行（留空则不校验）")
     parser.add_argument("--bbg", action="store_true", help="启用 Baseband-guard")
     parser.add_argument("--rekernel", action="store_true", help="启用 Re-Kernel")
+    parser.add_argument(
+        "--rekernel-x",
+        action="store_true",
+        dest="rekernel_x",
+        help="启用 ReKernel-X（与 --rekernel 互斥，同时给出时以 Re-Kernel 为准）",
+    )
     parser.add_argument("--nomount", action="store_true", help="启用 NoMount 挂载元模块")
     parser.add_argument("--no-susfs", action="store_true", help="禁用 SUSFS")
     parser.add_argument("--op8e", action="store_true", help="启用一加 8E 支持（非一加勿开）")

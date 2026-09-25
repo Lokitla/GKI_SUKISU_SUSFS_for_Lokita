@@ -57,9 +57,61 @@ GhostLock 是影响 Linux 内核的一组高风险漏洞，包括 `CVE-2026-4349
 - 通过 `source "drivers/rekernel/Kconfig"` 挂进驱动树
 - defconfig 追加 `CONFIG_REKERNEL=y` 与 `CONFIG_REKERNEL_NETWORK=y`
 
-> **为什么要内置：** Re-Kernel 依赖 `kallsyms_lookup_name` 等内核内部符号，
-> 而 GKI 对**外部模块**隐藏这些符号。走 in-tree 内置编译可以看到它们，
-> 所以本仓库采用内置方式而非 LKM。
+> **为什么要内置：** 真实原因是 `rekernel_binder.c` 需要 include
+> `drivers/android/binder_internal.h` —— 这是**内核私有头文件**，外部 LKM 拿不到。
+> 走 in-tree 内置编译才能引用 `struct binder_proc` / `struct binder_buffer` 等内部布局。
+>
+> 注意「内置」解决的是**头文件**问题，不是符号链接问题：
+> binder 的 `binder_alloc_free_buf` / `binder_stats` / `binder_proc_dec_tmpref` 等
+> 在 GKI 里并未 `EXPORT_SYMBOL`，内置模块也一样链接不到。所以两者（含下文的
+> ReKernel-X）清一色用 `register_kprobe(&kp_kallsyms_lookup_name)` 反查拿到地址，
+> 再转成函数指针调用 —— 这是同一套运行时绕过手段，与内置与否无关。
+
+---
+
+## 🧪 ReKernel-X（实验性）
+
+> **TIPS：** [ReKernel-X](https://github.com/myflavor/ReKernel-X) 是 Re-Kernel 的
+> myflavor fork。本仓库把它作为**可选替代实现**移植进来，与上面的 Sakion 主线并存，
+> 目前处于 beta 实验阶段，**不建议日常使用**。
+
+### 与 Sakion 主线的实际差异
+
+两者共用同一套 tracepoint + genl 骨架，真正的差别在一个点上：
+
+| | Sakion 主线 | ReKernel-X |
+|---|---|---|
+| genl family | `rekernel` | `rekernel_x2` |
+| 异步事务去重 | `register_binder_cleanup()` 存在，但受 `CLEAN_UP_ASYNC_BINDER` 宏保护，**默认不编译**；且走 tracepoint + 待处理哈希表，需要发送端设置 `TF_UPDATE_TXN` 才生效 | free-async **默认开启**，直接 kprobe 挂在 `binder_proc_transaction` 入口，投递前遍历 `node->async_todo` 淘汰过期事务 |
+| 去重粒度 | 无配置接口 | 通过 genl 配置 `rpc_name` + `code` → 策略（`SKIP` / `BY_CODE` / `BY_DATA`） |
+| 配套用户态 | 第三方 daemon | 仓库自带 Android AAR（`ReKernelX.java` + JNI） |
+
+也就是说 RKX 的价值在于**不依赖上层配合就能主动去重**，而不是"多了一堆功能"。
+
+### 开启方式
+
+| 入口 | 参数 |
+|---|---|
+| Actions（单版本工作流） | `use_rekernel_x`（**默认关闭**） |
+| 本地 CLI | `--rekernel-x` |
+
+> ⚠️ **两者互斥**：同时给出 `--rekernel` 与 `--rekernel-x` 时**以 Re-Kernel 为准**，
+> ReKernel-X 阶段会自动跳过。不做 fail-fast 是因为编排路径恒定传 `false`，报错反而是噪音。
+>
+> ⚠️ **用户态不兼容**：换成 RKX 后内核只说 `rekernel_x2` 协议，原来对接
+> `rekernel` family 的 daemon 会连不上。评估前先确认你的用户态用哪个。
+
+### 实现说明
+
+源码在构建期拉到 `common/drivers/rekernel_x/`，由 `CONFIG_REKERNEL_X` 控制内置：
+
+- `obj-m += rekernel_x.o` → `obj-$(CONFIG_REKERNEL_X) += rekernel_x.o`
+  （`rekernel_x` 是聚合了 10 个 `.o` 的复合对象，只改容器目标，不能把子目标摊平）
+- **Kconfig 由本仓库补写**：上游只做外部 LKM / Magisk 模块（DDK 容器里 `make M=...`），
+  压根不带 Kconfig，内置编译必须自己补一个
+- include 路径无需改写 —— 上游写的是带引号的 `"../android/binder_internal.h"`，
+  从 `drivers/rekernel_x/` 展开正好命中 `drivers/android/binder_internal.h`
+- 同样不需要 Sakion 那样的 `seq_file.h` 补丁：RKX 没用 `DEFINE_SHOW_ATTRIBUTE`
 
 ---
 

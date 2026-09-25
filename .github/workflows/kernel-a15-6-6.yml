@@ -80,6 +80,11 @@ on:
         required: false
         type: boolean
         default: false
+      use_rekernel_x:
+        description: "启用 ReKernel-X（与 Re-Kernel 互斥，同时开以 Re-Kernel 为准）"
+        required: false
+        type: boolean
+        default: false
       use_nomount:
         description: "启用 NoMount 挂载元模块"
         required: false
@@ -296,6 +301,7 @@ jobs:
       use_bbg: ${{ inputs.use_bbg }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel || false }}
+      use_rekernel_x: ${{ inputs.use_rekernel_x || false }}
       use_nomount: ${{ inputs.use_nomount || false }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches || false }}

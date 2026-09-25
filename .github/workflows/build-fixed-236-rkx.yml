@@ -1,0 +1,70 @@
+name: 固定构建-5.10.236-ReKernelX（实验）
+
+# =============================================================================
+# ReKernel-X 移植验证专用：与 build-fixed-236.yml 唯一的区别是把
+# use_rekernel_x 打开，其余参数完全一致，便于对照。
+#
+#   基线  build-fixed-236.yml      use_rekernel: false / use_rekernel_x: false
+#   实验  build-fixed-236-rkx.yml  use_rekernel: false / use_rekernel_x: true  ← 本文件
+#
+# 单独开文件而不是临时改 build-fixed-236.yml：
+#   后者是长期对照组，改动它会污染基线，历史产物也就失去可比性。
+#
+# 本 workflow 只验证「RKX 能否编进内核」，不验证运行时行为 ——
+# kprobe 是否真的挂上、genl family 是否注册成功，得刷机后看 dmesg。
+# =============================================================================
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+# 与基线互不干扰，各自独立的并发组
+concurrency:
+  group: fixed-build-236-rkx
+  cancel-in-progress: false
+
+jobs:
+  build-fixed:
+    name: "5.10.236-android12-2025-05 / RKX"
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      android_version: "android12"
+      kernel_version: "5.10"
+      sub_level: "236"
+      os_patch_level: "2025-05"
+      revision: "r1"
+      ksu_variant: "SukiSU"
+      # ksu_mode 不传：build.yml 默认「关闭」= 正常集成 KernelSU
+      version: "5.10.236-android12-9-00003-gfb24cf99ad97-ab14313284"
+      build_time: "Tue Oct 21 03:03:12 UTC 2025"
+      use_zram: true
+      use_bbr: true
+      use_bbg: false
+      use_kpm: "patched (开启并修补)"
+      use_rekernel: false
+      # [实验] ReKernel-X：myflavor fork，与上面的 use_rekernel 互斥（同开时 Sakion 优先）
+      use_rekernel_x: true
+      cve_2026_43499_patch: false
+      enable_susfs: true
+      export_susfs_patches: true
+      supp_op: false
+      droidspaces: "不启用"
+      droidspaces_ntsync: false
+      artifact_upload_mode: "上传全部"
+      send_telegram: false
+      use_release_cache: false
+      sukisu_commit: ""
+      susfs_commit: ""
+      kpm_patch_sha256: ""
+
+  get-ksu-manager:
+    uses: ./.github/workflows/get-manager.yml
+    secrets: inherit
+    with:
+      kernelsu_variant: "SukiSU"
+      manager_spoofed: true
+      sukisu_commit: ""
