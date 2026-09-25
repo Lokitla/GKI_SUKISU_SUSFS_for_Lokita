@@ -213,13 +213,11 @@ if [[ -f fs/statfs.c ]] && grep -qF 'susfs_sus_kstat_spoof_vfs_statfs(' fs/statf
   fi
 fi
 
-# 上游 susfs.c 直接调用 security_sb_statfs 却没有包含 linux/security.h，
-# 5.15+ 靠其他头文件间接带入，5.10 没有这条路径，clang -Werror 报隐式声明；缺失时补上
-if [[ -f fs/susfs.c ]] && grep -qF 'security_sb_statfs(' fs/susfs.c \
-  && ! grep -qF '#include <linux/security.h>' fs/susfs.c; then
-  echo "为 susfs.c 补充 linux/security.h 头文件"
-  sed -i '0,/^#include <linux\/fs.h>$/s//#include <linux\/fs.h>\n#include <linux\/security.h>/' fs/susfs.c
-fi
+# 原此处有一段「给 fs/susfs.c 补 #include <linux/security.h>」的兜底，可追溯为
+# 三仓融合时从 zzh 继承的原样代码（zzh 已在 613a8f0 删除同款实现）。当时保留它
+# 是因为上游 susfs.c 未包含该头文件、5.10 上会 clang -Werror 报隐式声明；而
+# 实测 kernel_patches/fs/susfs.c 的两个分支现已自带该 include，判断恒为假、属
+# 死代码，故此处一并移除。
 
 # 6.12.69+ 的 show_smap 上下文漂移：上游把 show_smap 里的 vma_pages() 换成了
 # vma_data_pages()，SUSFS 补丁中「smaps 隐藏 sus_map 文件」的那段 hunk 因此失配被拒，
