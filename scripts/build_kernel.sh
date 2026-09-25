@@ -2301,10 +2301,13 @@ block = (
     "/* 补记：KernelSU 上游写死传字符串字面量 \"ksu\"。\n"
     "   内核 v6.10 起 security_add_hooks 第三参改成了 const struct lsm_id *lsmid，\n"
     "   传字符串会类型不匹配直接编不过（v5.19~v6.6 还是 const char *，\n"
-    "   旧写法在那几个版本能凑合编过）。这里按内核版本补实参宏。 */\n"
+    "   旧写法在那几个版本能凑合编过）。这里按内核版本补实参宏。\n"
+    "   字段是 name 不是 lsm：struct lsm_id 自 v6.9 起就是\n"
+    "   `{ const char *name; u64 id; }`，security_add_hooks 内部只读 lsmid->name。\n"
+    "   id 保持默认 0（上游也没给），本路径不读它。 */\n"
     "#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 10, 0)\n"
     "static const struct lsm_id ksu_lsm_id = {\n"
-    '    .lsm = "ksu"\n'
+    '    .name = "ksu"\n'
     "};\n"
     "#define KSU_LSM_ARG (&ksu_lsm_id)\n"
     "#else\n"
