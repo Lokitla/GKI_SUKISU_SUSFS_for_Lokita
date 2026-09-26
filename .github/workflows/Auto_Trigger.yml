@@ -250,11 +250,14 @@ jobs:
               TARGET_WF="main.yml"
               ;;
             "固定 5.10.236")
-              # 走专用的固定 workflow（build-fixed-236.yml）：那边的参数全部写死，
+              # 走专用的固定 workflow（build-236-marble.yml）：那边的参数全部写死，
               # 不需要传任何 inputs，所以载荷只有 ref。产物留在 Actions artifacts，
               # 不发 Release —— 它没有经过负责 gh release create 的 main.yml 编排层。
+              # 该文件由原 build-fixed-236.yml 改名而来，参数另有一套自用取向
+              # （ReSukiSU + zram + 网络增强 + rek + nomount，适配 marble）。
+              # 改文件名或删它时，必须同步改这里的 TARGET_WF，否则 dispatch 会 404。
               jq -n --arg ref "$REF_NAME" '{ ref: $ref }' > /tmp/dispatch.json
-              TARGET_WF="build-fixed-236.yml"
+              TARGET_WF="build-236-marble.yml"
               ;;
             *)
               # 单版本冒烟走「Android 内核构建-自定义」(kernel-custom.yml)：
