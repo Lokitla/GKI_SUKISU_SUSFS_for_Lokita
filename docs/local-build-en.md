@@ -3,7 +3,7 @@
 Build the kernel on your own machine, without GitHub Actions.
 
 **Local and CI share the same build logic** — `build.py` only parses arguments; every real step
-lives in [`scripts/build_kernel.sh`](../scripts/build_kernel.sh) (46 phases). Both behave
+lives in [`scripts/build_kernel.sh`](../scripts/build_kernel.sh) (47 phases). Both behave
 identically, so there is no second implementation to keep in sync.
 
 > Change build behaviour in `scripts/build_kernel.sh`, never by rewriting shell inside
@@ -28,7 +28,7 @@ identically, so there is no second implementation to keep in sync.
 # List supported version combos (data comes from data/)
 python3 build.py --list-configs
 
-# List all 46 build phases
+# List all 47 build phases
 python3 build.py --list-phases
 
 # Build a single version
@@ -82,6 +82,8 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 | `--kpm-patch-sha256` | sha256 anchor for the KPM patch tool (`patch_linux`). When set it is checked **fail-closed** — a mismatch aborts the build (blank = no check) |
 | `--bbg` | Enable Baseband-guard |
 | `--rekernel` | Enable the Re-Kernel driver (tombstone/freeze support) |
+| `--net-enhance` | Enable network enhancement (full IPSet types + BBR + FQ/FQ_CODEL qdisc + IPv6 NAT + extra congestion algorithms; all are pre-existing kernel options) |
+| `--skip-incompatible` | Skip optional features that fail instead of aborting the build (SUSFS and OnePlus 8E are never skipped) |
 | `--nomount` | Enable the NoMount mount meta-module; the matching NoMount module must be flashed separately |
 | `--op8e` | Enable OnePlus 8E support (do not enable on other devices) |
 | `--cve-patch` | Apply the CVE-2026-43499 (GhostLock) fix chain |
@@ -103,7 +105,7 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 
 ## Resuming and single-step debugging
 
-The build is split into 46 phases; `--list-phases` prints the full numbered list. A kernel build
+The build is split into 47 phases; `--list-phases` prints the full numbered list. A kernel build
 takes tens of minutes, so rerunning everything is expensive — use these two flags to rerun only
 what broke:
 
