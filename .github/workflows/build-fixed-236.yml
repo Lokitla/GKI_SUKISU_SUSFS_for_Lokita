@@ -1,8 +1,10 @@
-name: 固定构建-5.10.236（SukiSU+zram+bbr / 伪装版本）
+name: 固定构建-5.10.236（ReSukiSU+zram+bbr / 伪装版本）
 
 # =============================================================================
 # 参数全写死的个人专用构建：不带任何 inputs，触发即跑固定配置。
-#   5.10.236-android12-2025-05 / SukiSU + SUSFS / KPM 修补 / zram 与 bbr 启用
+#   5.10.236-android12-2025-05 / ReSukiSU + SUSFS / zram 与 bbr 启用
+#   注：ReSukiSU 内核不提供 KPM，use_kpm 的「patched」不会写进 defconfig，
+#   KPM 修补阶段也会被跳过——这是变体限制，不是配置失效。
 #   版本名与构建时间固定为伪装串（见下方 with: 的 version / build_time）
 #
 # 为什么单独开一个文件、而不是给 kernel-custom.yml 传参：
@@ -45,7 +47,7 @@ jobs:
       sub_level: "236"
       os_patch_level: "2025-05"
       revision: "r1"
-      ksu_variant: "SukiSU"
+      ksu_variant: "ReSukiSU"
       # ksu_mode 不传：build.yml 默认「关闭」= 正常集成 KernelSU
       version: "5.10.236-android12-9-00003-gfb24cf99ad97-ab14313284"
       build_time: "Tue Oct 21 03:03:12 UTC 2025"
@@ -71,6 +73,6 @@ jobs:
     uses: ./.github/workflows/get-manager.yml
     secrets: inherit
     with:
-      kernelsu_variant: "SukiSU"
+      kernelsu_variant: "ReSukiSU"
       manager_spoofed: true
       sukisu_commit: ""
