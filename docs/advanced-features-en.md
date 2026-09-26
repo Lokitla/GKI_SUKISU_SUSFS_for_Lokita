@@ -60,6 +60,37 @@ kernel** (not as an external module), controlled by `CONFIG_REKERNEL`:
 - hooked into the driver tree via `source "drivers/rekernel/Kconfig"`
 - `CONFIG_REKERNEL=y` and `CONFIG_REKERNEL_NETWORK=y` are appended to the defconfig
 
+---
+
+## 🌐 Network enhancement (optional)
+
+Enables a batch of **pre-existing kernel** networking capabilities. No third-party code
+is involved — everything is written into the defconfig:
+
+| Category | Contents |
+|---|---|
+| Congestion control | `CONFIG_TCP_CONG_BBR=y` + `CONFIG_DEFAULT_BBR=y` (BBR becomes the default), plus BIC / CUBIC / WESTWOOD / HTCP built in |
+| Queueing disciplines | `CONFIG_NET_SCH_FQ=y`, `CONFIG_NET_SCH_FQ_CODEL=y` |
+| IPSet | `CONFIG_IP_SET=y`, `CONFIG_IP_SET_MAX=65534`, and every bitmap / hash / list type |
+| Netfilter | `CONFIG_NETFILTER_XT_SET`, `CONFIG_NETFILTER_XT_MATCH_ADDRTYPE` |
+| IPv6 NAT | `CONFIG_IP6_NF_NAT=y`, `CONFIG_IP6_NF_TARGET_MASQUERADE=y` |
+
+**Why built-in (`=y`) rather than module (`=m`)**: BIC / WESTWOOD / HTCP default to `m`
+in the mainline Kconfig. Built as modules they produce `tcp_bic.ko` and friends, which
+GKI's `module_outs` does not declare — bazel fails outright. This stage therefore rewrites
+any existing `=m` to `=y`.
+
+**How to enable**
+
+| Entry point | Parameter |
+|---|---|
+| Actions | `use_net_enhance` (**off** by default) |
+| Local CLI | `--net-enhance` |
+
+> You still need a userspace `ipset` tool: the kernel provides the capability only.
+> `CONFIG_IP_SET_MAX=65534` sits inside the kernel Kconfig range (2–65534), so no source
+> change is required.
+
 > **Why built-in:** Re-Kernel depends on internal symbols such as `kallsyms_lookup_name`, which
 > GKI hides from **external modules**. In-tree compilation can see them, so this repo builds it in
 > rather than shipping an LKM.

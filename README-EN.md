@@ -9,7 +9,7 @@
 >
 > - This repository is a **personal derivative (fork)** of [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS). The vast majority of the core work — build matrix, scripts, patch adaptation — **was done by the upstream author**; this repo only integrates it for personal use. All credit belongs upstream.
 > - Workflows, build scripts and docs here were **modified with AI assistance** and have **not been reviewed, endorsed or contributed to by any upstream author**; behaviour may differ from upstream. The upstream authors take no responsibility for anything in this repository.
-> - Builds are for the owner's own testing and are **not an official distribution channel**; for official releases go to [zzh's original repo](https://github.com/zzh20188/GKI_KernelSU_SUSFS/releases).
+> - Builds are for the owner's own testing and are **not an official distribution channel**; for official releases go to [zzh20188's original repo](https://github.com/zzh20188/GKI_KernelSU_SUSFS/releases).
 > - Flashing third-party kernels risks bricking, data loss and app integrity-check failures. Back up your stock boot image and proceed at your own risk.
 > - The docs site (GitHub Pages) uses [GoatCounter](https://www.goatcounter.com/) for anonymous visit stats, hosted at `zzh20188.goatcounter.com`; it collects no personally identifiable information. Disable JavaScript or block `gc.zgo.at` to opt out.
 > - Please report issues **here** and never contact the upstream authors about them (no issues, emails or Coolapk DMs).
@@ -60,13 +60,13 @@ English | [**简体中文**](README.md)
 
 | Capability | Description | Default |
 |---|---|---|
-| KernelSU variant | `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` | `SukiSU` |
+| KernelSU variant | `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` | `ReSukiSU` |
 | SUSFS | SUSFS patch set with inline hook support | On |
-| KPM | Patch `Image` after compilation so KPM modules can load (unsupported on 6.6) | `patched` (on + patched) |
+| KPM | Patch `Image` after compilation so KPM modules can load (unsupported on 6.6) | `patched` (on + patched) ‡ |
 | Hook type | SUSFS Inline Hooks — hand-written syscall interception at compile time, no kprobe traces | — |
 | Magic Mount | SukiSU default mount mode | On |
-| ZRAM / LZ4KD | Enhanced ZRAM algorithm | **On** |
-| BBR | Set as the default congestion algorithm | Off |
+| ZRAM / LZ4KD | Enhanced ZRAM algorithm (LZ4KD / LZ4K_OPLUS); on 6.12 the whole block is skipped with a warning (no lz4k patch stack) | On (see note 3) |
+| BBR | Set as the default congestion algorithm (the script opens the `TCP_CONG_ADVANCED` gate first, see note 4) | Off |
 | BBG | Baseband-guard anti-wipe protection | Off |
 | Re-Kernel | Re-Kernel driver | Off |
 | NoMount | Mount metamodule: integrates [maxsteeel/NoMount](https://github.com/maxsteeel/nomount) at the `fs/` layer. It takes a different path from SUSFS sus_mount and coexists with any KSU variant; flash the matching NoMount module yourself | Off |
@@ -78,8 +78,33 @@ English | [**简体中文**](README.md)
 | Telegram notification | Push a notification when the build finishes | On |
 | Custom build time | Pin the kernel `UTS_VERSION` timestamp | Empty |
 
-> Apart from SukiSU, SUSFS, KPM, the spoofed manager and Telegram notifications, every
-> other toggle defaults to off, matching the defaults of ShirkNeko's **original repository**.
+> Apart from the ReSukiSU variant, SUSFS, the spoofed manager, Telegram notifications
+> and ZRAM, every other toggle defaults to off.
+>
+> Note 1 · Variant: the default has been switched from `SukiSU` to `ReSukiSU` (no extra
+> upstream branch to fetch, faster builds). The `kernelsu_variant` / `ksu_variant` default
+> was updated across all 11 workflow entries, in `scripts/build_kernel.sh`, and in the docs.
+>
+> Note 2 · KPM is inert under the default variant: only SukiSU builds provide it — ReSukiSU,
+> Official and Next have no `config KPM` in their Kconfig. The related stages are skipped
+> automatically, so the build still succeeds but KPM modules cannot load. Switch back to
+> `SukiSU` if you need KPM.
+>
+> Note 3 · ZRAM defaults by layer: the build script itself falls back to `false`
+> (`USE_ZRAM:=false` in `build_kernel.sh`, only when nobody passes a value);
+> the local CLI (`build.py --zram`, `--no-zram` to disable) and **all** Actions
+> entries (each `kernel-*.yml`, `kernel-custom.yml`, and the `main.yml` full matrix)
+> default to `true`. With it on, the LZ4KD / LZ4K_OPLUS patch stack is applied.
+> 6.12 has no lz4k patch stack, so even when enabled it is skipped entirely with a
+> warning (see the "Auto trigger" section below).
+>
+> Note 4 · BBR gating: the 5.10 / 5.15 / 6.1 / 6.12 gki_defconfig baselines lack
+> `CONFIG_TCP_CONG_ADVANCED`, and Kconfig wraps `TCP_CONG_BBR` / `DEFAULT_BBR` inside
+> `if TCP_CONG_ADVANCED` — without the gate those lines are dead config. The script
+> writes `TCP_CONG_ADVANCED=y` first, then BBR, and also sets
+> `TCP_CONG_BIC / WESTWOOD / HTCP` to `=y` (they default to `m`; forcing `=y` avoids
+> undeclared `.ko` outputs on the bazel path). The 6.6 baseline already has the gate,
+> so this is idempotent there.
 
 ---
 
@@ -116,6 +141,12 @@ Try `boot-lz4.img` first on modern devices; if it hangs on the first screen, swi
 
 > **Note:** OnePlus ColorOS 14/15 is currently not supported. A data wipe may be required after flashing.
 
+> **6.12:** this patch set adds a compatibility fix for the new `security_add_hooks`
+> signature introduced in 6.10+, so 6.12 is no longer a hard build failure. However the
+> automatic build matrix does not contain 6.12 — to build it, manually trigger the
+> standalone "内核构建 - Android 16 (6.12)" entry (6.12.23 / 30 / 38 / 58; KPM and ZRAM
+> are auto-skipped on 6.12). See the section below.
+
 > **rekernel feature (beta): rekernel feature is now supported (currently in beta)**
 
 
@@ -141,7 +172,7 @@ This repo keeps its documentation in [`docs/`](docs/), reviewed and updated toge
 
 ---
 
-## 🆕 Capabilities Added on Top of Upstream zzh
+## 🆕 Capabilities Added on Top of Upstream zzh20188
 
 On top of [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS), this repository ports
 the following features from
@@ -150,11 +181,11 @@ the following features from
 | Capability | Description | How to enable |
 |---|---|---|
 | **Local CLI build** | Build without Actions, sharing the same script as CI | `python3 build.py ...` |
-| **BBR congestion control** | Set BBR as the default TCP congestion algorithm | Actions: `use_bbr`; CLI: `--bbr` |
+| **BBR congestion control** | Set BBR as the default TCP congestion algorithm; includes the `TCP_CONG_ADVANCED` gate pre-write (see note 4) | Actions: `use_bbr`; CLI: `--bbr` |
 | **Telegram notification** | Push build results and checksums to Telegram | Actions: `send_telegram` |
 | **Release cache** | Store ccache in GitHub Releases, bypassing `actions/cache` size and expiry limits | Actions: `use_release_cache` |
 | **Spoofed manager toggle** | Choose whether to also fetch the SukiSU manager APK disguised as the official KernelSU package name | Actions: `manager_spoofed` |
-| **KPM image patching** | Patch `Image` after compilation so KPM modules can load (ported from ShirkNeko's `patch_kpm_image`); 5.x and 6.1, skipped on 6.6 | Actions: `use_kpm` → `enabled` / `patched` |
+| **KPM image patching** | Patch `Image` after compilation so KPM modules can load (ported from ShirkNeko's `patch_kpm_image`); skipped on 6.6 and on non-SukiSU variants (`ReSukiSU` / `Official` / `Next`) | Actions: `use_kpm` → `enabled` / `patched` |
 | **Split manager artifacts** | The normal and Spoofed managers are uploaded as two separate artifacts instead of one combined archive | Always on |
 | **Standalone SUSFS switch** | The three-state "KernelSU / SUSFS mode" picker is now a simple "Integrate SUSFS" checkbox (plain GKI is no longer offered) | Actions: `enable_susfs` |
 
@@ -164,10 +195,10 @@ on the **main branch of [ShirkNeko/GKI_KernelSU_SUSFS](https://github.com/ShirkN
 
 | Option | This fork | ShirkNeko upstream |
 |---|---|---|
-| KernelSU variant | **`SukiSU`** | `Stable` (no variant picker) |
+| KernelSU variant | **`ReSukiSU`** | `Stable` (no variant picker) |
 | Integrate SUSFS | **On** | built in, no separate switch |
 | KPM | **`patched`** (enabled + image patching) | `true` |
-| ZRAM (LZ4KD) | **On** | `false` |
+| ZRAM (LZ4KD) | **On** (all Actions entries and the local CLI) | `false` |
 | BBG security patch | **Off** | `false` |
 | CVE-2026-43499 fix | **Off** | not offered upstream (kept here as an option) |
 | BBR congestion control | Off | `false` |
@@ -202,20 +233,59 @@ compares it against the value recorded on this repository's `sha` branch:
 2. No new commit → do nothing, no runner minutes burned;
 3. Commit SHA unavailable (API rate limit) → fail fast instead of building with an empty value.
 
-**By default the full matrix runs**: 5.10 + 5.15 + 6.1 + 6.6 —
-**22 + 20 + 23 + 15 = 80 kernel versions**, matching what upstream zzh publishes per Release.
-> Note: the above covers only the default-enabled 5.10–6.6 matrix; ticking `include_612` adds 6.12's 4 versions.
-> The `data/` directory holds **126** version definitions in total (5.10=36 / 5.15=35 / 6.1=32 / 6.6=16 / 6.12=7);
-> a local `build.py --all` builds from this full set.
-The build config is fixed at **KPM `patched` (on + patched) + ZRAM (LZ4KD) on**, with the other
+**By default the full matrix runs** via `main.yml`, but the actual combination count is
+decided by the **`auto` slim matrix** in `.github/workflows/config/matrix.json`:
+**5.10=5 / 5.15=6 / 6.1=5 / 6.6=3 — 19 kernel versions in total** (a few representative
+sub-levels plus LTS per version).
+> Note: the `data/` directory holds **127** version definitions in total (5.10=36 / 5.15=35 / 6.1=32 / 6.6=16 / 6.12=8);
+> that is the full "every available version" set, on which a local `build.py --all` and each
+> single-version entry's `full` matrix (22/20/23/15/4, 84 total) are based. The 19 auto-triggered
+> builds are the `auto` matrix subset.
+The build config is fixed at **variant `ReSukiSU` (so KPM stages are skipped) + ZRAM (LZ4KD) on**, with the other
 enhancements (BBG / Re-Kernel / BBR, etc.) off.
 Pick `单版本冒烟` for a quick run that builds just 5.10.66.
 
-**6.12 is excluded by default**: current SukiSU mainline does not compile on 6.12 —
-`security_add_hooks` takes a `const struct lsm_id *` on 6.12 while SukiSU still passes a
-string (`hook/lsm_hook.c:191`), and disabling KPM does not help either. This is an upstream
-issue; enable it again by ticking `include_612` once SukiSU fixes it or if you switch to the
-legacy variants (40726 / 40548) — no code change needed.
+**6.12 is excluded by default** (it is not in the auto matrix — ticking `include_612`
+will not build it, see below). It has three hurdles; the first two are cleared:
+
+`security_add_hooks` took a `const struct lsm_id *` starting with v6.10, while the KernelSU
+variants still pass a string literal
+(`security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu")` in `hook/lsm_hook.c`).
+The patch stage fills in the argument macro per kernel version: `&ksu_lsm_id` with
+`.name = "ksu"` for v6.10 and newer, the plain string for older kernels — verified by run
+`36198392724`, which compiled past `lsm_hook.c` cleanly.
+
+The second hurdle is KPM: SukiSU's `drivers/kernelsu/kpm/super_access.c` uses
+`netlink_kernel_cfg.cb_mutex` and `DYNAMIC_STRUCT_END(netlink_kernel_cfg)`, which do not
+compile on 6.10+ (`no member named 'cb_mutex' in 'struct netlink_kernel_cfg'`).
+**KPM is switched off automatically** instead of burning a doomed build: when
+`KERNEL_VERSION >= 6.10` and KPM is requested, the early gate sets `KPM_SUPPORTED=0` and
+every KPM stage (including the `CONFIG_KPM=y` defconfig write) is skipped.
+> Measured on run `36198392724`: forcing it through costs 18 minutes for a failed first
+> attempt, then the built-in retry drops `ksu.fragment` (also disabling KPM) to produce a
+> kernel — roughly 20 extra minutes per version. The automatic switch lands in the same
+> state without the wasted attempt.
+> Side effect: on 6.12 KPM is off whether you asked for it or not — use a **≤ 6.6 kernel**
+> if you need KPM. The default `ReSukiSU` variant carries no KPM code and is unaffected
+> (verified: 6.12 + `ReSukiSU` builds first try with KPM stages auto-skipped).
+>
+> Watch out: the field of `struct lsm_id` has always been `name`, never `lsm`. Writing
+> `.lsm` because the new signature looks like it expects one fails at compile time with
+> `field designator 'lsm' does not refer to any field in type 'const struct lsm_id'`.
+
+The third hurdle is ZRAM: 6.12 has no lz4k patch stack (`SukiSU_patch` only provides
+5.10 / 5.15 / 6.1 / 6.6). **Even with ZRAM enabled, 6.12 skips the whole block**: the
+early gate emits a `::warning::` and none of the ZRAM stages or `CONFIG_ZRAM`-family
+defconfig writes run — the artifact carries only the kernel's stock compression. This is
+intentional: an explicit skip beats a half-applied ZRAM stack that breaks the GKI
+defconfig check.
+
+> Also note: **ticking `include_612` does not make the automatic build run 6.12.** The
+> automatic trigger goes through `main.yml`, and every single-version entry invoked from
+> `main.yml` uses the `auto` slim matrix, which does not contain 6.12 —
+> `kernel-a16-6-12.yml` emits an empty matrix and skips the build. To build 6.12 today,
+> **manually trigger the standalone "内核构建 - Android 16 (6.12)" entry** (full mode:
+> 6.12.23 / 30 / 38 / 58).
 
 Manual runs accept these inputs:
 
@@ -223,13 +293,14 @@ Manual runs accept these inputs:
 |---|---|---|
 | `force` | Trigger even when no new commit was detected | false |
 | `build_scope` | `全部版本` (all) / `单版本冒烟` (single) / `不构建` (none) | `全部版本` |
-| `include_612` | Include the 4 Android 16 (6.12) versions too (incompatible with current SukiSU) | false |
+| `include_612` | Tries to add 6.12 to the matrix. **Note: 6.12 is not in the `auto` matrix, so the automatic build still skips it** (see above); this repo carries the LSM signature fix | false |
 | `release_type` | `Release` / `Pre-Release` / `Actions` | `Release` |
 
-> `全部版本` dispatches `main.yml` with the full matrix; `单版本冒烟` dispatches
+> `全部版本` dispatches `main.yml` with the `auto` matrix; `单版本冒烟` dispatches
 > `kernel-custom.yml` and builds only 5.10.66.
 >
-> A full 80-version run takes a while (20 concurrent jobs → roughly 4 waves). That is normal.
+> The 19-version `auto` matrix usually completes in one wave; a manual full run of all
+> 84 versions (20 concurrent jobs) takes roughly 4 waves. That is normal.
 
 > Requires **Settings → Actions → Workflow permissions** to be `Read and write`,
 > otherwise the push back to the `sha` branch is rejected with a 403 for `github-actions[bot]`.
@@ -312,7 +383,7 @@ second implementation to drift apart.
 python3 build.py --android android14 --kernel 6.1 --sub-level 124 --os-patch 2025-02
 ```
 
-For the full argument reference (46 build phases, resuming with `--from`, single-step reruns with
+For the full argument reference (47 build phases, resuming with `--from`, single-step reruns with
 `--only`, every feature switch), see 💻 [**Local CLI build docs**](docs/local-build-en.md).
 
 ---
@@ -324,7 +395,7 @@ the core work comes from the upstream authors below. The full list lives in [NOT
 
 | Project | Upstream contribution | Licence |
 |---|---|---|
-| [WildKernels/GKI_KernelSU_SUSFS](https://github.com/WildKernels/GKI_KernelSU_SUSFS) | Common root of both zzh and ShirkNeko | **GPL-3.0-or-later** (custom LICENSE header + full GPL-3.0 text; GitHub reports `Other`) |
+| [WildKernels/GKI_KernelSU_SUSFS](https://github.com/WildKernels/GKI_KernelSU_SUSFS) | Common root of both zzh20188 and ShirkNeko | **GPL-3.0-or-later** (custom LICENSE header + full GPL-3.0 text; GitHub reports `Other`) |
 | [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) | **Build scaffolding and the bulk of the code** (matrix, scripts, patch adaptation) | GPL-2.0 |
 | [ShirkNeko/GKI_KernelSU_SUSFS](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) | KPM image patching, local CLI design | not declared |
 | [coolzyd9107/GKI_SukiSU_Ultra_SUSFS](https://github.com/coolzyd9107/GKI_SukiSU_Ultra_SUSFS) | Release notes template | GPL-2.0 |
@@ -346,7 +417,7 @@ here and it will be corrected immediately.
 
 ### GPL-2.0 vs GPL-3.0
 
-This repository touches both licences (the zzh base is GPL-2.0; SukiSU / SUSFS are GPL-3.0). The differences:
+This repository touches both licences (the zzh20188 base is GPL-2.0; SukiSU / SUSFS are GPL-3.0). The differences:
 
 | Aspect | GPL-2.0 | GPL-3.0 / GPL-3.0-or-later |
 |---|---|---|
