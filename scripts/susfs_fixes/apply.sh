@@ -213,13 +213,53 @@ if [[ -f fs/statfs.c ]] && grep -qF 'susfs_sus_kstat_spoof_vfs_statfs(' fs/statf
   fi
 fi
 
-# 上游 susfs.c 直接调用 security_sb_statfs 却没有包含 linux/security.h，
-# 5.15+ 靠其他头文件间接带入，5.10 没有这条路径，clang -Werror 报隐式声明；缺失时补上
-if [[ -f fs/susfs.c ]] && grep -qF 'security_sb_statfs(' fs/susfs.c \
-  && ! grep -qF '#include <linux/security.h>' fs/susfs.c; then
-  echo "为 susfs.c 补充 linux/security.h 头文件"
-  sed -i '0,/^#include <linux\/fs.h>$/s//#include <linux\/fs.h>\n#include <linux\/security.h>/' fs/susfs.c
-fi
+# 原此处有一段「给 fs/susfs.c 补 #include <linux/security.h>」的兜底，可追溯为
+# 三仓融合时从 zzh 继承的原样代码（zzh 已在 613a8f0 删除同款实现）。当时保留它
+# 是因为上游 susfs.c 未包含该头文件、5.10 上会 clang -Werror 报隐式声明；而
+# 实测 kernel_patches/fs/susfs.c 的两个分支现已自带该 include，判断恒为假、属
+# 死代码，故此处一并移除。
+
+# 6.12.69+ 的 show_smap 上下文漂移：上游把 show_smap 里的 vma_pages() 换成了
+# vma_data_pages()，SUSFS 补丁中「smaps 隐藏 sus_map 文件」的那段 hunk 因此失配被拒，
+# 留下 fs/proc/task_mmu.c.rej。
+#
+# 这与「上游已含同款修改」那类可忽略冲突**性质相反**：不补回来的话，
+# 被标记 sus_map 的文件会从 /proc/<pid>/smaps 里暴露出来，而构建看起来是成功的。
+# 所以这里手工补入检查，并且补入失败就**不删 .rej** —— 交由下方的冲突检查照常终止，
+# 与全脚本的 fail-closed 约定保持一致。
+#
+# 定位思路参考 LingLuo17/AnyKernel3（GPL-3.0）对同一问题的排查结论，
+# 本实现按本仓库的失败处理约定重写，未复制其代码。
+fix_show_smap_sus_map() {
+  local f="fs/proc/task_mmu.c"
+
+  [ -f "$f.rej" ] || return 0
+  grep -qF 'static int show_smap(struct seq_file *m, void *v)' "$f" || return 0
+
+  # 幂等：函数体里已有该检查就不重复插入（重跑 / 断点续建时会再次进入本阶段）
+  local body
+  body=$(sed -n '/^static int show_smap(struct seq_file \*m, void \*v)/,/^}/p' "$f")
+  [ -n "$body" ] || return 0
+  case "$body" in
+    *SUSFS_IS_INODE_SUS_MAP*) return 0 ;;
+  esac
+
+  echo "为 show_smap 手工补入 SUS_MAP 检查（vma_pages → vma_data_pages 上下文漂移）"
+
+  # 只依赖函数签名与 vma 定义两行做锚点，不写死后续的 mem_size_stats 等声明，
+  # 免得上游再动函数体就整段失配。插入点必须在 vma 赋值之后：检查要用到 vma->vm_file。
+  perl -0pi -e 's/(static int show_smap\(struct seq_file \*m, void \*v\)\n\{\n\tstruct vm_area_struct \*vma = v;\n)/$1\n#ifdef CONFIG_KSU_SUSFS_SUS_MAP\n\tif (vma->vm_file) {\n\t\tif (SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))\n\t\t\treturn 0;\n\t}\n#endif\n/' "$f"
+
+  if ! grep -qF 'SUSFS_IS_INODE_SUS_MAP' "$f"; then
+    # 保留 .rej：下方的冲突检查会把它算进去并按既有策略终止构建
+    echo "::error::show_smap SUS_MAP 检查手工补入失败，保留 $f.rej 交由冲突检查处理"
+    return 0
+  fi
+
+  rm -f "$f.rej"
+  echo "已补入 show_smap SUS_MAP 检查并清除预期冲突文件"
+}
+fix_show_smap_sus_map
 
 # patch 退出码 1 也可能只是「部分 hunk 被跳过」而不留 .rej，所以不能只看返回值，
 # 必须核对产物：SUSFS 是否真的进了编译、SELinux 钩子是否真的注入
