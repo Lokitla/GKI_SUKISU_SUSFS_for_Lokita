@@ -56,6 +56,21 @@ permissions:
         required: false
         type: boolean
         default: false
+      # [移植] 网络增强：IPSet 全类型 + BBR + FQ/FQ_CODEL + IPv6 NAT + 附加拥塞算法。
+      # 全部是内核既有配置的启用，不引入第三方代码；默认关闭。
+      use_net_enhance:
+        description: "启用网络增强（IPSet + BBR + FQ 队列 + IPv6 NAT + 附加拥塞算法）"
+        required: false
+        type: boolean
+        default: false
+      # [移植] 兼容跳过：可选增强项失败时降级为警告并继续构建，而非中断。
+      # SUSFS 与一加 8E 支持不在跳过范围内（二者失败仍中断），详见
+      # scripts/build_kernel.sh 的 phase_skippable 白名单。
+      skip_incompatible:
+        description: "可选功能不兼容或失败时自动跳过，而非中断构建（SUSFS 与一加 8E 除外）"
+        required: false
+        type: boolean
+        default: false
       # [移植] 27e129e NoMount 挂载元模块。二进制布尔，默认关闭；由 kernel-a1*.yml /
       # kernel-custom.yml 透传。main.yml 因 workflow_dispatch 的 25 input 上限已满，
       # 暂不在手动界面暴露（编排路径恒定 false）。
@@ -228,6 +243,8 @@ jobs:
         USE_BBG: ${{ inputs.use_bbg }}
         USE_KPM: ${{ inputs.use_kpm }}
         USE_REKERNEL: ${{ inputs.use_rekernel }}
+        USE_NET_ENHANCE: ${{ inputs.use_net_enhance || false }}
+        SKIP_INCOMPATIBLE: ${{ inputs.skip_incompatible || false }}
         USE_NOMOUNT: ${{ inputs.use_nomount || false }}
         CVE_2026_43499_PATCH: ${{ inputs.cve_2026_43499_patch }}
         EXPORT_SUSFS_PATCHES: ${{ inputs.export_susfs_patches }}
