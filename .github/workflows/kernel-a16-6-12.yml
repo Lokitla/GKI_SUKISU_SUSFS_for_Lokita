@@ -318,7 +318,10 @@ jobs:
       ksu_variant: ${{ inputs.kernelsu_variant }}
       version: ${{ inputs.version || '' }}
       build_time: ${{ inputs.build_time || '' }}
-      use_zram: false
+      # 这里原本写死 false，把 use_zram 的默认值（true）静默盖掉 ——
+      # UI 上看着勾了 ZRAM，实际构建却没开。6.12 上 ZRAM 的真实处置交给
+      # 脚本：上游 lz4k 补丁栈只到 6.6，没有就整段跳过并告警，别在这里替它决定。
+      use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel || false }}

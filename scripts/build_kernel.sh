@@ -2714,7 +2714,9 @@ stage_patch_kpm_image() {
   # 变体内核不提供 KPM 时整段跳过：Image 里压根没有 KPM 支持，修补毫无意义，
   # 反而可能改坏产物。KPM_SUPPORTED 由 stage_add_kernelsu 算好。
   if [ "${KPM_SUPPORTED:-1}" = "0" ]; then
-    echo "跳过 KPM 镜像修补：变体 ${KSU_VARIANT} 的内核不提供 KPM（见 stage_add_kernelsu 的告警）"
+    # 别写成"变体不提供 KPM"：KPM_SUPPORTED=0 有两个来源（变体不带 KPM 代码、
+    # 或内核 ≥ 6.10 带不动那段代码），这里两种都落在这条分支上，写死一种会误导。
+    echo "跳过 KPM 镜像修补：本次构建未启用 KPM（变体不提供或内核版本过新，见 stage_add_kernelsu 的告警）"
     cd "$_pwd"
     return 0
   fi
