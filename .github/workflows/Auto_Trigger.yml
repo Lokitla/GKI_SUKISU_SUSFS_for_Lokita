@@ -26,15 +26,22 @@
 #
 # 想省时间时手动选「单版本冒烟」，只编 5.10.66 一个。
 #
-# 默认构建配置：KPM = patched（开启并修补）、ZRAM (LZ4KD) = 开启，
+# 默认构建配置：变体 = ReSukiSU（KPM 随之被自动跳过）、ZRAM (LZ4KD) = 开启，
 # 其余功能开关（BBG / Re-Kernel / BBR / Droidspaces 等）保持关闭。
 #
-# 为什么默认排除 6.12：
-#   SukiSU 主线与 6.12 的 LSM hook 签名不兼容 —— security_add_hooks 的第三参数
-#   在 6.12 上是 const struct lsm_id *，SukiSU 仍按老签名传字符串
-#   (hook/lsm_hook.c:191)，关掉 KPM 也一样编不过。属于上游问题，等 SukiSU 修
-#   或改用老版本变体（40726 / 40548）再开。恢复方式：把 include_612 勾上即可，
-#   不需要改代码。
+# 关于 6.12：
+#   security_add_hooks 的第三参数自 v6.10 起改成 const struct lsm_id *，而 KernelSU
+#   各变体仍按老签名传字符串（hook/lsm_hook.c 里的
+#   security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu")）。打补丁阶段会按
+#   内核版本补实参宏：v6.10+ 传 &ksu_lsm_id（字段是 name 不是 lsm），更早的内核照旧
+#   传字符串字面量 —— 所以 6.12 不再是「怎么都编不过」。
+# 但 6.12 上还有第二道坎：SukiSU 的 drivers/kernelsu/kpm/super_access.c 用了
+#   netlink_kernel_cfg.cb_mutex 与 DYNAMIC_STRUCT_END(netlink_kernel_cfg)，
+#   在 6.10+ 上编不过（no member named 'cb_mutex'）。原本启用 KPM 时第一次构建必失败，
+#   要靠 COMPILE_MAX_ATTEMPTS 重试丢掉 ksu.fragment（KPM 随之关闭）才出包，每版多花
+#   约 18 分钟（实测 run 36198392724）；现在早期闸门直接把 KPM_SUPPORTED 置 0 自动关闭，
+#   不再白跑那轮失败编译。
+#   → KPM 在 6.12 上等于不可用，需要 KPM 只能用 ≤ 6.6 的内核。
 # =============================================================================
 name: Auto Trigger on SukiSU Update
 
@@ -58,7 +65,7 @@ on:
           - 固定 5.10.236
           - 不构建
       include_612:
-        description: 一并把 Android 16 (6.12) 的 4 个版本纳入（当前与最新 SukiSU 不兼容，默认跳过）
+        description: 尝试把 Android 16 (6.12) 纳入矩阵。注意：6.12 不在 auto 精简矩阵内，勾选后自动构建仍会跳过 6.12；构建 6.12 请手动触发「内核构建 - Android 16 (6.12)」入口
         type: boolean
         default: false
       release_type:
@@ -214,7 +221,7 @@ jobs:
                   ref: $ref,
                   inputs: {
                     release_type: $release_type,
-                    kernelsu_variant: "SukiSU",
+                    kernelsu_variant: "ReSukiSU",
                     enable_susfs: true,
                     use_kpm: "patched (开启并修补)",
                     droidspaces: "不启用",
@@ -261,7 +268,7 @@ jobs:
                   ref: $ref,
                   inputs: {
                     kernel_version: "5.10",
-                    kernelsu_variant: "SukiSU",
+                    kernelsu_variant: "ReSukiSU",
                     enable_susfs: true,
                     use_kpm: "patched (开启并修补)",
                     droidspaces: "不启用",
