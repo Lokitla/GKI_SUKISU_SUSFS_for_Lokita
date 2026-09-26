@@ -30,7 +30,7 @@ on:
           - ReSukiSU
           - Official
           - Next
-        default: SukiSU
+        default: ReSukiSU
       enable_susfs:
         description: "集成 SUSFS"
         required: false
@@ -127,7 +127,7 @@ on:
         default: false
 
       use_bbr:
-        description: "设置 BBR 为默认拥塞算法"
+        description: "网络优化（BBR 默认拥塞算法 + IPSet 全类型 + FQ/FQ_CODEL 队列 + IPv6 NAT + 附加拥塞算法内建）"
         required: false
         type: boolean
         default: false
@@ -353,6 +353,9 @@ jobs:
       use_bbg: ${{ inputs.use_bbg }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel || false }}
+      # 本文件的 dispatch inputs 已达 GitHub 的 25 上限，不再新增开关：
+      # 网络增强复用既有的 use_bbr 作为「网络优化」入口（BBR 只是其中一项）。
+      use_net_enhance: ${{ inputs.use_bbr || false }}
       use_nomount: ${{ inputs.use_nomount || false }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       supp_op: ${{ inputs.supp_op || false }}
