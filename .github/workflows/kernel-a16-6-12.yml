@@ -19,7 +19,7 @@ on:
           - ReSukiSU
           - Official
           - Next
-        default: SukiSU
+        default: ReSukiSU
       enable_susfs:
         description: "集成 SUSFS"
         required: false
@@ -75,6 +75,16 @@ on:
         default: false
       use_rekernel:
         description: "启用 Re-Kernel 驱动"
+        required: false
+        type: boolean
+        default: false
+      use_net_enhance:
+        description: "启用网络增强（IPSet + BBR + FQ 队列 + IPv6 NAT + 附加拥塞算法）"
+        required: false
+        type: boolean
+        default: false
+      skip_incompatible:
+        description: "可选功能不兼容或失败时自动跳过，而非中断构建（SUSFS 与一加 8E 除外）"
         required: false
         type: boolean
         default: false
@@ -167,6 +177,16 @@ on:
         required: true
         type: string
       use_rekernel:
+        required: false
+        type: boolean
+        default: false
+      use_net_enhance:
+        description: "启用网络增强（IPSet + BBR + FQ 队列 + IPv6 NAT + 附加拥塞算法）"
+        required: false
+        type: boolean
+        default: false
+      skip_incompatible:
+        description: "可选功能不兼容或失败时自动跳过，而非中断构建（SUSFS 与一加 8E 除外）"
         required: false
         type: boolean
         default: false
@@ -298,10 +318,15 @@ jobs:
       ksu_variant: ${{ inputs.kernelsu_variant }}
       version: ${{ inputs.version || '' }}
       build_time: ${{ inputs.build_time || '' }}
-      use_zram: false
+      # 这里原本写死 false，把 use_zram 的默认值（true）静默盖掉 ——
+      # UI 上看着勾了 ZRAM，实际构建却没开。6.12 上 ZRAM 的真实处置交给
+      # 脚本：上游 lz4k 补丁栈只到 6.6，没有就整段跳过并告警，别在这里替它决定。
+      use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel || false }}
+      use_net_enhance: ${{ inputs.use_net_enhance || false }}
+      skip_incompatible: ${{ inputs.skip_incompatible || false }}
       use_nomount: ${{ inputs.use_nomount || false }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches || false }}
