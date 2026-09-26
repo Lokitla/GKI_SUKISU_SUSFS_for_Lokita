@@ -60,8 +60,8 @@ GitHub Actions 与本地 `build.py` 共用这一份 47 阶段脚本，不存在�
 | KPM | 编译后修补 Image 使其可加载 KPM 模块（6.6 内核不支持） | `patched（开启并修补）`※ |
 | Hook 类型 | SUSFS Inline Hooks，编译期手写 syscall 拦截，不留 kprobe 痕迹 | — |
 | Magic Mount | SukiSU 默认挂载方式 | 开启 |
-| ZRAM / LZ4KD | ZRAM 增强算法（LZ4KD / LZ4K_OPLUS） | 关闭（见下方注） |
-| BBR | 设为默认拥塞算法 | 关闭 |
+| ZRAM / LZ4KD | ZRAM 增强算法（LZ4KD / LZ4K_OPLUS）；6.12 无 lz4k 补丁栈，请求会被整段跳过并告警 | 开启（见下方注） |
+| BBR | 设为默认拥塞算法（脚本会先开 `TCP_CONG_ADVANCED` 门控再写开关，见注 4） | 关闭 |
 | BBG | Baseband-guard 防格机 | 关闭 |
 | Re-Kernel | Re-Kernel 驱动 | 关闭 |
 | NoMount | 挂载元模块：在 `fs/` 层集成 [maxsteeel/NoMount](https://github.com/maxsteeel/nomount)，与 SUSFS sus_mount 各走各的路径，可与任意 KSU 变体共存；需自行刷入配套 NoMount 模块 | 关闭 |
@@ -73,8 +73,7 @@ GitHub Actions 与本地 `build.py` 共用这一份 47 阶段脚本，不存在�
 | Telegram 通知 | 构建完成后推送通知 | 开启 |
 | 自定义构建时间 | 固定内核 `UTS_VERSION` 时间戳 | 留空 |
 
-> 除 ReSukiSU 变体、SUSFS、Spoofed 管理器和 Telegram 通知外，其余开关默认关闭，
-> 与 ShirkNeko **原仓库**的默认值保持一致。
+> 除 ReSukiSU 变体、SUSFS、Spoofed 管理器、Telegram 通知和 ZRAM 外，其余开关默认关闭。
 >
 > 注 1 · **变体已换血：** 默认从 `SukiSU` 换成 `ReSukiSU`（不需要额外拉取上游
 > 分支，构建更快），`.github/workflows/` 下 11 个入口的 `kernelsu_variant` /
@@ -84,9 +83,19 @@ GitHub Actions 与本地 `build.py` 共用这一份 47 阶段脚本，不存在�
 > Next 的内核 Kconfig 里没有 `config KPM`。默认变体下相关阶段会被自动跳过——构建不
 > 中断，但内核加载不了 KPM 模块；需要 KPM 请手动把变体切回 `SukiSU`。
 >
-> 注 3 · **ZRAM 的默认值分三处：** 构建脚本与本地 CLI 默认 `false`，各 `kernel-*.yml`
-> 单版本入口同样默认 `false`，只有「构建内核」全矩阵入口（`main.yml`）默认 `true`。
-> 默认关掉时只有内核自带的压缩算法，开了才装配 LZ4KD / LZ4K_OPLUS。
+> 注 3 · **ZRAM 的默认值分三层：** 构建脚本内部兜底默认 `false`
+> （`build_kernel.sh` 的 `USE_ZRAM:=false`，仅当无人传参时生效）；
+> 本地 CLI（`build.py --zram`，`--no-zram` 关闭）与**所有** Actions 入口
+> （各 `kernel-*.yml` 单版本入口、`kernel-custom.yml`、`main.yml` 全矩阵）默认 `true`。
+> 默认开启即装配 LZ4KD / LZ4K_OPLUS；6.12 因无 lz4k 补丁栈，即使开了也会整段跳过
+> （见下方「SukiSU 上游更新自动触发」一节的说明）。
+>
+> 注 4 · **BBR 的门控处理：** 5.10 / 5.15 / 6.1 / 6.12 的 gki_defconfig 基线里没有
+> `CONFIG_TCP_CONG_ADVANCED`，而 Kconfig 里 `TCP_CONG_BBR` 与 `DEFAULT_BBR` 都被
+> `if TCP_CONG_ADVANCED` 包住——门控不开，BBR 两行就是没人认的死行。脚本会先写
+> `TCP_CONG_ADVANCED=y` 再写 BBR，并连带把 `TCP_CONG_BIC / WESTWOOD / HTCP` 置 `=y`
+> （三者 Kconfig 默认 `m`，置 `y` 是为了避免在 bazel 路径产出未声明的 `.ko`）。
+> 6.6 基线自带 ADVANCED，此处理幂等。
 
 ---
 
@@ -121,8 +130,11 @@ GitHub Actions 与本地 `build.py` 共用这一份 47 阶段脚本，不存在�
 
 | 入口 | 一次会构建多少 |
 |---|---|
-| **内核构建 - Android 12 / 13 / 14 / 15 / 16** | 该内核版本的**全部**子版本（矩阵写死，5.10 共 22 个） |
+| **内核构建 - Android 12 / 13 / 14 / 15 / 16** | 该内核版本的**全部**子版本（矩阵由 `.github/workflows/config/matrix.json` 的 `full` 模式生成，5.10 共 22 个；6.12 为 4 个） |
 | **Android 内核构建-自定义** | 只构建你在「安全补丁级别」里指定的版本，**默认只出 1 个** |
+
+> 注：从「构建内核」（`main.yml`）调用这些单版本入口时走 `auto` 精简矩阵
+> （5.10=5 / 5.15=6 / 6.1=5 / 6.6=3，6.12 不在内），不是上表的 full 全量。
 
 自定义入口用「构建范围」下拉控制出多少：
 
@@ -154,7 +166,9 @@ GitHub Actions 与本地 `build.py` 共用这一份 47 阶段脚本，不存在�
 > **注意：** 目前不支持一加 ColorOS 14、15，刷入后可能需要清除数据开机。
 >
 > **6.12：** 本仓库已为 6.10+ 的 `security_add_hooks` 新签名补上兼容补丁，
-> 勾 `include_612` 即可纳入矩阵，详见下方「SukiSU 上游更新自动触发」一节。
+> 但自动构建矩阵不含 6.12（详见下方「SukiSU 上游更新自动触发」一节）；
+> 要构建 6.12 请手动触发独立入口「内核构建 - Android 16 (6.12)」
+> （6.12.23 / 30 / 38 / 58 四个子版本；6.12 上 KPM 与 ZRAM 会自动跳过）。
 >
 > **老版本 SukiSU：** 保留了老版本变体（`SukiSU(40726)` / `SukiSU(40548)`）的构建；
 > 它们完全使用旧版 SUKISU 与 SUSFS 代码，不含最近的特性或 bug，
@@ -193,7 +207,7 @@ GitHub Actions 与本地 `build.py` 共用这一份 47 阶段脚本，不存在�
 | 能力 | 说明 | 开启方式 |
 |---|---|---|
 | **本地 CLI 构建** | 不依赖 Actions 即可构建，与云端共用同一脚本 | `python3 build.py ...` |
-| **BBR 拥塞控制** | 将 BBR 设为默认 TCP 拥塞算法 | Actions: `use_bbr`；CLI: `--bbr` |
+| **BBR 拥塞控制** | 将 BBR 设为默认 TCP 拥塞算法；含 `TCP_CONG_ADVANCED` 门控前置（见功能特性注 4） | Actions: `use_bbr`；CLI: `--bbr` |
 | **Telegram 通知** | 构建完成后推送消息与产物校验值到 TG | Actions: `send_telegram` |
 | **Release 缓存** | 用 GitHub Release 存 ccache，突破 `actions/cache` 的容量与过期限制 | Actions: `use_release_cache` |
 | **Spoofed 管理器开关** | 可单独控制是否一并拉取伪装官方包名的 SukiSU 管理器 APK | Actions: `manager_spoofed` |
@@ -211,7 +225,7 @@ GitHub Actions 与本地 `build.py` 共用这一份 47 阶段脚本，不存在�
 | KernelSU 变体 | **`ReSukiSU`** | `Stable(标准)`（无变体选项） |
 | 集成 SUSFS | **开启** | 内置，无独立开关 |
 | KPM | **`patched`（开启并修补镜像）** | `true` |
-| ZRAM (LZ4KD) | **开启**（仅「构建内核」全矩阵入口） | `false` |
+| ZRAM (LZ4KD) | **开启**（所有 Actions 入口与本地 CLI） | `false` |
 | BBG 安全补丁 | **关闭** | `false` |
 | CVE-2026-43499 修复 | **关闭** | 无此选项（本分支保留为可选） |
 | BBR 拥塞控制 | 关闭 | `false` |
@@ -247,15 +261,16 @@ GitHub Actions 与本地 `build.py` 共用这一份 47 阶段脚本，不存在�
 2. 无新提交 → 什么都不做，不消耗 Runner 时长；
 3. 拿不到提交号（API 限流）→ 直接失败退出，不会带着空值去构建。
 
-**默认跑「全部版本」**：5.10 + 5.15 + 6.1 + 6.6 的默认矩阵，共约
-**22 + 20 + 23 + 15 = 80 个内核版本**（与上游 zzh 每次 Release 的数量一致）。
-> 注：以上仅含默认启用的 5.10–6.6 矩阵；勾选 `include_612` 会再纳入 6.12 的全部 8 个版本。
-> `data/` 目录下共 **127 条**版本定义（5.10=36 / 5.15=35 / 6.1=32 / 6.6=16 / 6.12=8），
-> 本地 `build.py --all` 即基于此全集构建。
+**默认跑「全部版本」**：走 `main.yml` 展开矩阵，但实际组合数由
+`.github/workflows/config/matrix.json` 的 **`auto` 精简矩阵**决定：
+**5.10=5 / 5.15=6 / 6.1=5 / 6.6=3，共 19 个内核版本**（每版取数个代表性子版本 + LTS）。
+> 注：`data/` 目录下共 **127 条**版本定义（5.10=36 / 5.15=35 / 6.1=32 / 6.6=16 / 6.12=8），
+> 这是「全部可用版本」的全集，本地 `build.py --all` 与各单版本入口的 full 矩阵
+> （22/20/23/15/4，共 84 个）基于它；自动触发的 19 个是 auto 矩阵的子集。
 构建配置固定为 **变体 `ReSukiSU`（KPM 随之被跳过）+ ZRAM (LZ4KD) 开启**，
 其余增强项（BBG / Re-Kernel / BBR 等）关闭。想省时间时手动选「单版本冒烟」，只编 5.10.66 一个。
 
-**6.12 默认不参与，想加回来勾 `include_612`。** 有先后两道坎，第一道已经翻过去：
+**6.12 默认不参与**（自动矩阵不含它，勾 `include_612` 也不会构建，见下）。它有三道坎，前两道已经翻过去：
 
 `security_add_hooks` 的第三参数自 v6.10 起改成 `const struct lsm_id *`，而 KernelSU 各
 变体仍按老签名传字符串（`hook/lsm_hook.c` 里的
@@ -278,20 +293,33 @@ KPM 时，早期闸门直接把 `KPM_SUPPORTED` 置 0，KPM 相关阶段与 `CON
 > 另注：`struct lsm_id` 的字段一直是 `name`，不是 `lsm` —— 照着新签名想当然写 `.lsm`
 > 会在编译期报 `field designator 'lsm' does not refer to any field`。
 
+第三道坎跟 ZRAM 有关：6.12 没有 lz4k 补丁栈（`SukiSU_patch` 只提供 5.10 / 5.15 /
+6.1 / 6.6 四个目录）。**即使把 ZRAM 开关打开，6.12 上也会整段跳过**：构建早期闸门
+发 `::warning::` 后，ZRAM 相关阶段与 `CONFIG_ZRAM` 系列的 defconfig 改写全部不执行，
+产物只带内核自带的压缩算法。这是刻意设计——宁可明确跳过，也不要留下半套打了
+一半的 ZRAM 补丁让 GKI defconfig 校验炸掉。
+
+> 另外注意：**`include_612` 勾了也不会让自动构建跑 6.12**。自动触发走 `main.yml`，
+> 各单版本入口被 `main.yml` 调用时一律用 `auto` 精简矩阵，而 6.12 不在 `auto`
+> 矩阵里——`kernel-a16-6-12.yml` 会输出空矩阵并跳过构建。目前想构建 6.12，
+> 只能**手动触发独立入口「内核构建 - Android 16 (6.12)」**（full 模式，
+> 构建 6.12.23 / 30 / 38 / 58 四个子版本）。
+
 手动运行时可改这几个输入：
 
 | 输入 | 说明 | 默认 |
 |---|---|---|
 | `force` | 忽略「是否有新提交」，强制触发 | 否 |
 | `build_scope` | `全部版本` / `单版本冒烟` / `不构建` | `全部版本` |
-| `include_612` | 一并把 6.12 的 8 个版本纳入（默认跳过；本仓库已打 LSM 兼容补丁） | 否 |
+| `include_612` | 尝试把 6.12 纳入矩阵。**注意：6.12 不在 `auto` 矩阵内，勾选后自动构建仍会跳过 6.12**（见上）；本仓库已打 LSM 兼容补丁 | 否 |
 | `ksu_branch_mode` | SukiSU 拉取分支：`auto`=跟随 SUSFS 开关自动选（开 SUSFS→builtin，关→main）/ `main`=纯管理器分支 / `builtin`=内核内置实现 | `auto` |
 | `release_type` | `Release` / `Pre-Release` / `Actions` | `Release` |
 
 > 选 `全部版本` 走 `main.yml` 展开矩阵；选 `单版本冒烟` 走 `kernel-custom.yml`，
 > 一次只编 5.10.66 一个。
 >
-> 80 个版本全量构建耗时较长（并发上限 20，约 4 波），属于正常现象。
+> 19 个版本（auto 矩阵）通常一波并发即可完成；若手动跑 full 全量 84 个，
+> 并发上限 20 约分 4 波，属于正常现象。
 
 > 需要仓库 **Settings → Actions → Workflow permissions** 为 `Read and write`，
 > 否则回写 `sha` 分支会被 `github-actions[bot]` 的 403 拦下。
