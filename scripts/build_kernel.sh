@@ -2220,8 +2220,11 @@ stage_config_net_enhance() {
     return 1
   fi
 
-  # BBR 与队列调度。5.10/5.15/6.1 上 DEFAULT_BBR 受 TCP_CONG_ADVANCED 门控，
-  # 6.6/6.12 已内建；ensure_net_cfg 对已存在的行自动跳过，无需按版本分支。
+  # BBR 与队列调度。TCP_CONG_BBR / DEFAULT_BBR 都在 `if TCP_CONG_ADVANCED` 里，
+  # 所以门控这一行是其余几行的前提（stage_config_kernel 里的 use_bbr 也照此办理）。
+  # 实测 GKI 的 gki_defconfig 基线：只有 6.6 带 TCP_CONG_ADVANCED=y +
+  # TCP_CONG_BBR=y，5.10 / 6.1 / 6.12 完全没有 TCP_CONG_* 行 —— 门控照样写，
+  # 由 ensure_net_cfg 负责把符号从"不存在"变成"存在"，无需按版本分支。
   ensure_net_cfg "CONFIG_TCP_CONG_ADVANCED=y"
   ensure_net_cfg "CONFIG_TCP_CONG_BBR=y"
   ensure_net_cfg "CONFIG_DEFAULT_BBR=y"
@@ -2395,18 +2398,46 @@ PY
   fi
 
   # [融合] BBR 拥塞控制 —— 取自 ShirkNeko/GKI_KernelSU_SUSFS
+  #
+  # 门控必须先于开关：net/ipv4/Kconfig 里 TCP_CONG_BBR 与 DEFAULT_BBR 都写在
+  # `if TCP_CONG_ADVANCED` 块内，门控不成立时这两个符号会被 Kconfig 屏蔽、
+  # 根本不存在。而 GKI 的 gki_defconfig 基线里只有 6.6 带
+  # CONFIG_TCP_CONG_ADVANCED=y，5.10 / 6.1 / 6.12 都没有。照上游原样只写开关
+  # 不写门控，后三个版本上追加的就是没人认的死行 —— 写后校验 grep 的恰好是
+  # 自己写进去的那一行，永远为真，看不出来，等于开了个空开关。
+  #
+  # 因此这里先打开 ADVANCED 门控。顺带必须把 BIC / WESTWOOD / HTCP 一并置 =y：
+  # 这三个在 Kconfig 里是 `default m`，门控一开它们就被带进内核，编出 tcp_bic.ko
+  # 之类而 GKI 的 module_outs 并未声明，bazel 会直接失败（理由同
+  # stage_config_net_enhance 里关于 module_outs 的注释）。
   if [ "${USE_BBR}" = "true" ]; then
+    # 保持自包含：ensure_net_cfg 定义在 stage_config_net_enhance 内部，而
+    # config_kernel 阶段先于 config_net_enhance 执行，此刻它还不存在。
+    ensure_bbr_cfg() {
+      local line="$1" cfg="${1%%=*}"
+      if grep -qxF "$line" "$DEFCONFIG"; then
+        return 0
+      fi
+      if grep -Eq "^${cfg}=|^# ${cfg} is not set$" "$DEFCONFIG"; then
+        sed -i -E "s|^${cfg}=.*|${line}|; s|^# ${cfg} is not set$|${line}|" "$DEFCONFIG"
+      else
+        echo "$line" >> "$DEFCONFIG"
+      fi
+    }
+
+    ensure_bbr_cfg "CONFIG_TCP_CONG_ADVANCED=y"
+    ensure_bbr_cfg "CONFIG_TCP_CONG_BBR=y"
+    ensure_bbr_cfg "CONFIG_DEFAULT_BBR=y"
+    ensure_bbr_cfg "CONFIG_TCP_CONG_BIC=y"
+    ensure_bbr_cfg "CONFIG_TCP_CONG_WESTWOOD=y"
+    ensure_bbr_cfg "CONFIG_TCP_CONG_HTCP=y"
+
+    # 门控没落盘的话上面几条全是死行，宁可显式失败，也不要静默产出空开关
+    if ! grep -qxF 'CONFIG_TCP_CONG_ADVANCED=y' "$DEFCONFIG"; then
+      echo "::error::CONFIG_TCP_CONG_ADVANCED 未能落盘：TCP_CONG_BBR / DEFAULT_BBR 被 \`if TCP_CONG_ADVANCED\` 屏蔽，BBR 开关无效"
+      return 1
+    fi
     echo "启用 BBR 拥塞控制"
-    if grep -q '^CONFIG_TCP_CONG_BBR=' "$DEFCONFIG"; then
-      sed -i 's/^CONFIG_TCP_CONG_BBR=.*/CONFIG_TCP_CONG_BBR=y/' "$DEFCONFIG"
-    else
-      echo "CONFIG_TCP_CONG_BBR=y" >> "$DEFCONFIG"
-    fi
-    if grep -q '^CONFIG_DEFAULT_BBR=' "$DEFCONFIG"; then
-      sed -i 's/^CONFIG_DEFAULT_BBR=.*/CONFIG_DEFAULT_BBR=y/' "$DEFCONFIG"
-    else
-      echo "CONFIG_DEFAULT_BBR=y" >> "$DEFCONFIG"
-    fi
   fi
 
   cd "$_pwd"
