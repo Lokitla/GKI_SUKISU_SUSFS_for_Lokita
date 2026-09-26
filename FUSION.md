@@ -11,24 +11,24 @@
 | 仓库 | 文件数 | 最后提交 | 判定 |
 |---|---|---|---|
 | **zzh20188/GKI_KernelSU_SUSFS** | 130 | 2026-09-16 | 主干，功能最全 → **选为主项目** |
-| coolzyd9107/GKI_SukiSU_Ultra_SUSFS | 120 | 2026-06-28 | zzh 的过期副本 |
+| coolzyd9107/GKI_SukiSU_Ultra_SUSFS | 120 | 2026-06-28 | zzh20188 的过期副本 |
 | ShirkNeko/GKI_KernelSU_SUSFS | 43 | 2026-08-27 | 另一套架构（Python 构建系统），有独有功能 |
 
 ### coolzyd：无独有内容，直接丢弃
 
 ```
 coolzyd 独有文件：0 个
-zzh 独有文件：12 个（含 security_patch/ 整个 CVE 修复目录）
+zzh20188 独有文件：12 个（含 security_patch/ 整个 CVE 修复目录）
 ```
 
 两者同名文件仅有内容差异，且 coolzyd 落后约 2.5 个月。唯一的差异点
-`web/js/config.js` 里的 `deprecatedCutoff` 字段，zzh 已迁移到 `data/*.json`
+`web/js/config.js` 里的 `deprecatedCutoff` 字段，zzh20188 已迁移到 `data/*.json`
 的 `deprecated_cutoff` —— 属于更新写法，不是缺失。**没有任何需要合并的内容。**
 
 ### ShirkNeko：另一套架构，有 4 项独有能力
 
 ShirkNeko 用 Python 模块化脚本（`kernel_builder.py` 763 行）替代了 YAML 工作流。
-值得注意的是，它的 OnePlus 8E 补丁直接引用 zzh 的仓库：
+值得注意的是，它的 OnePlus 8E 补丁直接引用 zzh20188 的仓库：
 
 ```python
 OP8E_PATCH_URL = "https://github.com/zzh20188/GKI_KernelSU_SUSFS/raw/refs/heads/dev/hmbird_patch.c"
@@ -40,8 +40,8 @@ OP8E_PATCH_URL = "https://github.com/zzh20188/GKI_KernelSU_SUSFS/raw/refs/heads/
 
 ## 二、融合策略：抽取公共脚本，双入口共用
 
-zzh 的构建逻辑原本以 53 个 step 的形式内嵌在 `build.yml`（1583 行）里，只能跑在
-GitHub Actions 上。ShirkNeko 的 Python 版能本地跑，但功能比 zzh 少一大截
+zzh20188 的构建逻辑原本以 53 个 step 的形式内嵌在 `build.yml`（1583 行）里，只能跑在
+GitHub Actions 上。ShirkNeko 的 Python 版能本地跑，但功能比 zzh20188 少一大截
 （无 CVE 补丁、Droidspaces、ReKernel、6.12、5 种 KSU 变体）。
 
 **直接搬运任何一边都是错的**，因此采用第三条路：
@@ -81,7 +81,7 @@ scripts/build_kernel.sh        ← 单一真相源（完整功能，45 个阶段
 2. **去掉第三方依赖** —— 原实现的 `import multipart` 包名有误且非标准库，
    改用标准库手写 multipart 上传。
 3. **参数统一** —— 通知内容改为从与 `build_kernel.sh` 相同的环境变量读取，
-   并补充了 zzh 特有开关（BBR / BBG / ReKernel / Droidspaces / CVE 补丁）的展示。
+   并补充了 zzh20188 特有开关（BBR / BBG / ReKernel / Droidspaces / CVE 补丁）的展示。
 
 ---
 

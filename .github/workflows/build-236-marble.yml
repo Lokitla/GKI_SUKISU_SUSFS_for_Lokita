@@ -32,9 +32,9 @@ name: 自用构建-5.10.236（ReSukiSU / marble）
 # 若首次实机构建遇到某一项报不兼容、又不想让整轮白跑，把
 # skip_incompatible 改成 true 即可降级为 warning 继续。
 #
-# 网络增强已包含"把 BBR 设为默认拥塞算法"，use_bbr 仍保留为 true 只是让
-# config_kernel 阶段也走一遍同样的写入（幂等，二者共用 ensure_bbr_cfg /
-# ensure_net_cfg，不会重复追加）。
+# 不单列 use_bbr：网络增强本身就包含「把 BBR 设为默认拥塞算法」
+# （stage_config_net_enhance 会写 CONFIG_DEFAULT_BBR=y），再开 use_bbr 只是
+# 让 config_kernel 阶段重复走一遍同样的写入，属于冗余。
 #
 # ReSukiSU 内核不提供 KPM，use_kpm 的「patched」不会写进 defconfig，
 # KPM 修补阶段也会被跳过——这是变体限制，不是配置失效。
@@ -82,7 +82,6 @@ jobs:
       version: "5.10.236-android12-9-00003-gfb24cf99ad97-ab14313284"
       build_time: "Tue Oct 21 03:03:12 UTC 2025"
       use_zram: true
-      use_bbr: true
       use_bbg: false
       use_kpm: "patched (开启并修补)"
       use_rekernel: true

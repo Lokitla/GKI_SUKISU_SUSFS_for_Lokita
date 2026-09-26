@@ -6,7 +6,7 @@
   1. 恢复 TLS 证书校验（原实现关闭了证书验证，存在中间人风险）
   2. 用标准库实现 multipart 上传，去掉对 `multipart` 第三方包的依赖
   3. 构建参数统一从环境变量读取，与 build_kernel.sh 保持同一套变量名
-  4. 补充 zzh 特有选项（BBR / BBG / ReKernel / Droidspaces / CVE 补丁）的展示
+  4. 补充 zzh20188 特有选项（BBR / BBG / ReKernel / Droidspaces / CVE 补丁）的展示
 
 用法:
     python3 scripts/telegram_notify.py single

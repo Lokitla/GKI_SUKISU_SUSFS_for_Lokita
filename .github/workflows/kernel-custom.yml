@@ -126,7 +126,11 @@ on:
         type: boolean
         default: false
 
-      use_bbr:
+      # 网络增强（IPSet 全类型 + BBR + FQ/FQ_CODEL 队列 + IPv6 NAT + 附加拥塞算法）。
+      # 本项已包含「把 BBR 设为默认拥塞算法」，所以这里不再单列 use_bbr 开关：
+      # 网络增强关着却想单独要 BBR 的场景不存在，两个开关只会造成歧义。
+      # 需要单独控制 BBR 请改用单版本入口 kernel-a1*.yml（那里两者是分开的）。
+      use_net_enhance:
         description: "网络优化（BBR 默认拥塞算法 + IPSet 全类型 + FQ/FQ_CODEL 队列 + IPv6 NAT + 附加拥塞算法内建）"
         required: false
         type: boolean
@@ -353,9 +357,8 @@ jobs:
       use_bbg: ${{ inputs.use_bbg }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel || false }}
-      # 本文件的 dispatch inputs 已达 GitHub 的 25 上限，不再新增开关：
-      # 网络增强复用既有的 use_bbr 作为「网络优化」入口（BBR 只是其中一项）。
-      use_net_enhance: ${{ inputs.use_bbr || false }}
+      # 与 use_bbr 解耦：各自独立取值（见上方 input 定义处的说明）。
+      use_net_enhance: ${{ inputs.use_net_enhance || false }}
       use_nomount: ${{ inputs.use_nomount || false }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       supp_op: ${{ inputs.supp_op || false }}
@@ -364,7 +367,6 @@ jobs:
       droidspaces: ${{ inputs.droidspaces || '不启用' }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync || false }}
       artifact_upload_mode: ${{ inputs.artifact_upload_mode }}
-      use_bbr: ${{ inputs.use_bbr || false }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}

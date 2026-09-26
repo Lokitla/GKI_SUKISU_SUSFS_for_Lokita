@@ -217,6 +217,15 @@ jobs:
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
       # ksu_mode 不传：build.yml 默认「关闭」（正常集成 KernelSU）。
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
+      # [矩阵入口不暴露的开关] 以下三项在 kernel-*.yml 里都有 input，但 main.yml
+      # 的 workflow_dispatch 已达 25 个 input 上限（见上方 ksu_branch_mode 处的
+      # 说明），无法再暴露到手动界面；不写就等于永远取默认值。
+      # 这里显式写死默认值并注明，避免造成"矩阵构建支持网络增强"的误解。
+      # 需要这三项请改用：单版本入口 kernel-*.yml、自定义入口
+      # kernel-custom.yml，或本地 `python3 build.py --net-enhance` 等参数。
+      use_net_enhance: false
+      skip_incompatible: false
+      susfs_commit: ''
   # ==================== Android 13 - 5.15 构建 ====================
   build-a13-5-15:
     if: inputs.build_a13_5_15 || inputs.build_all
@@ -245,6 +254,15 @@ jobs:
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
+      # [矩阵入口不暴露的开关] 以下三项在 kernel-*.yml 里都有 input，但 main.yml
+      # 的 workflow_dispatch 已达 25 个 input 上限（见上方 ksu_branch_mode 处的
+      # 说明），无法再暴露到手动界面；不写就等于永远取默认值。
+      # 这里显式写死默认值并注明，避免造成"矩阵构建支持网络增强"的误解。
+      # 需要这三项请改用：单版本入口 kernel-*.yml、自定义入口
+      # kernel-custom.yml，或本地 `python3 build.py --net-enhance` 等参数。
+      use_net_enhance: false
+      skip_incompatible: false
+      susfs_commit: ''
   # ==================== Android 14 - 6.1 构建 ====================
   build-a14-6-1:
     if: inputs.build_a14_6_1 || inputs.build_all
@@ -273,6 +291,15 @@ jobs:
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
+      # [矩阵入口不暴露的开关] 以下三项在 kernel-*.yml 里都有 input，但 main.yml
+      # 的 workflow_dispatch 已达 25 个 input 上限（见上方 ksu_branch_mode 处的
+      # 说明），无法再暴露到手动界面；不写就等于永远取默认值。
+      # 这里显式写死默认值并注明，避免造成"矩阵构建支持网络增强"的误解。
+      # 需要这三项请改用：单版本入口 kernel-*.yml、自定义入口
+      # kernel-custom.yml，或本地 `python3 build.py --net-enhance` 等参数。
+      use_net_enhance: false
+      skip_incompatible: false
+      susfs_commit: ''
   # ==================== Android 15 - 6.6 构建 ====================
   build-a15-6-6:
     if: inputs.build_a15_6_6 || inputs.build_all
@@ -301,6 +328,15 @@ jobs:
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
+      # [矩阵入口不暴露的开关] 以下三项在 kernel-*.yml 里都有 input，但 main.yml
+      # 的 workflow_dispatch 已达 25 个 input 上限（见上方 ksu_branch_mode 处的
+      # 说明），无法再暴露到手动界面；不写就等于永远取默认值。
+      # 这里显式写死默认值并注明，避免造成"矩阵构建支持网络增强"的误解。
+      # 需要这三项请改用：单版本入口 kernel-*.yml、自定义入口
+      # kernel-custom.yml，或本地 `python3 build.py --net-enhance` 等参数。
+      use_net_enhance: false
+      skip_incompatible: false
+      susfs_commit: ''
   # ==================== Android 16 - 6.12 构建 ====================
   build-a16-6-12:
     if: inputs.build_a16_6_12 || inputs.build_all
@@ -329,6 +365,15 @@ jobs:
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
+      # [矩阵入口不暴露的开关] 以下三项在 kernel-*.yml 里都有 input，但 main.yml
+      # 的 workflow_dispatch 已达 25 个 input 上限（见上方 ksu_branch_mode 处的
+      # 说明），无法再暴露到手动界面；不写就等于永远取默认值。
+      # 这里显式写死默认值并注明，避免造成"矩阵构建支持网络增强"的误解。
+      # 需要这三项请改用：单版本入口 kernel-*.yml、自定义入口
+      # kernel-custom.yml，或本地 `python3 build.py --net-enhance` 等参数。
+      use_net_enhance: false
+      skip_incompatible: false
+      susfs_commit: ''
   # ==================== 收集补丁冲突文件 ====================
   # 汇总所有构建任务中的 .rej 文件，方便调试补丁问题
   collect-rejects:
