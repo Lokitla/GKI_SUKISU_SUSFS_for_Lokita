@@ -9,7 +9,7 @@
 >
 > - This repository is a **personal derivative (fork)** of [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS). The vast majority of the core work — build matrix, scripts, patch adaptation — **was done by the upstream author**; this repo only integrates it for personal use. All credit belongs upstream.
 > - Workflows, build scripts and docs here were **modified with AI assistance** and have **not been reviewed, endorsed or contributed to by any upstream author**; behaviour may differ from upstream. The upstream authors take no responsibility for anything in this repository.
-> - Builds are for the owner's own testing and are **not an official distribution channel**; for official releases go to [zzh's original repo](https://github.com/zzh20188/GKI_KernelSU_SUSFS/releases).
+> - Builds are for the owner's own testing and are **not an official distribution channel**; for official releases go to [zzh20188's original repo](https://github.com/zzh20188/GKI_KernelSU_SUSFS/releases).
 > - Flashing third-party kernels risks bricking, data loss and app integrity-check failures. Back up your stock boot image and proceed at your own risk.
 > - The docs site (GitHub Pages) uses [GoatCounter](https://www.goatcounter.com/) for anonymous visit stats, hosted at `zzh20188.goatcounter.com`; it collects no personally identifiable information. Disable JavaScript or block `gc.zgo.at` to opt out.
 > - Please report issues **here** and never contact the upstream authors about them (no issues, emails or Coolapk DMs).
@@ -172,7 +172,7 @@ This repo keeps its documentation in [`docs/`](docs/), reviewed and updated toge
 
 ---
 
-## 🆕 Capabilities Added on Top of Upstream zzh
+## 🆕 Capabilities Added on Top of Upstream zzh20188
 
 On top of [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS), this repository ports
 the following features from
@@ -395,7 +395,7 @@ the core work comes from the upstream authors below. The full list lives in [NOT
 
 | Project | Upstream contribution | Licence |
 |---|---|---|
-| [WildKernels/GKI_KernelSU_SUSFS](https://github.com/WildKernels/GKI_KernelSU_SUSFS) | Common root of both zzh and ShirkNeko | **GPL-3.0-or-later** (custom LICENSE header + full GPL-3.0 text; GitHub reports `Other`) |
+| [WildKernels/GKI_KernelSU_SUSFS](https://github.com/WildKernels/GKI_KernelSU_SUSFS) | Common root of both zzh20188 and ShirkNeko | **GPL-3.0-or-later** (custom LICENSE header + full GPL-3.0 text; GitHub reports `Other`) |
 | [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) | **Build scaffolding and the bulk of the code** (matrix, scripts, patch adaptation) | GPL-2.0 |
 | [ShirkNeko/GKI_KernelSU_SUSFS](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) | KPM image patching, local CLI design | not declared |
 | [coolzyd9107/GKI_SukiSU_Ultra_SUSFS](https://github.com/coolzyd9107/GKI_SukiSU_Ultra_SUSFS) | Release notes template | GPL-2.0 |
@@ -417,7 +417,7 @@ here and it will be corrected immediately.
 
 ### GPL-2.0 vs GPL-3.0
 
-This repository touches both licences (the zzh base is GPL-2.0; SukiSU / SUSFS are GPL-3.0). The differences:
+This repository touches both licences (the zzh20188 base is GPL-2.0; SukiSU / SUSFS are GPL-3.0). The differences:
 
 | Aspect | GPL-2.0 | GPL-3.0 / GPL-3.0-or-later |
 |---|---|---|

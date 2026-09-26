@@ -9,7 +9,7 @@
 >
 > - 本仓库是 [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) 的**个人自用衍生分支**。构建矩阵、脚本与补丁适配等**绝大多数核心工作由上游作者完成**，本仓库只是在此基础上做了自用整合，所有功劳归属上游。
 > - 仓库内的工作流、构建脚本与文档经过 **AI 辅助修改与二次开发**，**未经任何上游作者审阅、认可或参与**，行为可能与上游不一致；上游作者对本仓库的内容、质量与后果不承担任何责任。
-> - 产物仅供本人测试，**不是官方发布渠道**；想要官方版本请前往 [zzh 原仓库](https://github.com/zzh20188/GKI_KernelSU_SUSFS/releases)。
+> - 产物仅供本人测试，**不是官方发布渠道**；想要官方版本请前往 [zzh20188 原仓库](https://github.com/zzh20188/GKI_KernelSU_SUSFS/releases)。
 > - 刷入第三方内核存在变砖、丢失数据、触发应用风控等风险；请自行备份原厂 Boot 镜像，风险自负。
 > - 文档站点（GitHub Pages）使用 [GoatCounter](https://www.goatcounter.com/) 做匿名访问统计，数据托管于 `zzh20188.goatcounter.com`，不收集可识别个人身份的信息；禁用 JavaScript 或拦截 `gc.zgo.at` 即可退出统计。
 > - 遇到问题请在本仓库反馈，**不要以任何方式打扰上游作者**（包括 Issue、邮件、酷安私信等）。
@@ -32,7 +32,7 @@ GitHub Actions 与本地 `build.py` 共用这一份 47 阶段脚本，不存在�
 [![KernelSU](https://img.shields.io/badge/KernelSU-Supported-5AA300?style=flat-square)](https://kernelsu.org/)
 [![SUSFS](https://img.shields.io/badge/SUSFS-Integrated-E67E22?style=flat-square)](https://gitlab.com/simonpunk/susfs4ksu)
 
-> 🙏 上面这个 Coolapk 链接是**上游原作者 zzh20188 的酷安主页**，放在这里仅是为了表达敬意与感谢；
+> 🙏 上面这个 Coolapk 链接是**原作者 zzh20188 的酷安主页**，放在这里仅是为了表达敬意与感谢；
 > **它与本仓库没有任何关系**——请勿因本仓库的任何问题（Issue、私信、评论）去打扰原作者。
 
 [**English**](README-EN.md) | 简体中文
@@ -195,12 +195,12 @@ GitHub Actions 与本地 `build.py` 共用这一份 47 阶段脚本，不存在�
 - 📊 [**内核版本查询**](https://lokitla.github.io/GKI_SUKISU_SUSFS_for_Lokita/)：安全补丁月份 → 内核子版本对照，点开即可复制构建参数
 - [English](docs/advanced-features-en.md) / [English: local build](docs/local-build-en.md)
 
-> 上游 [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) 的 Wiki 面向原仓库，
+> [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) 的 Wiki 面向原仓库，
 > 不含本分支的定制项（SukiSU 变体、KPM 镜像修补、Release 缓存、NoMount 等），请以本仓库 `docs/` 为准。
 
 ---
 
-## 🆕 相对上游 zzh 的新增能力
+## 🆕 相对 zzh20188 的新增能力
 
 在 [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) 的基础上，本仓库移植了 [ShirkNeko/GKI_KernelSU_SUSFS](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) 的以下能力，并做了适配整理：
 
@@ -439,7 +439,7 @@ python3 build.py --android android14 --kernel 6.1 --sub-level 124 --os-patch 202
 
 | 项目 | 上游贡献 | 许可证 |
 |---|---|---|
-| [WildKernels/GKI_KernelSU_SUSFS](https://github.com/WildKernels/GKI_KernelSU_SUSFS) | zzh 与 ShirkNeko 的共同原始上游 | **GPL-3.0-or-later**（自定义 LICENSE 声明头 + GPL-3.0 全文，GitHub 识别为 `Other`） |
+| [WildKernels/GKI_KernelSU_SUSFS](https://github.com/WildKernels/GKI_KernelSU_SUSFS) | zzh20188 与 ShirkNeko 的共同原始上游 | **GPL-3.0-or-later**（自定义 LICENSE 声明头 + GPL-3.0 全文，GitHub 识别为 `Other`） |
 | [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS) | **构建基座与绝大部分代码**（矩阵、脚本、补丁适配） | GPL-2.0 |
 | [ShirkNeko/GKI_KernelSU_SUSFS](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) | KPM 镜像修补、本地 CLI 设计 | 未声明 |
 | [coolzyd9107/GKI_SukiSU_Ultra_SUSFS](https://github.com/coolzyd9107/GKI_SukiSU_Ultra_SUSFS) | Release 说明模板 | GPL-2.0 |
@@ -458,7 +458,7 @@ python3 build.py --android android14 --kernel 6.1 --sub-level 124 --os-patch 202
 
 ### GPL-2.0 与 GPL-3.0 的区别
 
-本仓库同时涉及这两种许可证（基座 zzh 是 GPL-2.0，SukiSU / SUSFS 是 GPL-3.0），差异如下：
+本仓库同时涉及这两种许可证（基座 zzh20188 是 GPL-2.0，SukiSU / SUSFS 是 GPL-3.0），差异如下：
 
 | 维度 | GPL-2.0 | GPL-3.0 / GPL-3.0-or-later |
 |---|---|---|
