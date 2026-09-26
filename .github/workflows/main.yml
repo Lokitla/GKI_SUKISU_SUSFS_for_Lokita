@@ -41,7 +41,7 @@ on:
           - ReSukiSU
           - Official
           #- Next
-        default: SukiSU
+        default: ReSukiSU
       enable_susfs:
         description: "集成 SUSFS"
         required: false
@@ -662,7 +662,14 @@ jobs:
           # 功能开关显示
           echo "LZ4_STATUS=${{ inputs.use_zram && '开启' || '未开启' }}" >> $GITHUB_ENV
           echo "BBG_STATUS=${{ inputs.use_bbg && '支持' || '不支持' }}" >> $GITHUB_ENV
-          if [[ "${{ inputs.use_kpm }}" == enabled* ]]; then
+          # KPM 只有 SukiSU 变体提供。ReSukiSU / Official / Next 的内核 Kconfig 里
+          # 没有 config KPM，构建脚本会把 KPM 阶段整段跳过，这里如实反映——
+          # 否则 Release 列表会挂着「支持（已修补镜像）」，实际却加载不了 KPM 模块。
+          if [[ "${{ inputs.kernelsu_variant }}" == "ReSukiSU" ]] \
+             || [[ "${{ inputs.kernelsu_variant }}" == "Official" ]] \
+             || [[ "${{ inputs.kernelsu_variant }}" == "Next" ]]; then
+            echo "KPM_STATUS=不支持（变体未提供 KPM）" >> $GITHUB_ENV
+          elif [[ "${{ inputs.use_kpm }}" == enabled* ]]; then
             echo "KPM_STATUS=支持" >> $GITHUB_ENV
           elif [[ "${{ inputs.use_kpm }}" == patched* ]]; then
             echo "KPM_STATUS=支持（已修补镜像）" >> $GITHUB_ENV
