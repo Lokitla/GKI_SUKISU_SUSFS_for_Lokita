@@ -170,3 +170,56 @@ run_cleanup_disk() {
 
 `tools/migration/` 里的脚本只用于追溯本次迁移是如何从原 1583 行 YAML 提取出
 shell 逻辑的，日常维护不需要再运行它。
+
+---
+
+## LingLuo17/AnyKernel3 移植记录
+
+> **前提澄清**：`LingLuo17/AnyKernel3` 虽然叫这个名字，但**不是 AnyKernel3 刷机包
+> 模板**，而是另一套完整的 GKI 构建工程（dev 分支 `ba3c27c`，结构与本仓库高度相似）。
+> 本仓库真正使用的 AnyKernel3 刷机包来自 `WildKernels/AnyKernel3`
+> （`scripts/build_kernel.sh` 的 `clone_deps` 阶段），那条链路不受本次移植影响。
+
+本仓库的 `ling_ports_beta` 分支即该工程的移植分支，已合并进 `main`。
+
+### 已移植
+
+- 6.10+ 的 `security_add_hooks` 新签名兼容补丁（`const struct lsm_id *`）；
+- 严格补丁校验与 6.12 的 `show_smap` 修复（本仓库 `susfs_fixes/apply.sh` 442 行，
+  比上游 zzh20188 的 328 行更完整）；
+- NoMount 挂载元模块、网络增强等（与上游 zzh20188 同代，非 LingLuo 独有）。
+
+### 确定遗漏（合并 `ling_ports_beta` 时漏掉）
+
+1. **6.12 的 ZRAM 补丁资源**：上游 `SukiSU_patch` 的 `other/zram/zram_patch/` 只有
+   `5.10 / 5.15 / 6.1 / 6.6` 四个目录，没有 6.12。LingLuo 为此补了 6.12 补丁
+   （commit `94fd545`、`ba3c27c`），本仓库未引入。
+   → 后果：6.12 入口的 `use_zram` 默认 `true` 却恒不生效（已改为默认 `false` 并在
+   描述里注明，属于"让开关说真话"的止血，不是恢复功能）。
+2. **6.12 的 KPM**：脚本在内核 ≥ 6.10 时强制 `KPM_SUPPORTED=0`，与 LingLuo 无关，
+   属上游限制。6.12 入口的 `use_kpm` 默认已改为 `disabled (关闭)`。
+3. **UAPI 同步**（`scripts/ksu_uapi_sync/builtin-uapi4.patch` 及对齐逻辑）未移植。
+
+### 强烈建议不要移植的一项
+
+**`scripts/ksu_post_setup.sh`（51 行）——品牌署名篡改脚本。**
+
+把脚本里的 base64 常量解出来，实际行为是：
+
+```
+UkVQT19OQU1FIDo9IFJlU3VraVNV  →  REPO_NAME := ReSukiSU
+QCQoY2FsbCBnaXRfYnJhbmNoKQ==  →  @$(call git_branch)
+TGluZ0x1bw==                  →  LingLuo
+```
+
+即：把 `KernelSU/kernel/Kbuild` 里的 `REPO_NAME := ReSukiSU` 改成
+`REPO_NAME := LingLuo`，把版本字符串里的 `@$(call git_branch)` 改成 `@LingLuo`，
+然后用 `git update-index --skip-worktree` 把这次改动从 git 状态里藏起来
+（`git status` / `git diff` 都看不到）。
+
+这等于把上游 KernelSU 变体的品牌标识替换成自己的，并让替换行为不可见，与本仓库
+`NOTICE` / `THIRD_PARTY_NOTICES.md` 的归属声明要求**直接冲突**——GPL-2.0 要求保留
+原作者署名，本仓库自己的许可证文件也写明"构建期拉取的各组件保留其原有许可，不因
+被本仓库引用而改变"。
+
+**不要移植这一项。** 记录在此，避免日后有人又把它捡回来。

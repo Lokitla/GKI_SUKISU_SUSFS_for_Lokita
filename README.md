@@ -141,16 +141,29 @@ GitHub Actions  ──┐
 | `use_net_enhance` | ❌ 恒定关闭 | ✅ | ✅ | ✅ | `--net-enhance` |
 | `use_nomount` | ✅ | ✅ | ✅ | ✅ | `--nomount` |
 | `skip_incompatible` | ❌ 恒定 false | ✅ | ❌ | ✅ | `--skip-incompatible` |
-| `export_susfs_patches` | ✅ | ✅ | ❌ | ✅ | `--export-susfs-patches` |
-| `ksu_branch_mode` | ✅ | ✅ | ❌ | ❌ | `--ksu-branch-mode` |
-| `susfs_commit` | ❌ 恒定空 | ✅ | ✅ | ❌ | 无此参数 |
+| `export_susfs_patches` | ✅ | ➖ 仅由主入口传入 | ❌ | ✅ | `--export-susfs-patches` |
+| `ksu_branch_mode` | ❌ 恒 `auto` | ✅ | ❌ | ❌ | `--ksu-branch-mode` |
+| `sukisu_commit` | ❌ 恒定空 | ✅ | ✅ | ❌ | `--sukisu-commit` |
+| `susfs_commit` | ❌ 恒定空 | ✅ | ✅ | ❌ | `--susfs-commit` |
+| `supp_op`（一加 8E） | ❌ 恒 false | ✅ | ✅ | ➖ 写死 false | `--op8e` |
 | `ksu_mode` | ❌ | ❌ | ❌ | ❌ | 无此参数 |
 
-- **❌ = 该入口不提供此开关**（代码里已显式写出默认值并注明原因，不会让人误以为支持）。
+图例：
+
+- **✅ = 该入口手动运行时可由用户控制**（该 input 出现在文件的 `workflow_dispatch` 块）。
+- **❌ = 该入口不提供此开关**，取固定默认值（代码里已写明并注明原因）。
   主要成因是 `main.yml` 的 `workflow_dispatch` 输入**已达 GitHub 的 25 个上限**。
   需要时改用**单版本入口 `kernel-*.yml`** 或**本地 `build.py`**。
-- **➖ = 该入口把它并入网络增强**，不单独提供：`use_net_enhance` 本身就包含
-  「把 BBR 设为默认拥塞算法」，两个开关只会造成歧义。
+- **➖ = 特殊情况**：
+  - 「并入网络增强」——`use_net_enhance` 本身已包含「把 BBR 设为默认拥塞算法」，
+    两个开关只会造成歧义；
+  - 「仅由主入口传入」——该 input 只存在于 `kernel-a1*.yml` 的 `workflow_call`
+    块（供 `main.yml` 调用时传入），**不在 `workflow_dispatch` 块**，所以手动运行
+    单版本入口时它恒为 `false`，只有走「构建内核」才能生效。
+
+> 矩阵每一格均以「该 input 是否出现在对应文件的 `workflow_dispatch` 块」为判据
+> 实测得出，而非按调用链推断——两者容易不一致（例如某个 input 只在 `workflow_call`
+> 块存在时，调用链看得到、用户却填不到）。
 
 ### 三个容易踩的坑
 

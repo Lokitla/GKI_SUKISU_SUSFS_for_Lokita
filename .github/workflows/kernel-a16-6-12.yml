@@ -25,11 +25,16 @@ on:
         required: false
         type: boolean
         default: true
+      # 6.12 上 KPM 恒不生效，默认关闭以免"勾了却空转"：
+      # build_kernel.sh 在内核 >= 6.10 时强制 KPM_SUPPORTED=0
+      # （SukiSU 的 drivers/kernelsu/kpm/super_access.c 用了 6.10+ 已移除的
+      #  netlink_kernel_cfg.cb_mutex，编译必失败），相关阶段全部跳过。
+      # 注意描述里不能写"6.6 不支持"——6.6 是支持的，不支持的是 6.12 及以上。
       use_kpm:
-        description: "KPM 模块支持（编译后修补 Image，6.6 内核不支持）"
+        description: "KPM 模块支持（编译后修补 Image。6.12 及以上不支持：SukiSU 的 KPM 代码用了新内核已移除的 netlink_kernel_cfg.cb_mutex）"
         required: true
         type: choice
-        default: "patched (开启并修补)"
+        default: "disabled (关闭)"
         options:
           - "disabled (关闭)"
           - "enabled (开启)"
@@ -63,11 +68,14 @@ on:
         default: "Thu Sep 17 00:00:00 UTC 2026"
 
       # ==================== 开关（默认关闭） ====================
+      # 6.12 上 ZRAM 恒不生效，默认关闭以免"勾了却空转"：
+      # 上游 SukiSU_patch 的 other/zram/zram_patch/ 只有 5.10 / 5.15 / 6.1 / 6.6
+      # 四个目录，没有 6.12，setup_zram_lz4 与 config_zram 两阶段会整段跳过。
       use_zram:
-        description: "启用 ZRAM 增强算法"
+        description: "启用 ZRAM 增强算法（6.12 暂无 lz4k 补丁栈，开启无效）"
         required: true
         type: boolean
-        default: true
+        default: false
       use_bbg:
         description: "启用 BBG 防格机"
         required: true

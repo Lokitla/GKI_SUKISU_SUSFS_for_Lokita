@@ -1,0 +1,38 @@
+# 构建产物与本地中间文件
+# 移植自上游 zzh20188/GKI_KernelSU_SUSFS 的同名文件，并按本仓库实际产物补齐。
+#
+# 注意：本文件只忽略"生成物"，不忽略任何参与构建的配置或脚本。
+# 已纳入版本控制的文件不受影响（gitignore 不会删除已跟踪文件）。
+
+# 内核源码与编译输出（体积最大，动辄数十 GB）
+out/
+build_out/
+*.o
+*.ko
+*.mod
+*.mod.c
+*.cmd
+*.dwo
+
+# 刷机包与镜像产物
+*.img
+*.zip
+*.tar.gz
+
+# 补丁冲突残留
+*.rej
+*.orig
+patch-rejects/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 编辑器与系统文件
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

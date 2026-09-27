@@ -149,18 +149,33 @@ This table exists to prevent "it looks supported but is permanently off" mistake
 | `use_net_enhance` | ❌ always off | ✅ | ✅ | ✅ | `--net-enhance` |
 | `use_nomount` | ✅ | ✅ | ✅ | ✅ | `--nomount` |
 | `skip_incompatible` | ❌ always false | ✅ | ❌ | ✅ | `--skip-incompatible` |
-| `export_susfs_patches` | ✅ | ✅ | ❌ | ✅ | `--export-susfs-patches` |
-| `ksu_branch_mode` | ✅ | ✅ | ❌ | ❌ | `--ksu-branch-mode` |
-| `susfs_commit` | ❌ always empty | ✅ | ✅ | ❌ | not available |
+| `export_susfs_patches` | ✅ | ➖ main entry only | ❌ | ✅ | `--export-susfs-patches` |
+| `ksu_branch_mode` | ❌ always `auto` | ✅ | ❌ | ❌ | `--ksu-branch-mode` |
+| `sukisu_commit` | ❌ always empty | ✅ | ✅ | ❌ | `--sukisu-commit` |
+| `susfs_commit` | ❌ always empty | ✅ | ✅ | ❌ | `--susfs-commit` |
+| `supp_op` (OnePlus 8E) | ❌ always false | ✅ | ✅ | ➖ hardcoded false | `--op8e` |
 | `ksu_mode` | ❌ | ❌ | ❌ | ❌ | not available |
 
-- **❌ = not offered by this entry.** The default is written out explicitly in the code
-  with a note explaining why, so nobody is misled. The main cause is `main.yml`'s
-  `workflow_dispatch` inputs **hitting GitHub's 25-input limit**. Use the
-  **single-version entry `kernel-*.yml`** or **local `build.py`** instead.
-- **➖ = merged into network enhancement**, not offered separately: `use_net_enhance`
-  already includes "set BBR as the default congestion algorithm", so two switches would
-  only create ambiguity.
+Legend:
+
+- **✅ = user-controllable when this entry is run manually** (the input exists in that
+  file's `workflow_dispatch` block).
+- **❌ = not offered by this entry**; a fixed default is used (written out in the code
+  with a note explaining why). The main cause is `main.yml`'s `workflow_dispatch` inputs
+  **hitting GitHub's 25-input limit**. Use the **single-version entry `kernel-*.yml`**
+  or **local `build.py`** instead.
+- **➖ = special cases**:
+  - *merged into network enhancement* — `use_net_enhance` already includes "set BBR as
+    the default congestion algorithm", so two switches would only create ambiguity;
+  - *main entry only* — the input exists only in `kernel-a1*.yml`'s `workflow_call`
+    block (for `main.yml` to pass in), **not in `workflow_dispatch`**, so it is always
+    `false` when you run the single-version entry by hand; only "Build kernels" can
+    actually set it.
+
+> Every cell is measured against one criterion — whether the input appears in that file's
+> `workflow_dispatch` block — not inferred from the call chain. The two disagree easily:
+> an input present only in `workflow_call` is visible along the call chain yet unreachable
+> for the user.
 
 ### Three common pitfalls
 

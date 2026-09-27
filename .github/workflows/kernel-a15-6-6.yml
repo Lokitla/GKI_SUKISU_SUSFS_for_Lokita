@@ -26,7 +26,7 @@ on:
         type: boolean
         default: true
       use_kpm:
-        description: "KPM 模块支持（编译后修补 Image，6.6 内核不支持）"
+        description: "KPM 模块支持（编译后修补 Image。6.12 及以上不支持：SukiSU 的 KPM 代码用了新内核已移除的 netlink_kernel_cfg.cb_mutex；6.6 是支持的）"
         required: true
         type: choice
         default: "patched (开启并修补)"

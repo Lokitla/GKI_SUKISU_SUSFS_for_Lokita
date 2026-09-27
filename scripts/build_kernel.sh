@@ -452,7 +452,19 @@ stage_clone_deps() {
     fi
   }
 
-  if [ -n "$LEGACY_SUKISU_CONFIG" ]; then
+  # SUSFS 提交锁定：显式传入的 SUSFS_COMMIT 环境变量优先级最高。
+  # 此前 build.yml 一直在传这个变量，但本脚本从未读取它 —— susfs_commit 因此
+  # 是个空开关（各入口都能填，填了也没人用）。这里补上读取，与 SUKISU_COMMIT
+  # （见 resolve_ksu_branch 附近）保持同一套优先级：显式入参 > config/config > 分支最新。
+  # 老版本变体（SukiSU(40726)/SukiSU(40548)）走各自的固定配置，不受此开关影响。
+  if [ -n "${SUSFS_COMMIT:-}" ] && [ -z "$LEGACY_SUKISU_CONFIG" ]; then
+    if [[ ! "$SUSFS_COMMIT" =~ ^[0-9a-fA-F]{40}$ && ! "$SUSFS_COMMIT" =~ ^[0-9a-fA-F]{64}$ ]]; then
+      echo "::warning::忽略非法 SUSFS 提交: ${SUSFS_COMMIT}（要求 40 位 SHA-1 或 64 位 SHA-256 的 hex，改用默认分支）"
+    else
+      echo "切换 SUSFS 到指定提交: $SUSFS_COMMIT"
+      checkout_susfs_commit "$SUSFS_COMMIT"
+    fi
+  elif [ -n "$LEGACY_SUKISU_CONFIG" ]; then
     SUSFS_FIXED_COMMIT=$(grep "^${SUSFS_BRANCH}=" "$LEGACY_SUKISU_CONFIG" | cut -d'=' -f2-)
     if [ -z "$SUSFS_FIXED_COMMIT" ]; then
       echo "未在 $LEGACY_SUKISU_CONFIG 配置 $SUSFS_BRANCH 的固定 SUSFS 提交" >&2
@@ -460,16 +472,16 @@ stage_clone_deps() {
     fi
     echo "${KSU_VARIANT} 固定 SUSFS 提交: $SUSFS_FIXED_COMMIT"
     checkout_susfs_commit "$SUSFS_FIXED_COMMIT"
-  fi
-
-  CONFIG_FILE="config/config"
-  if [ -z "$LEGACY_SUKISU_CONFIG" ] && [ -f "$CONFIG_FILE" ]; then
-    CUSTOM_ENABLED=$(grep "^custom=" "$CONFIG_FILE" | cut -d'=' -f2)
-    if [ "$CUSTOM_ENABLED" == "true" ]; then
-      CUSTOM_COMMIT=$(grep "^${SUSFS_BRANCH}=" "$CONFIG_FILE" | cut -d'=' -f2)
-      if [ -n "$CUSTOM_COMMIT" ]; then
-        echo "切换 SUSFS 到自定义提交: $CUSTOM_COMMIT"
-        checkout_susfs_commit "$CUSTOM_COMMIT"
+  else
+    CONFIG_FILE="config/config"
+    if [ -f "$CONFIG_FILE" ]; then
+      CUSTOM_ENABLED=$(grep "^custom=" "$CONFIG_FILE" | cut -d'=' -f2)
+      if [ "$CUSTOM_ENABLED" == "true" ]; then
+        CUSTOM_COMMIT=$(grep "^${SUSFS_BRANCH}=" "$CONFIG_FILE" | cut -d'=' -f2)
+        if [ -n "$CUSTOM_COMMIT" ]; then
+          echo "切换 SUSFS 到自定义提交: $CUSTOM_COMMIT"
+          checkout_susfs_commit "$CUSTOM_COMMIT"
+        fi
       fi
     fi
   fi

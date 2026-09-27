@@ -26,7 +26,7 @@ on:
         type: boolean
         default: true
       use_kpm:
-        description: "KPM 模块支持（编译后修补 Image，6.6 内核不支持）"
+        description: "KPM 模块支持（编译后修补 Image。6.12 及以上不支持：SukiSU 的 KPM 代码用了新内核已移除的 netlink_kernel_cfg.cb_mutex；6.6 是支持的）"
         required: true
         type: choice
         default: "patched (开启并修补)"
@@ -324,7 +324,7 @@ jobs:
       use_nomount: ${{ inputs.use_nomount || false }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches || false }}
-      supp_op: false
+      supp_op: ${{ inputs.supp_op || false }}
       enable_susfs: ${{ inputs.enable_susfs }}
       # ksu_mode 不传：build.yml 默认「关闭」（正常集成 KernelSU）。
       droidspaces: ${{ inputs.droidspaces || '不启用' }}

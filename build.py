@@ -142,6 +142,10 @@ def build_env(args, android, kernel, sub_level, os_patch):
         "CVE_2026_43499_PATCH": str(args.cve_patch).lower(),
         "EXPORT_SUSFS_PATCHES": str(args.export_susfs_patches).lower(),
         "EXPECTED_KPM_PATCH_SHA256": args.kpm_patch_sha256 or "",
+        # 提交锁定：与 CI 的 sukisu_commit / susfs_commit 对齐。此前 CLI 未构造这两个
+        # 变量，本地无法复现"CI 锁定提交、本地走默认分支"的场景，排查结论会失真。
+        "SUKISU_COMMIT": args.sukisu_commit or "",
+        "SUSFS_COMMIT": args.susfs_commit or "",
         "ARTIFACT_UPLOAD_MODE": args.artifact_mode,
         "WORKSPACE": str(args.workspace),
     }
@@ -204,6 +208,10 @@ def main():
                         help="KPM 模块支持（默认 patched 开启并修补；--kpm disabled 关闭）")
     parser.add_argument("--kpm-patch-sha256", help="KPM 修补工具(patch_linux)的 sha256 锚点，"
                         "传入后做 fail-closed 比对，不符即拒绝执行（留空则不校验）")
+    parser.add_argument("--sukisu-commit", help="SukiSU 提交 hash：内核与管理器统一使用该 commit"
+                        "（仅 SukiSU 变体生效；留空则用 config/config 的 sukisu= 或分支最新）")
+    parser.add_argument("--susfs-commit", help="SUSFS 提交 hash：内核 SUSFS 修补使用该 commit"
+                        "（留空则用 config/config 的对应分支行或分支最新）")
     parser.add_argument("--bbg", action="store_true", help="启用 Baseband-guard")
     parser.add_argument("--rekernel", action="store_true", help="启用 Re-Kernel")
     parser.add_argument("--net-enhance", action="store_true",
