@@ -136,6 +136,22 @@ permissions:
         required: false
         type: string
         default: ""
+      # 以下三项供 susfs-probe 探测工作流使用（校准网页上的 SUSFS 兼容线）
+      susfs_raw_probe:
+        description: "SUSFS 原始补丁探测：跳过适配修复，直接用未经修补的原始补丁构建"
+        required: false
+        type: boolean
+        default: false
+      susfs_side_fixes:
+        description: "探测模式下保留与子版本无关的 SUSFS 侧修复（5.10 上游补丁自身的两处编译缺陷）"
+        required: false
+        type: boolean
+        default: false
+      susfs_pin_time:
+        description: "把 susfs4ksu 固定到该时刻之前的最后一次提交（ISO 8601，留空=不固定）"
+        required: false
+        type: string
+        default: ""
       kpm_patch_sha256:
         description: "KPM 修补工具 sha256 锚点（留空不校验）"
         required: false
@@ -160,6 +176,9 @@ jobs:
       env:
         SUKISU_COMMIT: ${{ inputs.sukisu_commit }}
         SUSFS_COMMIT: ${{ inputs.susfs_commit }}
+        SUSFS_RAW_PROBE: ${{ inputs.susfs_raw_probe || false }}
+        SUSFS_SIDE_FIXES: ${{ inputs.susfs_side_fixes || false }}
+        SUSFS_PIN_TIME: ${{ inputs.susfs_pin_time || '' }}
         ANDROID_VERSION: ${{ inputs.android_version }}
         KERNEL_VERSION: ${{ inputs.kernel_version }}
       run: |

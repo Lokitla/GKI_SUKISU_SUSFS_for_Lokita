@@ -141,12 +141,11 @@ This table exists to prevent "it looks supported but is permanently off" mistake
 
 | Switch | Build kernels `main.yml` | Single-version `kernel-a1*.yml` | Custom `kernel-custom.yml` | Personal `build-236-marble.yml` | Local `build.py` |
 |---|:---:|:---:|:---:|:---:|:---:|
-| `use_zram` | ✅ | ✅ | ✅ | ✅ | `--zram` |
-| `use_bbr` | ✅ | ✅ | ➖ merged into net enhance | ➖ merged into net enhance | `--bbr` |
+| `use_zram` | ✅ | ✅ (no-op on 6.12) | ✅ | ✅ | `--zram` |
+| `use_net_enhance` | ✅ | ✅ | ✅ | ✅ | `--net-enhance` |
 | `use_bbg` | ✅ | ✅ | ✅ | ✅ | `--bbg` |
-| `use_kpm` | ✅ | ✅ | ✅ | ✅ | `--kpm` |
+| `use_kpm` | ✅ | ✅ (no-op on 6.12) | ✅ | ✅ | `--kpm` |
 | `use_rekernel` | ✅ | ✅ | ✅ | ✅ | `--rekernel` |
-| `use_net_enhance` | ❌ always off | ✅ | ✅ | ✅ | `--net-enhance` |
 | `use_nomount` | ✅ | ✅ | ✅ | ✅ | `--nomount` |
 | `skip_incompatible` | ❌ always false | ✅ | ❌ | ✅ | `--skip-incompatible` |
 | `export_susfs_patches` | ✅ | ➖ main entry only | ❌ | ✅ | `--export-susfs-patches` |
@@ -165,12 +164,25 @@ Legend:
   **hitting GitHub's 25-input limit**. Use the **single-version entry `kernel-*.yml`**
   or **local `build.py`** instead.
 - **➖ = special cases**:
-  - *merged into network enhancement* — `use_net_enhance` already includes "set BBR as
-    the default congestion algorithm", so two switches would only create ambiguity;
   - *main entry only* — the input exists only in `kernel-a1*.yml`'s `workflow_call`
     block (for `main.yml` to pass in), **not in `workflow_dispatch`**, so it is always
     `false` when you run the single-version entry by hand; only "Build kernels" can
     actually set it.
+
+**On `use_bbr`**: all Actions entries now use `use_net_enhance` only — network
+enhancement already includes "set BBR as the default congestion algorithm", so two
+switches would only create ambiguity. Only the local `build.py` keeps a separate
+`--bbr`.
+
+**Two switches are permanently ineffective on 6.12 (Android 16)** — an upstream
+limitation, not a configuration problem:
+
+- `use_zram`: upstream `SukiSU_patch`'s `other/zram/zram_patch/` ships only
+  5.10 / 5.15 / 6.1 / 6.6, with no 6.12 directory, so those stages are skipped whole;
+- `use_kpm`: the script forces `KPM_SUPPORTED=0` on kernel ≥ 6.10 (SukiSU's KPM code
+  uses `netlink_kernel_cfg.cb_mutex`, removed in newer kernels).
+
+`kernel-a16-6-12.yml` now defaults both to off so they no longer spin idly.
 
 > Every cell is measured against one criterion — whether the input appears in that file's
 > `workflow_dispatch` block — not inferred from the call chain. The two disagree easily:

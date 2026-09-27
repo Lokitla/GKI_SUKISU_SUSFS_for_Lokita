@@ -87,27 +87,20 @@ on:
         type: boolean
         default: true
 
+      # ==================== 构建目标 ====================
+      # 原先这里是 build_a12_5_10 ~ build_a16_6_12 五个布尔开关，占掉 5 个名额。
+      # workflow_dispatch 上限 25，为腾出名额给 supp_op / sukisu_commit /
+      # susfs_commit / use_net_enhance，合并成一个逗号分隔的字符串。
+      # 写法：a12 / a13 / a14 / a15 / a16，或 all（全部，含 6.12）。
+      # 例：a12,a15    只构建 5.10 与 6.6
+      #     all        全部五个（等价于旧的 build_all=true）
+      build_targets:
+        description: "构建目标，逗号分隔（a12/a13/a14/a15/a16）或 all"
+        type: string
+        default: "all"
+        required: false
+
       # ==================== 开关（默认关闭） ====================
-      build_a12_5_10:
-        description: "Android 12 - 5.10"
-        type: boolean
-        default: false
-      build_a13_5_15:
-        description: "Android 13 - 5.15"
-        type: boolean
-        default: false
-      build_a14_6_1:
-        description: "Android 14 - 6.1"
-        type: boolean
-        default: false
-      build_a15_6_6:
-        description: "Android 15 - 6.6"
-        type: boolean
-        default: false
-      build_a16_6_12:
-        description: "Android 16 - 6.12"
-        type: boolean
-        default: false
       use_zram:
         description: "启用 ZRAM 增强算法"
         type: boolean
@@ -129,8 +122,12 @@ on:
         type: boolean
         default: false
 
-      use_bbr:
-        description: "设置 BBR 为默认拥塞算法"
+      # 原 use_bbr 的input 名额改为 use_net_enhance：
+      # 网络增强本身就包含「把 BBR 设为默认拥塞算法」（build_kernel.sh 的
+      # stage_config_net_enhance 会写 CONFIG_DEFAULT_BBR=y），两个开关只会造成歧义。
+      # 这样既统一了语义，又没有额外占用 25 个名额里的位置。
+      use_net_enhance:
+        description: "启用网络增强（IPSet 全类型 + BBR + FQ/FQ_CODEL 队列 + IPv6 NAT + 附加拥塞算法）"
         required: false
         type: boolean
         default: false
@@ -144,10 +141,13 @@ on:
         required: false
         type: boolean
         default: true
-      # supp_op（一加 8E 支持）已从手动触发界面移除：workflow_dispatch 上限 25 个 input，
-      # 名额让给 use_nomount。自动触发经 API 传 false，与此处默认值一致，隐藏后由
-      # 透传处的 ${{ inputs.supp_op || false }} 兜底，行为不变。需要开一加 8E 时直接跑
-      # kernel-a1*.yml 单独工作流（那边仍保留该开关）。
+      # supp_op 恢复显示：原先因 25 input 上限被隐藏，名额让给了 use_nomount。
+      # 本次把 5 个 build_a1x 布尔开关合并为 build_targets 后腾出名额，故补回。
+      supp_op:
+        description: "启用一加 8E 支持（非一加设备勿开）"
+        required: false
+        type: boolean
+        default: false
       use_nomount:
         description: "启用 NoMount 挂载元模块"
         required: false
@@ -177,6 +177,16 @@ on:
         required: false
         type: string
         default: ""
+      sukisu_commit:
+        description: "SukiSU 提交 hash：内核与管理器统一使用该 commit（仅 SukiSU 变体生效；留空则用 config/config 的 sukisu= 或分支最新）"
+        required: false
+        type: string
+        default: ""
+      susfs_commit:
+        description: "SUSFS 提交 hash：内核 SUSFS 修补使用该 commit（留空则用 config/config 的对应分支行或分支最新）"
+        required: false
+        type: string
+        default: ""
 jobs:
   # ==================== 获取管理器 ====================
   # 下载最新的 KernelSU 管理器 APK 和 SUSFS 模块
@@ -190,7 +200,7 @@ jobs:
       manager_spoofed: ${{ inputs.manager_spoofed }}
   # ==================== Android 12 - 5.10 构建 ====================
   build-a12-5-10:
-    if: inputs.build_a12_5_10 || inputs.build_all
+    if: contains(inputs.build_targets, 'a12') || contains(inputs.build_targets, 'all')
     uses: ./.github/workflows/kernel-a12-5-10.yml
     secrets: inherit
     with:
@@ -209,7 +219,6 @@ jobs:
       artifact_upload_mode: "上传全部"
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       called_from_main: true
-      use_bbr: ${{ inputs.use_bbr || false }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
       supp_op: ${{ inputs.supp_op || false }}
@@ -217,18 +226,16 @@ jobs:
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
       # ksu_mode 不传：build.yml 默认「关闭」（正常集成 KernelSU）。
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
-      # [矩阵入口不暴露的开关] 以下三项在 kernel-*.yml 里都有 input，但 main.yml
-      # 的 workflow_dispatch 已达 25 个 input 上限（见上方 ksu_branch_mode 处的
-      # 说明），无法再暴露到手动界面；不写就等于永远取默认值。
-      # 这里显式写死默认值并注明，避免造成"矩阵构建支持网络增强"的误解。
-      # 需要这三项请改用：单版本入口 kernel-*.yml、自定义入口
-      # kernel-custom.yml，或本地 `python3 build.py --net-enhance` 等参数。
-      use_net_enhance: false
+      # 以下两项目前仍未在手动界面暴露（25 个 input 名额已用满）：
+      #   skip_incompatible —— 可选阶段失败时降级为 warning 而非中断
+      #   ksu_branch_mode   —— 上方已注明，不声明时自然回退 auto
+      # 而 use_net_enhance / susfs_commit 已随本次名额整理改为可调（见 input 定义）。
+      use_net_enhance: ${{ inputs.use_net_enhance || false }}
       skip_incompatible: false
-      susfs_commit: ''
+      susfs_commit: ${{ inputs.susfs_commit || '' }}
   # ==================== Android 13 - 5.15 构建 ====================
   build-a13-5-15:
-    if: inputs.build_a13_5_15 || inputs.build_all
+    if: contains(inputs.build_targets, 'a13') || contains(inputs.build_targets, 'all')
     uses: ./.github/workflows/kernel-a13-5-15.yml
     secrets: inherit
     with:
@@ -247,25 +254,22 @@ jobs:
       artifact_upload_mode: "上传全部"
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       called_from_main: true
-      use_bbr: ${{ inputs.use_bbr || false }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
       supp_op: ${{ inputs.supp_op || false }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
-      # [矩阵入口不暴露的开关] 以下三项在 kernel-*.yml 里都有 input，但 main.yml
-      # 的 workflow_dispatch 已达 25 个 input 上限（见上方 ksu_branch_mode 处的
-      # 说明），无法再暴露到手动界面；不写就等于永远取默认值。
-      # 这里显式写死默认值并注明，避免造成"矩阵构建支持网络增强"的误解。
-      # 需要这三项请改用：单版本入口 kernel-*.yml、自定义入口
-      # kernel-custom.yml，或本地 `python3 build.py --net-enhance` 等参数。
-      use_net_enhance: false
+      # 以下两项目前仍未在手动界面暴露（25 个 input 名额已用满）：
+      #   skip_incompatible —— 可选阶段失败时降级为 warning 而非中断
+      #   ksu_branch_mode   —— 上方已注明，不声明时自然回退 auto
+      # 而 use_net_enhance / susfs_commit 已随本次名额整理改为可调（见 input 定义）。
+      use_net_enhance: ${{ inputs.use_net_enhance || false }}
       skip_incompatible: false
-      susfs_commit: ''
+      susfs_commit: ${{ inputs.susfs_commit || '' }}
   # ==================== Android 14 - 6.1 构建 ====================
   build-a14-6-1:
-    if: inputs.build_a14_6_1 || inputs.build_all
+    if: contains(inputs.build_targets, 'a14') || contains(inputs.build_targets, 'all')
     uses: ./.github/workflows/kernel-a14-6-1.yml
     secrets: inherit
     with:
@@ -284,25 +288,22 @@ jobs:
       artifact_upload_mode: "上传全部"
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       called_from_main: true
-      use_bbr: ${{ inputs.use_bbr || false }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
       supp_op: ${{ inputs.supp_op || false }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
-      # [矩阵入口不暴露的开关] 以下三项在 kernel-*.yml 里都有 input，但 main.yml
-      # 的 workflow_dispatch 已达 25 个 input 上限（见上方 ksu_branch_mode 处的
-      # 说明），无法再暴露到手动界面；不写就等于永远取默认值。
-      # 这里显式写死默认值并注明，避免造成"矩阵构建支持网络增强"的误解。
-      # 需要这三项请改用：单版本入口 kernel-*.yml、自定义入口
-      # kernel-custom.yml，或本地 `python3 build.py --net-enhance` 等参数。
-      use_net_enhance: false
+      # 以下两项目前仍未在手动界面暴露（25 个 input 名额已用满）：
+      #   skip_incompatible —— 可选阶段失败时降级为 warning 而非中断
+      #   ksu_branch_mode   —— 上方已注明，不声明时自然回退 auto
+      # 而 use_net_enhance / susfs_commit 已随本次名额整理改为可调（见 input 定义）。
+      use_net_enhance: ${{ inputs.use_net_enhance || false }}
       skip_incompatible: false
-      susfs_commit: ''
+      susfs_commit: ${{ inputs.susfs_commit || '' }}
   # ==================== Android 15 - 6.6 构建 ====================
   build-a15-6-6:
-    if: inputs.build_a15_6_6 || inputs.build_all
+    if: contains(inputs.build_targets, 'a15') || contains(inputs.build_targets, 'all')
     uses: ./.github/workflows/kernel-a15-6-6.yml
     secrets: inherit
     with:
@@ -321,25 +322,22 @@ jobs:
       artifact_upload_mode: "上传全部"
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       called_from_main: true
-      use_bbr: ${{ inputs.use_bbr || false }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
       supp_op: ${{ inputs.supp_op || false }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
-      # [矩阵入口不暴露的开关] 以下三项在 kernel-*.yml 里都有 input，但 main.yml
-      # 的 workflow_dispatch 已达 25 个 input 上限（见上方 ksu_branch_mode 处的
-      # 说明），无法再暴露到手动界面；不写就等于永远取默认值。
-      # 这里显式写死默认值并注明，避免造成"矩阵构建支持网络增强"的误解。
-      # 需要这三项请改用：单版本入口 kernel-*.yml、自定义入口
-      # kernel-custom.yml，或本地 `python3 build.py --net-enhance` 等参数。
-      use_net_enhance: false
+      # 以下两项目前仍未在手动界面暴露（25 个 input 名额已用满）：
+      #   skip_incompatible —— 可选阶段失败时降级为 warning 而非中断
+      #   ksu_branch_mode   —— 上方已注明，不声明时自然回退 auto
+      # 而 use_net_enhance / susfs_commit 已随本次名额整理改为可调（见 input 定义）。
+      use_net_enhance: ${{ inputs.use_net_enhance || false }}
       skip_incompatible: false
-      susfs_commit: ''
+      susfs_commit: ${{ inputs.susfs_commit || '' }}
   # ==================== Android 16 - 6.12 构建 ====================
   build-a16-6-12:
-    if: inputs.build_a16_6_12 || inputs.build_all
+    if: contains(inputs.build_targets, 'a16') || contains(inputs.build_targets, 'all')
     uses: ./.github/workflows/kernel-a16-6-12.yml
     secrets: inherit
     with:
@@ -358,22 +356,19 @@ jobs:
       artifact_upload_mode: "上传全部"
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       called_from_main: true
-      use_bbr: ${{ inputs.use_bbr || false }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
       supp_op: ${{ inputs.supp_op || false }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
       kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
-      # [矩阵入口不暴露的开关] 以下三项在 kernel-*.yml 里都有 input，但 main.yml
-      # 的 workflow_dispatch 已达 25 个 input 上限（见上方 ksu_branch_mode 处的
-      # 说明），无法再暴露到手动界面；不写就等于永远取默认值。
-      # 这里显式写死默认值并注明，避免造成"矩阵构建支持网络增强"的误解。
-      # 需要这三项请改用：单版本入口 kernel-*.yml、自定义入口
-      # kernel-custom.yml，或本地 `python3 build.py --net-enhance` 等参数。
-      use_net_enhance: false
+      # 以下两项目前仍未在手动界面暴露（25 个 input 名额已用满）：
+      #   skip_incompatible —— 可选阶段失败时降级为 warning 而非中断
+      #   ksu_branch_mode   —— 上方已注明，不声明时自然回退 auto
+      # 而 use_net_enhance / susfs_commit 已随本次名额整理改为可调（见 input 定义）。
+      use_net_enhance: ${{ inputs.use_net_enhance || false }}
       skip_incompatible: false
-      susfs_commit: ''
+      susfs_commit: ${{ inputs.susfs_commit || '' }}
   # ==================== 收集补丁冲突文件 ====================
   # 汇总所有构建任务中的 .rej 文件，方便调试补丁问题
   collect-rejects:
@@ -759,11 +754,11 @@ jobs:
               failed=1
             fi
           }
-          check_build "${{ inputs.build_a12_5_10 || inputs.build_all }}" "build-a12-5-10" "${{ needs.build-a12-5-10.result }}"
-          check_build "${{ inputs.build_a13_5_15 || inputs.build_all }}" "build-a13-5-15" "${{ needs.build-a13-5-15.result }}"
-          check_build "${{ inputs.build_a14_6_1 || inputs.build_all }}" "build-a14-6-1" "${{ needs.build-a14-6-1.result }}"
-          check_build "${{ inputs.build_a15_6_6 || inputs.build_all }}" "build-a15-6-6" "${{ needs.build-a15-6-6.result }}"
-          check_build "${{ inputs.build_a16_6_12 || inputs.build_all }}" "build-a16-6-12" "${{ needs.build-a16-6-12.result }}"
+          check_build "${{ contains(inputs.build_targets, 'a12') || contains(inputs.build_targets, 'all') }}" "build-a12-5-10" "${{ needs.build-a12-5-10.result }}"
+          check_build "${{ contains(inputs.build_targets, 'a13') || contains(inputs.build_targets, 'all') }}" "build-a13-5-15" "${{ needs.build-a13-5-15.result }}"
+          check_build "${{ contains(inputs.build_targets, 'a14') || contains(inputs.build_targets, 'all') }}" "build-a14-6-1" "${{ needs.build-a14-6-1.result }}"
+          check_build "${{ contains(inputs.build_targets, 'a15') || contains(inputs.build_targets, 'all') }}" "build-a15-6-6" "${{ needs.build-a15-6-6.result }}"
+          check_build "${{ contains(inputs.build_targets, 'a16') || contains(inputs.build_targets, 'all') }}" "build-a16-6-12" "${{ needs.build-a16-6-12.result }}"
           [[ "$failed" -ne 0 ]] && exit 1 || true
 
       # ==================== 检出代码 ====================
@@ -869,11 +864,11 @@ jobs:
               fi
             fi
           }
-          append_target "${{ inputs.build_a12_5_10 || inputs.build_all }}" "Android 12 / 5.10"
-          append_target "${{ inputs.build_a13_5_15 || inputs.build_all }}" "Android 13 / 5.15"
-          append_target "${{ inputs.build_a14_6_1 || inputs.build_all }}" "Android 14 / 6.1"
-          append_target "${{ inputs.build_a15_6_6 || inputs.build_all }}" "Android 15 / 6.6"
-          append_target "${{ inputs.build_a16_6_12 || inputs.build_all }}" "Android 16 / 6.12"
+          append_target "${{ contains(inputs.build_targets, 'a12') || contains(inputs.build_targets, 'all') }}" "Android 12 / 5.10"
+          append_target "${{ contains(inputs.build_targets, 'a13') || contains(inputs.build_targets, 'all') }}" "Android 13 / 5.15"
+          append_target "${{ contains(inputs.build_targets, 'a14') || contains(inputs.build_targets, 'all') }}" "Android 14 / 6.1"
+          append_target "${{ contains(inputs.build_targets, 'a15') || contains(inputs.build_targets, 'all') }}" "Android 15 / 6.6"
+          append_target "${{ contains(inputs.build_targets, 'a16') || contains(inputs.build_targets, 'all') }}" "Android 16 / 6.12"
           if [[ -z "$build_targets" ]]; then
             build_targets="未选择"
           fi
@@ -885,11 +880,11 @@ jobs:
               printf -- '- %s: [`%s`](%s)\n' "$label" "${hash:0:7}" "$url" >> susfs_commits.md
             fi
           }
-          append_susfs_commit "${{ inputs.build_a12_5_10 || inputs.build_all }}" "Android 12 / 5.10" "${COMMIT_HASH_gki_android12_5_10}" "${COMMIT_URL_gki_android12_5_10}"
-          append_susfs_commit "${{ inputs.build_a13_5_15 || inputs.build_all }}" "Android 13 / 5.15" "${COMMIT_HASH_gki_android13_5_15}" "${COMMIT_URL_gki_android13_5_15}"
-          append_susfs_commit "${{ inputs.build_a14_6_1 || inputs.build_all }}" "Android 14 / 6.1" "${COMMIT_HASH_gki_android14_6_1}" "${COMMIT_URL_gki_android14_6_1}"
-          append_susfs_commit "${{ inputs.build_a15_6_6 || inputs.build_all }}" "Android 15 / 6.6" "${COMMIT_HASH_gki_android15_6_6}" "${COMMIT_URL_gki_android15_6_6}"
-          append_susfs_commit "${{ inputs.build_a16_6_12 || inputs.build_all }}" "Android 16 / 6.12" "${COMMIT_HASH_gki_android16_6_12}" "${COMMIT_URL_gki_android16_6_12}"
+          append_susfs_commit "${{ contains(inputs.build_targets, 'a12') || contains(inputs.build_targets, 'all') }}" "Android 12 / 5.10" "${COMMIT_HASH_gki_android12_5_10}" "${COMMIT_URL_gki_android12_5_10}"
+          append_susfs_commit "${{ contains(inputs.build_targets, 'a13') || contains(inputs.build_targets, 'all') }}" "Android 13 / 5.15" "${COMMIT_HASH_gki_android13_5_15}" "${COMMIT_URL_gki_android13_5_15}"
+          append_susfs_commit "${{ contains(inputs.build_targets, 'a14') || contains(inputs.build_targets, 'all') }}" "Android 14 / 6.1" "${COMMIT_HASH_gki_android14_6_1}" "${COMMIT_URL_gki_android14_6_1}"
+          append_susfs_commit "${{ contains(inputs.build_targets, 'a15') || contains(inputs.build_targets, 'all') }}" "Android 15 / 6.6" "${COMMIT_HASH_gki_android15_6_6}" "${COMMIT_URL_gki_android15_6_6}"
+          append_susfs_commit "${{ contains(inputs.build_targets, 'a16') || contains(inputs.build_targets, 'all') }}" "Android 16 / 6.12" "${COMMIT_HASH_gki_android16_6_12}" "${COMMIT_URL_gki_android16_6_12}"
           if [[ "${{ inputs.enable_susfs }}" != "true" ]]; then
             echo "- 本次构建未集成 SUSFS" > susfs_commits.md
           elif [[ ! -s susfs_commits.md ]]; then

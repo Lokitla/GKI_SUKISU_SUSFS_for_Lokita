@@ -45,6 +45,17 @@ set -eo pipefail
 : "${CVE_2026_43499_PATCH:=false}"
 : "${EXPORT_SUSFS_PATCHES:=false}"
 : "${ENABLE_SUSFS:=true}"
+# [移植] SUSFS 原始补丁探测（来自上游 zzh20188 的 susfs-probe 工具分支）：
+#   SUSFS_RAW_PROBE=true  -> 请求"只打原始补丁、不做适配修复"，用于校准兼容线。
+#                            **需要 apply.sh 内部配合**才能生效（见 apply_susfs 阶段）。
+#   SUSFS_SIDE_FIXES=true -> 探测时仍保留与子版本无关的侧修复（5.10 上游补丁
+#                            自身的两处编译缺陷）
+#   SUSFS_PIN_TIME        -> ISO 8601 时刻，把 susfs4ksu 固定到该时刻之前最后一次
+#                            提交，让同一轮探测的所有任务用同一份上游代码。
+#                            这一项已完整实现（见 clone_deps 阶段）。
+: "${SUSFS_RAW_PROBE:=false}"
+: "${SUSFS_SIDE_FIXES:=false}"
+: "${SUSFS_PIN_TIME:=}"
 
 # SUSFS 开关清单——与 SukiSU builtin 分支 kernel/Kconfig 里的 KSU_SUSFS* 一一对应
 # （builtin 的 Kconfig 共 11 项：KSU_SUSFS 总开关 + 下面 9 个子项；main 分支 0 项）。
@@ -441,6 +452,24 @@ stage_clone_deps() {
   SUSFS_LATEST_COMMIT_DATE=$(git -C susfs4ksu log -1 --date=format:'%Y-%m-%d %H:%M:%S %z' --format='%cd')
   export SUSFS_LATEST_COMMIT_DATE="$SUSFS_LATEST_COMMIT_DATE"
   echo "SUSFS 仓库最新提交日期: $SUSFS_LATEST_COMMIT_DATE"
+
+  # SUSFS 固定时刻（susfs-probe 探测模式用）：一轮探测会跑几个小时，若中途上游
+  # 推送新提交，各任务的补丁版本就不一致，汇总出的结论会互相矛盾。这里把
+  # susfs4ksu 固定到该时刻之前的最后一次提交。
+  # 只有显式设置了 SUSFS_PIN_TIME 才放弃浅克隆（需要完整历史才能按时间定位），
+  # 正常构建完全不受影响。显式的 SUSFS_COMMIT 优先级更高，见下方。
+  if [ -n "${SUSFS_PIN_TIME:-}" ]; then
+    echo "按固定时刻拉取 susfs4ksu 历史（早于 ${SUSFS_PIN_TIME} 的最后一次提交）..."
+    git -C susfs4ksu fetch --unshallow >/dev/null 2>&1 || true
+    local pinned_susfs
+    pinned_susfs=$(git -C susfs4ksu rev-list -1 --before="${SUSFS_PIN_TIME}" HEAD 2>/dev/null)
+    if [ -n "$pinned_susfs" ]; then
+      git -C susfs4ksu checkout "$pinned_susfs" >/dev/null 2>&1
+      echo "susfs4ksu 已固定到: $(git -C susfs4ksu rev-parse --short=9 HEAD)"
+    else
+      echo "::warning::未能按 ${SUSFS_PIN_TIME} 定位 susfs4ksu 提交（可能早于仓库历史），保持分支最新"
+    fi
+  fi
 
   # 浅克隆只含分支头，切换到历史提交前需要单独拉取该提交
   checkout_susfs_commit() {
@@ -1409,6 +1438,14 @@ stage_apply_susfs() {
   fi
 
   cd ${KERNEL_ROOT}
+  # 原始补丁探测（SUSFS_RAW_PROBE）必须由 apply.sh 内部实现：
+  # apply.sh 同时负责"应用补丁"和"适配修复"，直接跳过它会连补丁都不打，
+  # 得到的就不是"原始补丁能否落地"的结论。这里只把开关透给 apply.sh。
+  # TODO(susfs-probe)：apply.sh 尚未实现原始模式（只 patch -p1、不做上下文调整、
+  # 并输出 apply.json），在此之前 RAW_PROBE 不会改变实际行为。
+  if [ "${SUSFS_RAW_PROBE}" = "true" ]; then
+    echo "::warning::SUSFS_RAW_PROBE=true，但 scripts/susfs_fixes/apply.sh 尚未实现原始模式，本次仍按常规（含适配修复）应用"
+  fi
   bash "$WORKSPACE/scripts/susfs_fixes/apply.sh"
   cd "$_pwd"
 

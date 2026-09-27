@@ -601,6 +601,57 @@ jobs:
             fi
           done
 
+      # [防线] 校验实际下载到的 APK 版本与"按提交数算出的预期版本"是否一致。
+      # 版本挑错时（例如算出的目标版本偏高、回退到旧 APK）产物名写的仍是目标值，
+      # 历史上出现过"产物名 40922、实际 APK 是 40879"的错配，刷入后提示版本不匹配。
+      #
+      # 严格度默认只告警：APK 版本号的口径（aapt 的 versionCode vs versionName）
+      # 未在真实产物上验证过，直接 fail-closed 有把所有构建打挂的风险。
+      # 确认口径后，在仓库 Settings → Variables 里设 MANAGER_VERSION_STRICT=true
+      # 即可升级为硬失败。
+      - name: 校验管理器 APK 版本
+        if: steps.add_KSU.outcome == 'success'
+        env:
+          EXPECTED: "${{ env.MANAGER_VERSION || env.KSU_VERSION }}"
+          STRICT: "${{ vars.MANAGER_VERSION_STRICT || 'false' }}"
+        run: |
+          if [ -z "$EXPECTED" ]; then
+            echo "::warning::无预期版本号，跳过管理器版本校验"
+            exit 0
+          fi
+          echo "预期管理器版本: $EXPECTED（严格模式=$STRICT）"
+          status=0
+          for f in manager-out/*.apk manager-out-spoofed/*.apk; do
+            [ -f "$f" ] || continue
+            base=$(basename "$f")
+            actual=""
+
+            # 优先用 aapt（若 runner 上有 Android SDK build-tools）
+            if command -v aapt >/dev/null 2>&1; then
+              actual=$(aapt dump badging "$f" 2>/dev/null \
+                | sed -n "s/.*versionCode='\([0-9]\{1,\}\)'.*/\1/p" | head -n 1)
+            fi
+            # 回退：从文件名取第一段 >=4 位的数字
+            if [ -z "$actual" ]; then
+              actual=$(printf '%s' "$base" | grep -oE '[0-9]{4,}' | head -n 1)
+            fi
+
+            if [ -z "$actual" ]; then
+              echo "::warning::$base 无法解析版本号（aapt 不可用且文件名不含版本号），跳过该包"
+              continue
+            fi
+
+            if [ "$actual" = "$EXPECTED" ]; then
+              echo "✓ $base 版本一致（$actual）"
+            elif [ "$STRICT" = "true" ]; then
+              echo "::error::$base 管理器版本不一致：实际=$actual 预期=$EXPECTED"
+              status=1
+            else
+              echo "::warning::$base 管理器版本不一致：实际=$actual 预期=$EXPECTED（未开启严格模式，继续上传）"
+            fi
+          done
+          exit $status
+
       - name: 上传管理器 APK
         if: steps.add_KSU.outcome == 'success'
         uses: actions/upload-artifact@v6

@@ -206,16 +206,19 @@ jobs:
               ;;
             "全部版本")
               # 完整矩阵走「构建内核」(main.yml)。
-              # 不用 build_all=true 而是逐个显式开启：build_all 会把 6.12 一起拉进来，
-              # 而 6.12 与最新 SukiSU 不兼容（见文件头注释），得能单独关掉。
+              # 构建目标用逗号分隔字符串 build_targets（原先的 5 个 build_a1x
+              # 布尔开关已合并，以便腾出 25 个 input 名额）：6.12 按需追加，
+              # 其余固定，避免 build_all 把 6.12 一起拉进来
+              # （6.12 与最新 SukiSU 不兼容，见文件头注释）。
               # 实际组合数由 matrix.json 决定（当前 19 个）。
-              # 注意：boolean 型 input 必须传 JSON 真布尔（true/false），
-              # 传字符串 "true" 会被 GitHub 判为非法值并回退成 false，
-              # 导致所有 build_a1x 开关全部失效、一个内核都不编。
+              BUILD_TARGETS="a12,a13,a14,a15"
+              if [ "$INCLUDE_612" = "true" ]; then
+                BUILD_TARGETS="$BUILD_TARGETS,a16"
+              fi
               jq -n \
                 --arg ref "$REF_NAME" \
                 --arg release_type "$RELEASE_TYPE" \
-                --argjson build_a16 "$INCLUDE_612" \
+                --arg build_targets "$BUILD_TARGETS" \
                 --arg kpm_pin "$KPM_PIN" \
                 '{
                   ref: $ref,
@@ -226,23 +229,20 @@ jobs:
                     use_kpm: "patched (开启并修补)",
                     droidspaces: "不启用",
                     build_time: "",
-                    build_all: false,
+                    build_targets: $build_targets,
                     export_susfs_patches: true,
-                    build_a12_5_10: true,
-                    build_a13_5_15: true,
-                    build_a14_6_1: true,
-                    build_a15_6_6: true,
-                    build_a16_6_12: $build_a16,
                     use_zram: true,
                     use_bbg: false,
                     use_rekernel: false,
                     cve_2026_43499_patch: false,
                     droidspaces_ntsync: false,
-                    use_bbr: false,
+                    use_net_enhance: false,
                     send_telegram: true,
                     use_release_cache: false,
                     manager_spoofed: true,
                     supp_op: false,
+                    sukisu_commit: "",
+                    susfs_commit: "",
                     kpm_patch_sha256: $kpm_pin
                   }
                 }' > /tmp/dispatch.json
@@ -285,7 +285,6 @@ jobs:
                     cve_2026_43499_patch: false,
                     supp_op: false,
                     droidspaces_ntsync: false,
-                    use_bbr: false,
                     send_telegram: true,
                     use_release_cache: false,
                     manager_spoofed: true,

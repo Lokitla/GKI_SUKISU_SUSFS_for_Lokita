@@ -133,12 +133,11 @@ GitHub Actions  ──┐
 
 | 开关 | 构建内核 `main.yml` | 单版本 `kernel-a1*.yml` | 自定义 `kernel-custom.yml` | 自用 `build-236-marble.yml` | 本地 `build.py` |
 |---|:---:|:---:|:---:|:---:|:---:|
-| `use_zram` | ✅ | ✅ | ✅ | ✅ | `--zram` |
-| `use_bbr` | ✅ | ✅ | ➖ 并入网络增强 | ➖ 并入网络增强 | `--bbr` |
+| `use_zram` | ✅ | ✅（6.12 恒不生效） | ✅ | ✅ | `--zram` |
+| `use_net_enhance` | ✅ | ✅ | ✅ | ✅ | `--net-enhance` |
 | `use_bbg` | ✅ | ✅ | ✅ | ✅ | `--bbg` |
-| `use_kpm` | ✅ | ✅ | ✅ | ✅ | `--kpm` |
+| `use_kpm` | ✅ | ✅（6.12 恒不生效） | ✅ | ✅ | `--kpm` |
 | `use_rekernel` | ✅ | ✅ | ✅ | ✅ | `--rekernel` |
-| `use_net_enhance` | ❌ 恒定关闭 | ✅ | ✅ | ✅ | `--net-enhance` |
 | `use_nomount` | ✅ | ✅ | ✅ | ✅ | `--nomount` |
 | `skip_incompatible` | ❌ 恒定 false | ✅ | ❌ | ✅ | `--skip-incompatible` |
 | `export_susfs_patches` | ✅ | ➖ 仅由主入口传入 | ❌ | ✅ | `--export-susfs-patches` |
@@ -155,11 +154,22 @@ GitHub Actions  ──┐
   主要成因是 `main.yml` 的 `workflow_dispatch` 输入**已达 GitHub 的 25 个上限**。
   需要时改用**单版本入口 `kernel-*.yml`** 或**本地 `build.py`**。
 - **➖ = 特殊情况**：
-  - 「并入网络增强」——`use_net_enhance` 本身已包含「把 BBR 设为默认拥塞算法」，
-    两个开关只会造成歧义；
   - 「仅由主入口传入」——该 input 只存在于 `kernel-a1*.yml` 的 `workflow_call`
     块（供 `main.yml` 调用时传入），**不在 `workflow_dispatch` 块**，所以手动运行
     单版本入口时它恒为 `false`，只有走「构建内核」才能生效。
+
+**关于 `use_bbr`**：所有 Actions 入口已统一为 `use_net_enhance`，不再单列
+`use_bbr`——网络增强本身就包含「把 BBR 设为默认拥塞算法」，两个开关只会造成歧义。
+只有本地 `build.py` 仍保留独立的 `--bbr`。
+
+**6.12（Android 16）上有两个开关恒不生效**，这是上游限制而非配置问题：
+
+- `use_zram`：上游 `SukiSU_patch` 的 `other/zram/zram_patch/` 只有
+  5.10 / 5.15 / 6.1 / 6.6 四个目录，没有 6.12，相关阶段会整段跳过；
+- `use_kpm`：内核 ≥ 6.10 时脚本强制 `KPM_SUPPORTED=0`
+  （SukiSU 的 KPM 代码用了新内核已移除的 `netlink_kernel_cfg.cb_mutex`）。
+
+`kernel-a16-6-12.yml` 已把这两项默认值改为关闭，避免"勾了却空转"。
 
 > 矩阵每一格均以「该 input 是否出现在对应文件的 `workflow_dispatch` 块」为判据
 > 实测得出，而非按调用链推断——两者容易不一致（例如某个 input 只在 `workflow_call`
@@ -302,6 +312,7 @@ python3 build.py --android android12 --kernel 5.10 --sub-level 236 \
 | `zram/` | LZ4 的 ARM64 NEON 加速实现 |
 | `web/` | GitHub Pages 站点源码 |
 | `scripts/susfs_fixes/apply.sh` | SUSFS 补丁适配与冲突修复 |
+| `scripts/susfs_probe/` | SUSFS 原始补丁探测脚本（取自上游 zzh20188 的 `susfs-probe` 工具分支），用于校准兼容线；配套工作流尚未引入 |
 | `tools/migration/` | 迁移期一次性脚本，**不参与构建** |
 | `FUSION.md` | 三个上游仓库的比对与迁移记录 |
 

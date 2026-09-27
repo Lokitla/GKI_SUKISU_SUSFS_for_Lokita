@@ -121,11 +121,6 @@ on:
         required: false
         type: boolean
         default: true
-      use_bbr:
-        description: "设置 BBR 为默认拥塞算法"
-        required: false
-        type: boolean
-        default: false
       send_telegram:
         description: "发送 Telegram 通知（需配置 secrets）"
         required: false
@@ -237,11 +232,6 @@ on:
         type: boolean
         default: false
 
-      use_bbr:
-        description: "设置 BBR 为默认拥塞算法"
-        required: false
-        type: boolean
-        default: false
       send_telegram:
         description: "发送 Telegram 通知（需配置 secrets）"
         required: false
@@ -344,7 +334,6 @@ jobs:
       droidspaces: ${{ inputs.droidspaces || '不启用' }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync || false }}
       artifact_upload_mode: ${{ inputs.artifact_upload_mode }}
-      use_bbr: ${{ inputs.use_bbr || false }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
