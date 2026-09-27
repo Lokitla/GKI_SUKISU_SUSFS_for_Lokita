@@ -105,11 +105,6 @@ on:
         required: false
         type: boolean
         default: false
-      manager_spoofed:
-        description: "一并拉取 Spoofed 管理器（伪装包名）"
-        required: false
-        type: boolean
-        default: true
       send_telegram:
         description: "发送 Telegram 通知（需配置 secrets）"
         required: false
@@ -134,18 +129,8 @@ on:
           - "main"
           - "builtin"
         default: "auto"
-      sukisu_commit:
-        description: "SukiSU 提交 hash：内核与管理器统一使用该 commit（留空则用 config/config 或最新）"
-        required: false
-        type: string
-        default: ""
-      susfs_commit:
-        description: "SUSFS 提交 hash：内核 SUSFS 修补使用该 commit（留空则取 config/config 或分支最新）"
-        required: false
-        type: string
-        default: ""
-      kpm_patch_sha256:
-        description: "KPM 修补工具 sha256 锚点（留空不校验）"
+      manager_commit:
+        description: "管理器提交 hash（SukiSU/管理器 hash；可选用英文逗号后接 SUSFS hash，留空则不锁定）"
         required: false
         type: string
         default: ""
@@ -233,11 +218,6 @@ on:
         required: false
         type: boolean
         default: false
-      manager_spoofed:
-        description: "一并拉取 Spoofed 管理器（伪装包名）"
-        required: false
-        type: boolean
-        default: true
       supp_op:
         description: "启用一加 8E 支持（非一加勿开）"
         required: false
@@ -248,18 +228,8 @@ on:
         required: false
         type: string
         default: "auto"
-      sukisu_commit:
-        description: "SukiSU 提交 hash：内核与管理器统一使用该 commit（留空则用 config/config 或最新）"
-        required: false
-        type: string
-        default: ""
-      susfs_commit:
-        description: "SUSFS 提交 hash：内核 SUSFS 修补使用该 commit（留空则取 config/config 或分支最新）"
-        required: false
-        type: string
-        default: ""
-      kpm_patch_sha256:
-        description: "KPM 修补工具 sha256 锚点（留空不校验）"
+      manager_commit:
+        description: "管理器提交 hash（SukiSU/管理器 hash；可选用英文逗号后接 SUSFS hash，留空则不锁定）"
         required: false
         type: string
         default: ""
@@ -321,10 +291,8 @@ jobs:
       artifact_upload_mode: ${{ inputs.artifact_upload_mode }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
-      sukisu_commit: ${{ inputs.sukisu_commit || '' }}
+      manager_commit: ${{ inputs.manager_commit }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
-      kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 }}
-      susfs_commit: ${{ inputs.susfs_commit || '' }}
   # 仅在直接触发时运行，从 main.yml 调用时跳过
   get-ksu-manager:
     if: ${{ !inputs.called_from_main }}
@@ -332,6 +300,6 @@ jobs:
     secrets: inherit
     with:
       kernelsu_variant: ${{ inputs.kernelsu_variant }}
-      manager_spoofed: ${{ inputs.manager_spoofed }}
-      sukisu_commit: ${{ inputs.sukisu_commit || '' }}
+      manager_spoofed: true
+      manager_commit: ${{ inputs.manager_commit }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}

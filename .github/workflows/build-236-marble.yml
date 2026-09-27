@@ -45,9 +45,9 @@ name: 自用构建-5.10.236（ReSukiSU / marble）
 #   build.yml 内部只有 actions/upload-artifact，没有任何 release 步骤，
 #   因此产物只留在 Actions artifacts 里，不会生成 Release。
 #
-# kpm_patch_sha256 留空是有意的：build_kernel.sh 在锚点为空时会回读
-# config/kpm_patch_sha256，等价于「始终跟随仓库锚点」，写死反而会漏掉
-# 上游变更带来的校验。
+# 提交 hash 与 KPM 锚点留空是有意的：该配置项已从所有手动入口隐藏，
+# 行为等同于留空（KPM 锚点为空时 build_kernel.sh 会回读 config/kpm_patch_sha256，
+# 等价于「始终跟随仓库锚点」，写死反而会漏掉上游变更带来的校验）。
 #
 # 注意：本文件被 .github/workflows/Auto_Trigger.yml 的「固定 5.10.236」
 # 分支硬引用（TARGET_WF），改名或删除前必须同步改那一行，否则自动触发会
@@ -97,9 +97,7 @@ jobs:
       artifact_upload_mode: "上传全部"
       send_telegram: false
       use_release_cache: false
-      sukisu_commit: ""
-      susfs_commit: ""
-      kpm_patch_sha256: ""
+      manager_commit: ""
 
   get-ksu-manager:
     uses: ./.github/workflows/get-manager.yml
@@ -107,4 +105,4 @@ jobs:
     with:
       kernelsu_variant: "ReSukiSU"
       manager_spoofed: true
-      sukisu_commit: ""
+      manager_commit: ""

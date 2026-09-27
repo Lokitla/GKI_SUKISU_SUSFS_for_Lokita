@@ -145,23 +145,8 @@ on:
         required: false
         type: boolean
         default: false
-      manager_spoofed:
-        description: "一并拉取 Spoofed 管理器（伪装包名）"
-        required: false
-        type: boolean
-        default: true
-      sukisu_commit:
-        description: "SukiSU 提交 hash：内核与管理器统一使用该 commit（留空则用 config/config 或最新）"
-        required: false
-        type: string
-        default: ""
-      susfs_commit:
-        description: "SUSFS 提交 hash：内核 SUSFS 修补使用该 commit（留空则取 config/config 或分支最新）"
-        required: false
-        type: string
-        default: ""
-      kpm_patch_sha256:
-        description: "KPM 修补工具 sha256 锚点（留空不校验）"
+      manager_commit:
+        description: "管理器提交 hash（SukiSU/管理器 hash；可选用英文逗号后接 SUSFS hash，留空则不锁定）"
         required: false
         type: string
         default: ""
@@ -369,13 +354,11 @@ jobs:
       artifact_upload_mode: ${{ inputs.artifact_upload_mode }}
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
-      sukisu_commit: ${{ inputs.sukisu_commit || '' }}
-      susfs_commit: ${{ inputs.susfs_commit || '' }}
-      kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 }}
+      manager_commit: ${{ inputs.manager_commit }}
   get-ksu-manager:
     uses: ./.github/workflows/get-manager.yml
     secrets: inherit
     with:
       kernelsu_variant: ${{ inputs.kernelsu_variant }}
-      manager_spoofed: ${{ inputs.manager_spoofed }}
-      sukisu_commit: ${{ inputs.sukisu_commit || '' }}
+      manager_spoofed: true
+      manager_commit: ${{ inputs.manager_commit }}

@@ -150,8 +150,9 @@ This table exists to prevent "it looks supported but is permanently off" mistake
 | `skip_incompatible` | ❌ always false | ✅ | ❌ | ✅ | `--skip-incompatible` |
 | `export_susfs_patches` | ✅ | ➖ main entry only | ❌ | ✅ | `--export-susfs-patches` |
 | `ksu_branch_mode` | ❌ always `auto` | ✅ | ❌ | ❌ | `--ksu-branch-mode` |
-| `sukisu_commit` | ❌ always empty | ✅ | ✅ | ❌ | `--sukisu-commit` |
-| `susfs_commit` | ❌ always empty | ✅ | ✅ | ❌ | `--susfs-commit` |
+| `manager_commit` (manager + SUSFS commit, comma-separated) | ✅ | ✅ | ✅ | ✅ | `--sukisu-commit` / `--susfs-commit` |
+| `kpm_patch_sha256` | ➖ hidden, always empty | ➖ same | ➖ same | ➖ same | `--kpm-patch-sha256` |
+| `manager_spoofed` (spoofed manager) | ➖ hidden, always on | ➖ same | ➖ same | ➖ same | not available |
 | `supp_op` (OnePlus 8E) | ❌ always false | ✅ | ✅ | ➖ hardcoded false | `--op8e` |
 | `ksu_mode` | ❌ | ❌ | ❌ | ❌ | not available |
 
@@ -168,6 +169,16 @@ Legend:
     block (for `main.yml` to pass in), **not in `workflow_dispatch`**, so it is always
     `false` when you run the single-version entry by hand; only "Build kernels" can
     actually set it.
+  - *hidden* — the option has been removed from every manual entry's UI with a fixed
+    behaviour: `kpm_patch_sha256` behaves as left blank (no verification),
+    `manager_spoofed` is always enabled. The underlying capability still lives in
+    `build_kernel.sh` / local `build.py`.
+
+**On commit hashes**: `sukisu_commit` and `susfs_commit` are merged into a single
+input `manager_commit`, holding "SukiSU/manager hash, **optionally followed by a
+comma and** the SUSFS hash". Parsing splits on the comma and strips surrounding
+whitespace; the validation for each hash is unchanged. With a single value the second
+hash is left empty (SUSFS unpinned).
 
 **On `use_bbr`**: all Actions entries now use `use_net_enhance` only — network
 enhancement already includes "set BBR as the default congestion algorithm", so two

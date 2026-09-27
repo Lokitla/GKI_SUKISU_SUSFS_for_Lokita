@@ -126,6 +126,17 @@ permissions:
         required: false
         type: string
         default: "auto"
+      # 合并输入框：界面上只暴露「管理器提交 hash」，内容为逗号分隔的两个 hash。
+      # 解析在本工作流的 resolve-commits 步骤完成（GitHub 表达式没有 split 函数，
+      # 无法在 with: 里直接拆），拆分结果仍走原有的 SUKISU_COMMIT / SUSFS_COMMIT
+      # 校验逻辑，行为不变。
+      manager_commit:
+        description: "管理器提交 hash（SukiSU/管理器 hash，可选逗号后接 SUSFS hash；留空则不锁定）"
+        required: false
+        type: string
+        default: ""
+      # 以下两个为兼容保留：直接调用本工作流时仍可分别传入。
+      # 与 manager_commit 同时给出时，以 manager_commit 为准。
       sukisu_commit:
         description: "SukiSU 提交 hash：内核与管理器统一使用该 commit（留空则用 config/config 或最新）"
         required: false
@@ -152,11 +163,9 @@ permissions:
         required: false
         type: string
         default: ""
-      kpm_patch_sha256:
-        description: "KPM 修补工具 sha256 锚点（留空不校验）"
-        required: false
-        type: string
-        default: ""
+      # kpm_patch_sha256 已从所有手动入口隐藏：留空即不校验，是唯一常规用法。
+      # 底层校验逻辑（EXPECTED_KPM_PATCH_SHA256）保留在 build_kernel.sh 中，
+      # 本地 build.py --kpm-patch-sha256 仍可显式传入。
 jobs:
   build-kernel:
     name: ${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}-${{ inputs.ksu_variant }}
@@ -169,13 +178,56 @@ jobs:
     steps:
     - name: 检出代码仓库
       uses: actions/checkout@v7
+    # 界面上「管理器提交 hash」是合并后的单个输入框，这里按逗号拆回两个 hash。
+    # GitHub 表达式没有 split，所以必须落在有 shell 的这一步。
+    # 拆分后仍走原有校验与实际行为，不新增也不跳过任何逻辑。
+    - name: 解析提交 hash（合并输入框）
+      id: resolve_commits
+      # 安全：外部输入一律经 env 传入，run 块中不出现 ${{ }}
+      env:
+        MANAGER_COMMIT: ${{ inputs.manager_commit }}
+        SUKISU_COMMIT_IN: ${{ inputs.sukisu_commit }}
+        SUSFS_COMMIT_IN: ${{ inputs.susfs_commit }}
+      run: |
+        set -eu
+        sukisu="$SUKISU_COMMIT_IN"
+        susfs="$SUSFS_COMMIT_IN"
+        if [ -n "$MANAGER_COMMIT" ]; then
+          case "$MANAGER_COMMIT" in
+            *,*)
+              sukisu=$(printf '%s' "$MANAGER_COMMIT" | cut -d',' -f1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+              susfs=$(printf '%s' "$MANAGER_COMMIT" | cut -d',' -f2 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+              printf '%s' "$MANAGER_COMMIT" | cut -d',' -f3- | grep -q . \
+                && echo "::warning::管理器提交 hash 超过两段，已忽略第 3 段及之后的内容"
+              ;;
+            *)
+              sukisu=$(printf '%s' "$MANAGER_COMMIT" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+              susfs=""
+              ;;
+          esac
+        fi
+        # 保留原有校验：只允许 40 位（SHA-1）或 64 位（SHA-256）十六进制
+        for entry in "SukiSU/管理器:$sukisu" "SUSFS:$susfs"; do
+          label=${entry%%:*}; val=${entry#*:}
+          [ -z "$val" ] && continue
+          case "$val" in
+            *[!0-9a-fA-F]*)
+              echo "::error::非法的 ${label} commit（只允许十六进制字符）: $val"; exit 1 ;;
+          esac
+          if [ "${#val}" != "40" ] && [ "${#val}" != "64" ]; then
+            echo "::error::非法的 ${label} commit 长度（需 40 或 64 位）: $val"; exit 1
+          fi
+        done
+        echo "sukisu_commit=$sukisu" >> "$GITHUB_OUTPUT"
+        echo "susfs_commit=$susfs" >> "$GITHUB_OUTPUT"
+        echo "解析结果: SukiSU/管理器='${sukisu:-<不锁定>}'  SUSFS='${susfs:-<不锁定>}'"
     - name: 应用自定义提交
-      if: ${{ inputs.sukisu_commit != '' || inputs.susfs_commit != '' }}
+      if: ${{ inputs.manager_commit != '' || inputs.sukisu_commit != '' || inputs.susfs_commit != '' }}
       # 安全：所有外部输入一律经 env 传入，run 块中不得出现 ${{ }}。
       # ${{ }} 在 shell 解析之前完成文本替换，直接内插会形成 Actions 注入面。
       env:
-        SUKISU_COMMIT: ${{ inputs.sukisu_commit }}
-        SUSFS_COMMIT: ${{ inputs.susfs_commit }}
+        SUKISU_COMMIT: ${{ steps.resolve_commits.outputs.sukisu_commit }}
+        SUSFS_COMMIT: ${{ steps.resolve_commits.outputs.susfs_commit }}
         SUSFS_RAW_PROBE: ${{ inputs.susfs_raw_probe || false }}
         SUSFS_SIDE_FIXES: ${{ inputs.susfs_side_fixes || false }}
         SUSFS_PIN_TIME: ${{ inputs.susfs_pin_time || '' }}
@@ -267,14 +319,15 @@ jobs:
         USE_NOMOUNT: ${{ inputs.use_nomount || false }}
         CVE_2026_43499_PATCH: ${{ inputs.cve_2026_43499_patch }}
         EXPORT_SUSFS_PATCHES: ${{ inputs.export_susfs_patches }}
-        EXPECTED_KPM_PATCH_SHA256: ${{ inputs.kpm_patch_sha256 }}
+        EXPECTED_KPM_PATCH_SHA256: ""
         ENABLE_SUSFS: ${{ inputs.enable_susfs }}
         SUPP_OP: ${{ inputs.supp_op }}
         DROIDSPACES: ${{ inputs.droidspaces }}
         DROIDSPACES_NTSYNC: ${{ inputs.droidspaces_ntsync }}
         ARTIFACT_UPLOAD_MODE: ${{ inputs.artifact_upload_mode }}
         USE_BBR: ${{ inputs.use_bbr }}
-        SUKISU_COMMIT: ${{ inputs.sukisu_commit }}
+        # 用拆分步骤的结果而非原始入参：合并输入框里"逗号前一段"才是 SukiSU/管理器 hash。
+        SUKISU_COMMIT: ${{ steps.resolve_commits.outputs.sukisu_commit }}
         KSU_BRANCH_MODE: ${{ inputs.ksu_branch_mode }}
         TOOLCHAIN_CACHE_HIT: ${{ steps.cache-toolchain.outputs.cache-hit }}
         WORKSPACE: ${{ github.workspace }}

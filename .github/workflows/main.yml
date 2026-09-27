@@ -136,11 +136,6 @@ on:
         required: false
         type: boolean
         default: true
-      manager_spoofed:
-        description: "一并拉取 Spoofed 管理器（伪装包名）"
-        required: false
-        type: boolean
-        default: true
       # supp_op 恢复显示：原先因 25 input 上限被隐藏，名额让给了 use_nomount。
       # 本次把 5 个 build_a1x 布尔开关合并为 build_targets 后腾出名额，故补回。
       supp_op:
@@ -172,18 +167,8 @@ on:
       # 注：ksu_branch_mode 已从手动触发界面移除 —— workflow_dispatch 上限 25 个 input，
       # 自动触发（Auto_Trigger）已占满 24 个必需字段，手动专用项只能留一个（保留 version）。
       # 其转发处用 ${{ inputs.ksu_branch_mode || 'auto' }} 兜底，不声明时自然回退 auto。
-      kpm_patch_sha256:
-        description: "KPM 修补工具 sha256 锚点（留空不校验）。main.yml 透传给各 kernel-* 构建，让自动触发的全量构建也能做 fail-closed 比对"
-        required: false
-        type: string
-        default: ""
-      sukisu_commit:
-        description: "SukiSU 提交 hash：内核与管理器统一使用该 commit（仅 SukiSU 变体生效；留空则用 config/config 的 sukisu= 或分支最新）"
-        required: false
-        type: string
-        default: ""
-      susfs_commit:
-        description: "SUSFS 提交 hash：内核 SUSFS 修补使用该 commit（留空则用 config/config 的对应分支行或分支最新）"
+      manager_commit:
+        description: "管理器提交 hash（SukiSU/管理器 hash；可选用英文逗号后接 SUSFS hash，留空则不锁定）"
         required: false
         type: string
         default: ""
@@ -195,9 +180,9 @@ jobs:
     secrets: inherit
     with:
       kernelsu_variant: ${{ inputs.kernelsu_variant }}
-      sukisu_commit: ${{ inputs.sukisu_commit || '' }}
+      manager_commit: ${{ inputs.manager_commit }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
-      manager_spoofed: ${{ inputs.manager_spoofed }}
+      manager_spoofed: true
   # ==================== Android 12 - 5.10 构建 ====================
   build-a12-5-10:
     if: contains(inputs.build_targets, 'a12') || contains(inputs.build_targets, 'all')
@@ -222,8 +207,7 @@ jobs:
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
       supp_op: ${{ inputs.supp_op || false }}
-      sukisu_commit: ${{ inputs.sukisu_commit || '' }}
-      kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
+      manager_commit: ${{ inputs.manager_commit }}
       # ksu_mode 不传：build.yml 默认「关闭」（正常集成 KernelSU）。
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
       # 以下两项目前仍未在手动界面暴露（25 个 input 名额已用满）：
@@ -232,7 +216,6 @@ jobs:
       # 而 use_net_enhance / susfs_commit 已随本次名额整理改为可调（见 input 定义）。
       use_net_enhance: ${{ inputs.use_net_enhance || false }}
       skip_incompatible: false
-      susfs_commit: ${{ inputs.susfs_commit || '' }}
   # ==================== Android 13 - 5.15 构建 ====================
   build-a13-5-15:
     if: contains(inputs.build_targets, 'a13') || contains(inputs.build_targets, 'all')
@@ -257,8 +240,7 @@ jobs:
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
       supp_op: ${{ inputs.supp_op || false }}
-      sukisu_commit: ${{ inputs.sukisu_commit || '' }}
-      kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
+      manager_commit: ${{ inputs.manager_commit }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
       # 以下两项目前仍未在手动界面暴露（25 个 input 名额已用满）：
       #   skip_incompatible —— 可选阶段失败时降级为 warning 而非中断
@@ -266,7 +248,6 @@ jobs:
       # 而 use_net_enhance / susfs_commit 已随本次名额整理改为可调（见 input 定义）。
       use_net_enhance: ${{ inputs.use_net_enhance || false }}
       skip_incompatible: false
-      susfs_commit: ${{ inputs.susfs_commit || '' }}
   # ==================== Android 14 - 6.1 构建 ====================
   build-a14-6-1:
     if: contains(inputs.build_targets, 'a14') || contains(inputs.build_targets, 'all')
@@ -291,8 +272,7 @@ jobs:
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
       supp_op: ${{ inputs.supp_op || false }}
-      sukisu_commit: ${{ inputs.sukisu_commit || '' }}
-      kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
+      manager_commit: ${{ inputs.manager_commit }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
       # 以下两项目前仍未在手动界面暴露（25 个 input 名额已用满）：
       #   skip_incompatible —— 可选阶段失败时降级为 warning 而非中断
@@ -300,7 +280,6 @@ jobs:
       # 而 use_net_enhance / susfs_commit 已随本次名额整理改为可调（见 input 定义）。
       use_net_enhance: ${{ inputs.use_net_enhance || false }}
       skip_incompatible: false
-      susfs_commit: ${{ inputs.susfs_commit || '' }}
   # ==================== Android 15 - 6.6 构建 ====================
   build-a15-6-6:
     if: contains(inputs.build_targets, 'a15') || contains(inputs.build_targets, 'all')
@@ -325,8 +304,7 @@ jobs:
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
       supp_op: ${{ inputs.supp_op || false }}
-      sukisu_commit: ${{ inputs.sukisu_commit || '' }}
-      kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
+      manager_commit: ${{ inputs.manager_commit }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
       # 以下两项目前仍未在手动界面暴露（25 个 input 名额已用满）：
       #   skip_incompatible —— 可选阶段失败时降级为 warning 而非中断
@@ -334,7 +312,6 @@ jobs:
       # 而 use_net_enhance / susfs_commit 已随本次名额整理改为可调（见 input 定义）。
       use_net_enhance: ${{ inputs.use_net_enhance || false }}
       skip_incompatible: false
-      susfs_commit: ${{ inputs.susfs_commit || '' }}
   # ==================== Android 16 - 6.12 构建 ====================
   build-a16-6-12:
     if: contains(inputs.build_targets, 'a16') || contains(inputs.build_targets, 'all')
@@ -359,8 +336,7 @@ jobs:
       send_telegram: ${{ inputs.send_telegram || false }}
       use_release_cache: ${{ inputs.use_release_cache || false }}
       supp_op: ${{ inputs.supp_op || false }}
-      sukisu_commit: ${{ inputs.sukisu_commit || '' }}
-      kpm_patch_sha256: ${{ inputs.kpm_patch_sha256 || '' }}
+      manager_commit: ${{ inputs.manager_commit }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
       # 以下两项目前仍未在手动界面暴露（25 个 input 名额已用满）：
       #   skip_incompatible —— 可选阶段失败时降级为 warning 而非中断
@@ -368,7 +344,6 @@ jobs:
       # 而 use_net_enhance / susfs_commit 已随本次名额整理改为可调（见 input 定义）。
       use_net_enhance: ${{ inputs.use_net_enhance || false }}
       skip_incompatible: false
-      susfs_commit: ${{ inputs.susfs_commit || '' }}
   # ==================== 收集补丁冲突文件 ====================
   # 汇总所有构建任务中的 .rej 文件，方便调试补丁问题
   collect-rejects:

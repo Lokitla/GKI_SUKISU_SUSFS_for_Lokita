@@ -19,8 +19,11 @@ on:
         required: false
         type: string
         default: "auto"
-      sukisu_commit:
-        description: "SukiSU 提交 hash：管理器与内核统一使用该 commit（留空则取 config/config 的 sukisu=，再留空则用最新）"
+      # 由上游入口的合并输入框「管理器提交 hash」传入。该框内容为
+      # 「SukiSU/管理器 hash[,SUSFS hash]」，本工作流只用逗号前那一段
+      # （管理器 hash），拆分在下面的「获取 KSU & SUSFS 版本」步骤完成。
+      manager_commit:
+        description: "管理器提交 hash（SukiSU/管理器 hash；可选逗号后的第二段为 SUSFS hash，此处忽略）"
         required: false
         type: string
         default: ""
@@ -105,7 +108,7 @@ jobs:
         env:
           # 安全：外部输入一律经 env 传入，run 块中不得出现 ${{ }}
           KSU_VARIANT: ${{ inputs.kernelsu_variant }}
-          SUKISU_COMMIT_INPUT: ${{ inputs.sukisu_commit }}
+          SUKISU_COMMIT_INPUT: ${{ inputs.manager_commit }}
           CUSTOM_ENABLED: ${{ steps.custom_cfg.outputs.enabled }}
           CUSTOM_COMMIT: ${{ steps.custom_cfg.outputs.commit }}
         run: |
@@ -140,7 +143,8 @@ jobs:
           if [ -z "$SUKISU_COMMIT" ] && [ "$CUSTOM_ENABLED" = "true" ]; then
             SUKISU_COMMIT="$CUSTOM_COMMIT"
           fi
-          SUKISU_COMMIT=$(echo "$SUKISU_COMMIT" | xargs)
+          # 合并输入框：只取逗号前第一段（管理器 hash），第二段是 SUSFS hash，与管理器无关。
+          SUKISU_COMMIT=$(echo "$SUKISU_COMMIT" | cut -d',' -f1 | xargs)
 
           # 管理器 APK 只能来自 main 分支：builtin 是只含 kernel/ 与 uapi/ 的独立分支，
           # 连 manager/ 目录都没有，不存在可用的 Manager CI 产物。
@@ -476,7 +480,7 @@ jobs:
             echo "✓ 管理器与内核严格对齐: KSU $TARGET_KSU_VERSION（构建 $BEST_BUILD_ID @ $BEST_BRANCH）"
           elif [ -n "$DOWNLOAD_LIST" ]; then
             LAG=$((TARGET_KSU_VERSION - BEST_VERSION))
-            echo "::warning::未找到与内核 KSU $TARGET_KSU_VERSION 严格匹配的 Manager 构建，回退使用 $BEST_VERSION（构建 $BEST_BUILD_ID @ $BEST_BRANCH），版本落后 $LAG。管理器与内核版本不一致，刷入后可能提示版本不匹配。若经常发生，可显式填入 sukisu_commit 锁定同一个提交。"
+            echo "::warning::未找到与内核 KSU $TARGET_KSU_VERSION 严格匹配的 Manager 构建，回退使用 $BEST_VERSION（构建 $BEST_BUILD_ID @ $BEST_BRANCH），版本落后 $LAG。管理器与内核版本不一致，刷入后可能提示版本不匹配。若经常发生，可在构建入口的「管理器提交 hash」里锁定同一个提交。"
           fi
 
           if [ -z "$DOWNLOAD_LIST" ]; then

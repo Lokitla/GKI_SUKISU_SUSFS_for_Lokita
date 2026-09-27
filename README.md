@@ -142,8 +142,9 @@ GitHub Actions  ──┐
 | `skip_incompatible` | ❌ 恒定 false | ✅ | ❌ | ✅ | `--skip-incompatible` |
 | `export_susfs_patches` | ✅ | ➖ 仅由主入口传入 | ❌ | ✅ | `--export-susfs-patches` |
 | `ksu_branch_mode` | ❌ 恒 `auto` | ✅ | ❌ | ❌ | `--ksu-branch-mode` |
-| `sukisu_commit` | ❌ 恒定空 | ✅ | ✅ | ❌ | `--sukisu-commit` |
-| `susfs_commit` | ❌ 恒定空 | ✅ | ✅ | ❌ | `--susfs-commit` |
+| `manager_commit`（管理器 + SUSFS 提交 hash，逗号分隔） | ✅ | ✅ | ✅ | ✅ | `--sukisu-commit` / `--susfs-commit` |
+| `kpm_patch_sha256` | ➖ 已隐藏，恒等于留空 | ➖ 同上 | ➖ 同上 | ➖ 同上 | `--kpm-patch-sha256` |
+| `manager_spoofed`（Spoofed 管理器） | ➖ 已隐藏，恒启用 | ➖ 同上 | ➖ 同上 | ➖ 同上 | 无此参数 |
 | `supp_op`（一加 8E） | ❌ 恒 false | ✅ | ✅ | ➖ 写死 false | `--op8e` |
 | `ksu_mode` | ❌ | ❌ | ❌ | ❌ | 无此参数 |
 
@@ -157,6 +158,14 @@ GitHub Actions  ──┐
   - 「仅由主入口传入」——该 input 只存在于 `kernel-a1*.yml` 的 `workflow_call`
     块（供 `main.yml` 调用时传入），**不在 `workflow_dispatch` 块**，所以手动运行
     单版本入口时它恒为 `false`，只有走「构建内核」才能生效。
+  - 「已隐藏」——该配置项已从所有手动入口的界面移除，行为固定：
+    `kpm_patch_sha256` 等价于留空（不校验），`manager_spoofed` 恒启用。
+    两者对应的底层能力仍保留在 `build_kernel.sh` / 本地 `build.py` 中。
+
+**关于提交 hash**：`sukisu_commit` 与 `susfs_commit` 已合并为单一输入框
+`manager_commit`，内容为「SukiSU/管理器 hash，**可选用英文逗号后接** SUSFS hash」，
+解析按逗号拆分并去除多余空格，原有两个 hash 的校验逻辑不变。只填一段时
+第二段为空（即不锁定 SUSFS）。
 
 **关于 `use_bbr`**：所有 Actions 入口已统一为 `use_net_enhance`，不再单列
 `use_bbr`——网络增强本身就包含「把 BBR 设为默认拥塞算法」，两个开关只会造成歧义。
