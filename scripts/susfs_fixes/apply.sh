@@ -5,6 +5,9 @@
 # 依赖环境变量：
 #   ANDROID_VERSION KERNEL_VERSION KSU_VARIANT OS_PATCH_LEVEL SUB_LEVEL
 #   KERNEL_ROOT SUSFS4KSU KERNEL_PATCHES LEGACY_SUKISU_CONFIG
+#   SUSFS_RAW_PROBE  原始补丁探测：只把上游补丁原样打进去，不做任何适配修复
+#   SUSFS_SIDE_FIXES 探测时保留与子版本无关的 SUSFS 侧修复（5.10 侧两处编译缺陷）
+#   SUSFS_PROBE_DIR  探测结论写出目录（apply.json），默认当前目录
 # 调用前必须将工作目录设为 $KERNEL_ROOT
 set -eo pipefail
 
@@ -73,6 +76,115 @@ cd "$KERNEL_ROOT/common"
 CURRENT_SUB="$SUB_LEVEL"
 if [[ ! "$CURRENT_SUB" =~ ^[0-9]+$ ]]; then
   CURRENT_SUB=99999
+fi
+
+# ---------------------------------------------------------------- 原始补丁探测
+# 探测要回答的是「上游 SUSFS 补丁原样打到未经改动的内核上能不能落地」。
+# 本脚本同时负责「应用补丁」和「适配修复」，走常规路径的话测出来的会是
+# 「修过之后的补丁能不能编译」，而不是原始兼容线。所以探测模式在这里就短路：
+# 只应用原始补丁（外加可选的侧修复），随即写出 apply.json 并结束。
+#
+# 判定口径：一切由 apply.json 记录，交给 scripts/susfs_probe/write_result.py 汇总。
+# 这里刻意不做 verify_susfs_landing / 不因失配而 exit —— 补丁没打上本身就是结论。
+
+# 侧修复之一：针对上游 5.10 补丁自身的编译缺陷（extern 声明晚于使用），
+# 与具体子版本无关，所以探测模式下也应用，保证不同分支之间口径可比。
+fix_statfs_susfs_decl() {
+  # 上游 5.10 补丁把 susfs_sus_kstat_spoof_vfs_statfs 的 extern 声明放在了
+  # susfs_statfs_by_dentry 之后，clang -Werror 会报隐式声明；声明晚于使用时前移
+  if [[ -f fs/statfs.c ]] && grep -qF 'susfs_sus_kstat_spoof_vfs_statfs(' fs/statfs.c; then
+    local statfs_use statfs_decl
+    statfs_use=$(grep -n 'if (!susfs_sus_kstat_spoof_vfs_statfs(' fs/statfs.c | head -1 | cut -d: -f1)
+    statfs_decl=$(grep -n '^extern int susfs_sus_kstat_spoof_vfs_statfs(' fs/statfs.c | head -1 | cut -d: -f1)
+    if [[ -n "$statfs_use" && -n "$statfs_decl" && "$statfs_decl" -gt "$statfs_use" ]] \
+      && grep -q '^static int susfs_statfs_by_dentry(' fs/statfs.c; then
+      echo "前移 statfs.c 中 susfs_sus_kstat_spoof_vfs_statfs 的声明"
+      sed -i '/^static int susfs_statfs_by_dentry(/i extern int susfs_sus_kstat_spoof_vfs_statfs(struct inode *inode, struct kstatfs *buf, bool *is_fuse);' fs/statfs.c
+    fi
+  fi
+}
+
+# 侧修复之二：6.12.69+ 的 show_smap 上下文漂移（vma_pages → vma_data_pages）。
+# 同样是上游补丁自身的缺陷，非本仓库的适配调整，故探测模式下同样应用。
+# 定位思路参考 LingLuo17/AnyKernel3（GPL-3.0）对同一问题的排查结论，
+# 本实现按本仓库的失败处理约定重写，未复制其代码。
+fix_show_smap_sus_map() {
+  local f="fs/proc/task_mmu.c"
+
+  [ -f "$f.rej" ] || return 0
+  grep -qF 'static int show_smap(struct seq_file *m, void *v)' "$f" || return 0
+
+  # 幂等：函数体里已有该检查就不重复插入（重跑 / 断点续建时会再次进入本阶段）
+  local body
+  body=$(sed -n '/^static int show_smap(struct seq_file \*m, void \*v)/,/^}/p' "$f")
+  [ -n "$body" ] || return 0
+  case "$body" in
+    *SUSFS_IS_INODE_SUS_MAP*) return 0 ;;
+  esac
+
+  echo "为 show_smap 手工补入 SUS_MAP 检查（vma_pages → vma_data_pages 上下文漂移）"
+
+  # 只依赖函数签名与 vma 定义两行做锚点，不写死后续的 mem_size_stats 等声明，
+  # 免得上游再动函数体就整段失配。插入点必须在 vma 赋值之后：检查要用到 vma->vm_file。
+  perl -0pi -e 's/(static int show_smap\(struct seq_file \*m, void \*v\)\n\{\n\tstruct vm_area_struct \*vma = v;\n)/$1\n#ifdef CONFIG_KSU_SUSFS_SUS_MAP\n\tif (vma->vm_file) {\n\t\tif (SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))\n\t\t\treturn 0;\n\t}\n#endif\n/' "$f"
+
+  if ! grep -qF 'SUSFS_IS_INODE_SUS_MAP' "$f"; then
+    # 保留 .rej：交由下方的冲突检查处理
+    echo "::error::show_smap SUS_MAP 检查手工补入失败，保留 $f.rej 交由冲突检查处理"
+    return 0
+  fi
+
+  rm -f "$f.rej"
+  echo "已补入 show_smap SUS_MAP 检查并清除预期冲突文件"
+}
+
+if [ "${SUSFS_RAW_PROBE:-false}" = "true" ]; then
+  PROBE_DIR="${SUSFS_PROBE_DIR:-.}"
+  mkdir -p "$PROBE_DIR"
+
+  _side_applied=""
+  if [ "${SUSFS_SIDE_FIXES:-false}" = "true" ]; then
+    fix_statfs_susfs_decl
+    fix_show_smap_sus_map
+    _side_applied="statfs_decl,show_smap_sus_map"
+    echo "原始补丁探测 + 侧修复（SUSFS_SIDE_FIXES=true）：$_side_applied"
+  else
+    echo "原始补丁探测（SUSFS_RAW_PROBE=true）：不做任何适配修复"
+  fi
+
+  # --forward 下 rc=1 表示有 hunk 被跳过，正是要测的东西；rc>=2 才是真失败。
+  # 与常规路径（apply_patch_checked）不同，这里不因失配而终止构建：
+  # 补丁没打上来本身就是这次探测的结论，终止就什么结论都拿不到了。
+  _patch_log=""
+  _patch_out=$(patch -p1 --forward < "$SUSFS_PATCH" 2>&1) && _rc=0 || _rc=$?
+  _patch_log="$_patch_out"
+
+  _rej_files=()
+  mapfile -t _rej_files < <(list_untracked_rej)
+  _rej_count=${#_rej_files[@]}
+  _hunks_failed=$(printf '%s\n' "$_patch_log" | grep -c '^Hunk #[0-9]* FAILED' || true)
+  _hunks_ignored=$(printf '%s\n' "$_patch_log" | grep -c 'previously applied, skipping' || true)
+
+  printf '%s\n' "$_patch_log" > "$PROBE_DIR/patch.log"
+
+  cat > "$PROBE_DIR/apply.json" <<EOF
+{
+  "raw_probe": true,
+  "susfs_side_fixes": ${SUSFS_SIDE_FIXES:-false},
+  "susfs_side_fixes_applied": "$_side_applied",
+  "patch_exit": $_rc,
+  "rej": $_rej_count,
+  "rej_files": [$(printf '"%s",' "${_rej_files[@]}" | sed 's/,$//')],
+  "hunks_failed": $_hunks_failed,
+  "hunks_ignored": $_hunks_ignored,
+  "hunks_offset": null,
+  "hunks_fuzz": null
+}
+EOF
+
+  echo "原始补丁探测结论：rej=$_rej_count，failed=$_hunks_failed，ignored=$_hunks_ignored，patch 退出码=$_rc"
+  echo "结论已写入 $PROBE_DIR/apply.json（构建继续，编译结果由依次的写结果步骤记录）"
+  exit 0
 fi
 
 # 兼容缺少 VMA padding 接口的 5.10.66～209、5.15.74～144 和 6.1.25～68
@@ -202,16 +314,10 @@ if [[ -n "$EXEC_HELPER" ]] \
 fi
 
 # 上游 5.10 补丁把 susfs_sus_kstat_spoof_vfs_statfs 的 extern 声明放在了
-# susfs_statfs_by_dentry 之后，clang -Werror 会报隐式声明；声明晚于使用时前移
-if [[ -f fs/statfs.c ]] && grep -qF 'susfs_sus_kstat_spoof_vfs_statfs(' fs/statfs.c; then
-  STATFS_USE=$(grep -n 'if (!susfs_sus_kstat_spoof_vfs_statfs(' fs/statfs.c | head -1 | cut -d: -f1)
-  STATFS_DECL=$(grep -n '^extern int susfs_sus_kstat_spoof_vfs_statfs(' fs/statfs.c | head -1 | cut -d: -f1)
-  if [[ -n "$STATFS_USE" && -n "$STATFS_DECL" && "$STATFS_DECL" -gt "$STATFS_USE" ]] \
-    && grep -q '^static int susfs_statfs_by_dentry(' fs/statfs.c; then
-    echo "前移 statfs.c 中 susfs_sus_kstat_spoof_vfs_statfs 的声明"
-    sed -i '/^static int susfs_statfs_by_dentry(/i extern int susfs_sus_kstat_spoof_vfs_statfs(struct inode *inode, struct kstatfs *buf, bool *is_fuse);' fs/statfs.c
-  fi
-fi
+# susfs_statfs_by_dentry 之后，clang -Werror 会报隐式声明；声明晚于使用时前移。
+# 实现已提升为顶层函数（见上方「原始补丁探测」段）：探测模式也要用它做侧修复，
+# 放在这里复用同一份，免得这段逻辑存在两份、日后各自漂移。
+fix_statfs_susfs_decl
 
 # 原此处有一段「给 fs/susfs.c 补 #include <linux/security.h>」的兜底，可追溯为
 # 三仓融合时从 zzh 继承的原样代码（zzh 已在 613a8f0 删除同款实现）。当时保留它
@@ -230,35 +336,7 @@ fi
 #
 # 定位思路参考 LingLuo17/AnyKernel3（GPL-3.0）对同一问题的排查结论，
 # 本实现按本仓库的失败处理约定重写，未复制其代码。
-fix_show_smap_sus_map() {
-  local f="fs/proc/task_mmu.c"
-
-  [ -f "$f.rej" ] || return 0
-  grep -qF 'static int show_smap(struct seq_file *m, void *v)' "$f" || return 0
-
-  # 幂等：函数体里已有该检查就不重复插入（重跑 / 断点续建时会再次进入本阶段）
-  local body
-  body=$(sed -n '/^static int show_smap(struct seq_file \*m, void \*v)/,/^}/p' "$f")
-  [ -n "$body" ] || return 0
-  case "$body" in
-    *SUSFS_IS_INODE_SUS_MAP*) return 0 ;;
-  esac
-
-  echo "为 show_smap 手工补入 SUS_MAP 检查（vma_pages → vma_data_pages 上下文漂移）"
-
-  # 只依赖函数签名与 vma 定义两行做锚点，不写死后续的 mem_size_stats 等声明，
-  # 免得上游再动函数体就整段失配。插入点必须在 vma 赋值之后：检查要用到 vma->vm_file。
-  perl -0pi -e 's/(static int show_smap\(struct seq_file \*m, void \*v\)\n\{\n\tstruct vm_area_struct \*vma = v;\n)/$1\n#ifdef CONFIG_KSU_SUSFS_SUS_MAP\n\tif (vma->vm_file) {\n\t\tif (SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))\n\t\t\treturn 0;\n\t}\n#endif\n/' "$f"
-
-  if ! grep -qF 'SUSFS_IS_INODE_SUS_MAP' "$f"; then
-    # 保留 .rej：下方的冲突检查会把它算进去并按既有策略终止构建
-    echo "::error::show_smap SUS_MAP 检查手工补入失败，保留 $f.rej 交由冲突检查处理"
-    return 0
-  fi
-
-  rm -f "$f.rej"
-  echo "已补入 show_smap SUS_MAP 检查并清除预期冲突文件"
-}
+# 同 fix_statfs_susfs_decl：实现已提升到「原始补丁探测」段，这里只调用。
 fix_show_smap_sus_map
 
 # patch 退出码 1 也可能只是「部分 hunk 被跳过」而不留 .rej，所以不能只看返回值，
