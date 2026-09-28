@@ -281,18 +281,37 @@ half-applied ZRAM patch that breaks GKI defconfig validation.
 
 ## Upstream update auto trigger
 
-`.github/workflows/Auto_Trigger.yml` periodically checks the latest commit on the `main`
-branch of [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) against the value
-recorded on this repository's `sha` branch:
+ReSukiSU and SukiSU ship from two unrelated upstream repositories with their own release
+cadences, so auto-triggering is split into **two independent workflows**:
 
-1. New commit → write it back to the `sha` branch and trigger **Build kernels**;
+| Workflow | Upstream watched | Baseline branch | Variant built | Schedule (UTC) |
+|---|---|---|---|---|
+| `.github/workflows/Auto_Trigger_ReSukiSU.yml` | [ReSukiSU/ReSukiSU](https://github.com/ReSukiSU/ReSukiSU) `main` | `sha-resukisu` | `ReSukiSU` | every 3 days at 00:00 |
+| `.github/workflows/Auto_Trigger_SukiSU.yml` | [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) `main` | `sha` | `SukiSU` | every 3 days at 12:00 |
+
+The two are offset by 12 hours so they never contend for runner concurrency and so the two
+releases stay easy to tell apart. Both follow the same procedure: fetch the upstream head
+commit → compare against their own baseline branch → write it back and trigger a build per
+`build_scope`.
+
+1. New commit → write it back to the baseline branch and trigger **Build kernels**;
 2. No new commit → do nothing, no runner time consumed;
 3. Cannot fetch the commit (API rate limit) → fail immediately rather than build with an
    empty value.
 
 Defaults to "all versions", expanding the **auto slim matrix of 19 kernel versions** via
-`main.yml`, with a fixed configuration of `ReSukiSU` + ZRAM on and all other enhancements
-off.
+`main.yml`, with ZRAM on and all other enhancements off.
+
+> **Release tags are counted per variant.** `main.yml` now emits tags shaped like
+> `<SUSFS version>-r<N>-<variant>`, where `-rN` only increments *within* one variant.
+> Sharing a single `-rN` sequence would let the second release compute an already-existing
+> tag — `gh release create` would then fail and that run's artifacts would be silently lost.
+
+> **The ReSukiSU workflow fires a full matrix build the first time it runs**, because its
+> `sha-resukisu` baseline does not exist yet. To establish the baseline without building,
+> run it manually once with `build_scope` set to "no build".
+> The SukiSU workflow reuses the existing `sha` branch, which already holds a
+> SukiSU-Ultra commit, so it will not misfire.
 
 Manual run options:
 
@@ -342,7 +361,8 @@ Supports all 47 stages, resume from a stage (`--from`) and re-run a single stage
 | `.github/workflows/kernel-a1*.yml` | Per-Android-version standalone entries |
 | `.github/workflows/kernel-custom.yml` | Custom single-version entry |
 | `.github/workflows/build-236-marble.yml` | **Personal**: fixed build for Redmi Note 12 Turbo |
-| `.github/workflows/Auto_Trigger.yml` | Detects upstream updates and triggers builds |
+| `.github/workflows/Auto_Trigger_ReSukiSU.yml` | Detects ReSukiSU upstream updates and triggers builds (ReSukiSU variant) |
+| `.github/workflows/Auto_Trigger_SukiSU.yml` | Detects SukiSU upstream updates and triggers builds (SukiSU variant) |
 | `.github/workflows/get-manager.yml` | Fetches manager APKs |
 | `.github/workflows/update-pages.yml` | Updates `data/` and deploys Pages |
 | `config/` | Config fragments, `config/config` commit pinning |
