@@ -256,15 +256,36 @@ GitHub Actions  ──┐
 
 ## 上游更新自动触发
 
-`.github/workflows/Auto_Trigger.yml` 定期检查 [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra)
-`main` 分支的最新提交，与本仓库 `sha` 分支记录的旧值比对：
+ReSukiSU 与 SukiSU 是两个互不相干的上游仓库，各有独立的更新节奏，
+因此拆成**两个各自独立、互不影响**的工作流：
 
-1. 有新提交 → 回写 `sha` 分支并触发**构建内核**；
+| 工作流 | 检测的上游 | 记录的基线分支 | 构建变体 | 定时（UTC） |
+|---|---|---|---|---|
+| `.github/workflows/Auto_Trigger_ReSukiSU.yml` | [ReSukiSU/ReSukiSU](https://github.com/ReSukiSU/ReSukiSU) `main` | `sha-resukisu` | `ReSukiSU` | 每 3 天 00:00 |
+| `.github/workflows/Auto_Trigger_SukiSU.yml` | [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) `main` | `sha` | `SukiSU` | 每 3 天 12:00 |
+
+两者时刻错开 12 小时，避免同时抢占 Runner 并发、也让两版发布时间好区分。
+流程一致：拉取上游最新提交号 → 与各自基线分支记录的旧值比对 →
+有更新则回写基线并按 `build_scope` 触发构建。
+
+单次运行的行为：
+
+1. 有新提交 → 回写基线分支并触发**构建内核**；
 2. 无新提交 → 什么都不做，不消耗 Runner 时长；
 3. 拿不到提交号（API 限流）→ 直接失败退出，不会带着空值去构建。
 
 默认跑「全部版本」，走 `main.yml` 展开 **auto 精简矩阵共 19 个内核版本**，
-构建配置固定为 `ReSukiSU` + ZRAM 开启，其余增强项关闭。
+构建配置为 ZRAM 开启，其余增强项关闭。
+
+> **两路的 Release 标签互相独立**：`main.yml` 生成的 tag 形如
+> `<SUSFS版本>-r<N>-<变体>`，即 `-rN` 只在同一个变体内部递增。
+> 若两路共用一套 `-rN` 序列，后发那次会算出已存在的 tag，
+> `gh release create` 失败、该次产物全部静默丢失。
+
+> **ReSukiSU 那条首次启用会立刻触发一轮全矩阵构建** —— `sha-resukisu` 分支
+> 此前不存在，首次运行视为「有更新」。只想建基线不想编的话，先手动跑一次它
+> 并把 `build_scope` 选成「不构建」。
+> SukiSU 那条沿用既有的 `sha` 分支，里面已是 SukiSU-Ultra 的提交号，不会误触发。
 
 手动运行时可改：
 
@@ -312,7 +333,8 @@ python3 build.py --android android12 --kernel 5.10 --sub-level 236 \
 | `.github/workflows/kernel-a1*.yml` | 按 Android 版本拆分的独立入口 |
 | `.github/workflows/kernel-custom.yml` | 自定义单版本入口 |
 | `.github/workflows/build-236-marble.yml` | **自用**：Redmi Note 12 Turbo 固定构建 |
-| `.github/workflows/Auto_Trigger.yml` | 检测上游更新并自动触发 |
+| `.github/workflows/Auto_Trigger_ReSukiSU.yml` | 检测 ReSukiSU 上游更新并自动触发（ReSukiSU 变体） |
+| `.github/workflows/Auto_Trigger_SukiSU.yml` | 检测 SukiSU 上游更新并自动触发（SukiSU 变体） |
 | `.github/workflows/get-manager.yml` | 抓取管理器 APK |
 | `.github/workflows/update-pages.yml` | 更新 `data/` 并部署 Pages |
 | `config/` | 配置片段、`config/config` 提交锁定 |
