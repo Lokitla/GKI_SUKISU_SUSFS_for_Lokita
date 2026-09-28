@@ -315,6 +315,8 @@ python3 build.py --android android12 --kernel 5.10 --sub-level 236 \
 | `.github/workflows/Auto_Trigger.yml` | 检测上游更新并自动触发 |
 | `.github/workflows/get-manager.yml` | 抓取管理器 APK |
 | `.github/workflows/update-pages.yml` | 更新 `data/` 并部署 Pages |
+| `.github/workflows/susfs-probe.yml` | **批量工具**：用原始 SUSFS 补丁全量编译，校准兼容线 |
+| `scripts/susfs_probe/` | 探测用的矩阵生成 / 结论汇总脚本 |
 | `config/` | 配置片段、`config/config` 提交锁定 |
 | `data/` | 各版本可用的内核子版本与补丁级别（127 条） |
 | `security_patch/` | CVE-2026-43499 修复链 |
