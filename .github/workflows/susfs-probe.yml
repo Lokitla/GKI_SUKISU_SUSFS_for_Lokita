@@ -1,0 +1,207 @@
+name: SUSFS 原始补丁探测
+
+# 对每个 GKI 月份分支用**未经修补的** susfs4ksu 原始补丁跑一次全量编译，
+# 得到「原始补丁能否直接应用并编译成功」的逐条结论，用于校准网页上的 SUSFS 兼容线。
+#
+# 与常规构建的区别：本工作流调用的 build.yml 会打开 susfs_raw_probe，
+# apply.sh 在该模式下只 `patch -p1` 打原始补丁，不做任何上下文调整与适配修复；
+# Unicode 绕过修复也一并跳过。结论落到 SUSFS-Probe-* 产物，由 summarize 汇总。
+#
+# 矩阵直接从 data_source 分支的 data/<android>/<kernel>.json 现取，每个任务调用
+# build.yml；最后一个 job 把全部结果与已有 data/susfs_probe/*.json 合并，
+# 汇总成 SUSFS-Probe-Summary 产物，其中 summary.json 按分支分块，
+# 可用 scripts/susfs_probe/split_summary.py 拆成 data/susfs_probe/<android>-<kernel>.json。
+#
+# 注意：summary.json 落到 data/susfs_probe/ 需要手动用 split_summary.py 拆分后提交，
+# 本工作流不直接写仓库数据。
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: susfs-probe-${{ inputs.kernelsu_variant }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_version:
+        description: "内核版本（all = 全部分支）"
+        required: true
+        type: choice
+        options:
+          - all
+          - "5.10"
+          - "5.15"
+          - "6.1"
+          - "6.6"
+          - "6.12"
+        default: all
+      kernelsu_variant:
+        description: "KernelSU 变体"
+        required: true
+        type: choice
+        options:
+          - ReSukiSU
+          - SukiSU
+          - SukiSU(40726)
+          - SukiSU(40548)
+          - Official
+        default: ReSukiSU
+      sub_level_min:
+        description: "最小子版本号（留空不限）"
+        required: false
+        type: string
+        default: ""
+      sub_level_max:
+        description: "最大子版本号（留空不限）"
+        required: false
+        type: string
+        default: ""
+      os_patch_levels:
+        description: "只探测这些安全补丁月份，逗号分隔（留空不限，如 2025-03,2025-07）"
+        required: false
+        type: string
+        default: ""
+      include_lts:
+        description: "同时探测 LTS 分支"
+        required: false
+        type: boolean
+        default: true
+      susfs_side_fixes:
+        description: "保留与子版本无关的 SUSFS 侧修复（5.10 上游补丁自身的两处编译缺陷）"
+        required: false
+        type: boolean
+        default: false
+      susfs_pin_time:
+        description: "susfs4ksu 固定到该时刻之前的最后一次提交（ISO 8601，留空 = 本次运行开始时刻）"
+        required: false
+        type: string
+        default: ""
+      upload_kernels:
+        description: "上传编译出的 AnyKernel3 包（默认只留探测结论）"
+        required: false
+        type: boolean
+        default: false
+      max_parallel:
+        description: "最大并行任务数"
+        required: false
+        type: string
+        default: "20"
+      data_source:
+        description: "版本数据与已有探测结果的来源分支"
+        required: false
+        type: string
+        default: main
+
+jobs:
+  # ==================== 生成探测矩阵 ====================
+  matrix:
+    name: 生成探测矩阵
+    runs-on: ubuntu-24.04
+    outputs:
+      include: ${{ steps.build.outputs.include }}
+      count: ${{ steps.build.outputs.count }}
+      pin_time: ${{ steps.pin.outputs.time }}
+    steps:
+      - name: 检出代码仓库
+        uses: actions/checkout@v7
+
+      - name: 确定 susfs4ksu 固定时刻
+        id: pin
+        env:
+          PIN_INPUT: ${{ inputs.susfs_pin_time }}
+        run: |
+          # 全量跑要持续几个小时，所有任务固定到同一时刻，
+          # 避免中途上游推送导致结论混用不同版本的 susfs4ksu
+          if [ -n "$PIN_INPUT" ]; then
+            echo "time=$PIN_INPUT" >> "$GITHUB_OUTPUT"
+          else
+            echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 生成探测矩阵
+        id: build
+        env:
+          KERNEL_VERSION_FILTER: ${{ inputs.kernel_version }}
+          SUB_LEVEL_MIN: ${{ inputs.sub_level_min }}
+          SUB_LEVEL_MAX: ${{ inputs.sub_level_max }}
+          OS_PATCH_LEVELS: ${{ inputs.os_patch_levels }}
+          INCLUDE_LTS: ${{ inputs.include_lts }}
+          DATA_SOURCE: ${{ inputs.data_source }}
+        run: python3 scripts/susfs_probe/build_matrix.py
+
+  # ==================== 逐个子版本全量编译 ====================
+  probe:
+    name: "${{ matrix.kernel_version }}.${{ matrix.sub_level }}-${{ matrix.os_patch_level }}"
+    needs: matrix
+    if: needs.matrix.outputs.count != '0'
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ fromJSON(inputs.max_parallel || '20') }}
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.include) }}
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      android_version: ${{ matrix.android_version }}
+      kernel_version: ${{ matrix.kernel_version }}
+      sub_level: ${{ matrix.sub_level }}
+      os_patch_level: ${{ matrix.os_patch_level }}
+      ksu_variant: ${{ inputs.kernelsu_variant }}
+      ksu_mode: 关闭
+      enable_susfs: true
+      susfs_raw_probe: true
+      susfs_side_fixes: ${{ inputs.susfs_side_fixes }}
+      susfs_pin_time: ${{ needs.matrix.outputs.pin_time }}
+      use_zram: false
+      use_bbg: false
+      use_kpm: "disabled (关闭)"
+      use_rekernel: false
+      cve_2026_43499_patch: false
+      export_susfs_patches: false
+      supp_op: false
+      droidspaces: "不启用"
+      droidspaces_ntsync: false
+      # 默认不上传：上百个子版本任务各传一份刷入包会迅速吃满 Actions 存储配额，
+      # 而探测只需要最后的结论产物（SUSFS-Probe-*）。
+      artifact_upload_mode: ${{ inputs.upload_kernels && '仅上传 AnyKernel3.zip' || '不上传' }}
+
+  # ==================== 汇总探测结果 ====================
+  # 手动取消长跑后也要汇总已完成的部分
+  summarize:
+    name: 汇总探测结果
+    needs:
+      - matrix
+      - probe
+    if: ${{ always() && needs.matrix.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: 检出代码仓库
+        uses: actions/checkout@v7
+
+      - name: 下载各任务的探测结论
+        uses: actions/download-artifact@v8
+        with:
+          path: ./probe-results
+          pattern: "SUSFS-Probe-*"
+          merge-multiple: false
+
+      - name: 汇总
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          KSU_VARIANT: ${{ inputs.kernelsu_variant }}
+          MATRIX_INCLUDE: ${{ needs.matrix.outputs.include }}
+          PROBE_PARTIAL: ${{ (inputs.sub_level_min != '' || inputs.sub_level_max != '' || inputs.os_patch_levels != '') && 'true' || 'false' }}
+          MERGE_FROM_BRANCH: ${{ inputs.data_source }}
+        run: python3 scripts/susfs_probe/aggregate.py ./probe-results ./susfs-probe-summary
+
+      - name: 上传汇总结果
+        uses: actions/upload-artifact@v6
+        with:
+          name: SUSFS-Probe-Summary
+          path: susfs-probe-summary/
+          if-no-files-found: error
+          overwrite: true
+          compression-level: 9
