@@ -135,6 +135,19 @@ export ENABLE_SUSFS
 export EXPECTED_KPM_PATCH_SHA256
 export SUPP_OP
 export STRICT_LICENSE_MODE
+# SUSFS 原始补丁探测的三个开关必须 export：apply.sh 是 bash 子进程调用的，
+# 不 export 的话子进程里 ${SUSFS_RAW_PROBE:-false} 恒为 false，探测形同虚设。
+# SUSFS_PROBE_DIR 是 apply.json 的写出目录，同样要透过去；build.yml 负责设置。
+export SUSFS_RAW_PROBE SUSFS_SIDE_FIXES SUSFS_PIN_TIME
+: "${SUSFS_PROBE_DIR:=$WORKSPACE/susfs-probe}"
+export SUSFS_PROBE_DIR
+# 探测矩阵里同一子版本会跨多个月份出现（如 5.10.209 的 2024-11 与 2025-01），
+# 而 CONFIG 只到子版本这一步，产物名不带月份就会互相覆盖。
+ARTIFACT_SUFFIX=""
+if [ "${SUSFS_RAW_PROBE:-false}" = "true" ]; then
+  ARTIFACT_SUFFIX="-${OS_PATCH_LEVEL:-unknown}"
+fi
+export ARTIFACT_SUFFIX
 export DROIDSPACES
 export DROIDSPACES_NTSYNC
 export ARTIFACT_UPLOAD_MODE
@@ -1438,14 +1451,11 @@ stage_apply_susfs() {
   fi
 
   cd ${KERNEL_ROOT}
-  # 原始补丁探测（SUSFS_RAW_PROBE）必须由 apply.sh 内部实现：
+  # 原始补丁探测（SUSFS_RAW_PROBE）由 apply.sh 自己实现，这里只透传开关：
   # apply.sh 同时负责"应用补丁"和"适配修复"，直接跳过它会连补丁都不打，
-  # 得到的就不是"原始补丁能否落地"的结论。这里只把开关透给 apply.sh。
-  # TODO(susfs-probe)：apply.sh 尚未实现原始模式（只 patch -p1、不做上下文调整、
-  # 并输出 apply.json），在此之前 RAW_PROBE 不会改变实际行为。
-  if [ "${SUSFS_RAW_PROBE}" = "true" ]; then
-    echo "::warning::SUSFS_RAW_PROBE=true，但 scripts/susfs_fixes/apply.sh 尚未实现原始模式，本次仍按常规（含适配修复）应用"
-  fi
+  # 拿到的就不是"原始补丁能否落地"的结论。apply.sh 打完原始补丁会写出
+  # $SUSFS_PROBE_DIR/apply.json 并直接结束；编译结论再由 build.yml 末尾的
+  # 「写入 SUSFS 探测结果」步骤合并成 result.json。
   bash "$WORKSPACE/scripts/susfs_fixes/apply.sh"
   cd "$_pwd"
 
@@ -1913,6 +1923,12 @@ stage_apply_unicode_fix() {
   if [ "${STRICT_LICENSE_MODE:-false}" = "true" ]; then
     echo "跳过 Unicode 绕过修复（STRICT_LICENSE_MODE=true：排除 Numbersf/Action-Build 非标准许可来源）"
     echo "::warning::严格许可模式：Unicode 绕过修复未应用，SUSFS 的 Unicode 相关隐藏能力会减弱"
+    return 0
+  fi
+  # 原始补丁探测同样要跳过：这个修复不属于上游 SUSFS 补丁，打上去之后编译成败
+  # 反映的是"修复过的补丁"，而不是"原始补丁能不能编"，会把兼容线整体抬高一截。
+  if [ "${SUSFS_RAW_PROBE:-false}" = "true" ]; then
+    echo "跳过 Unicode 绕过修复（SUSFS_RAW_PROBE=true：原始补丁探测，不叠加任何修复）"
     return 0
   fi
   local _pwd="$PWD"
@@ -3300,6 +3316,7 @@ export_state() {
   [ -n "${GITHUB_ENV:-}" ] || return 0
   {
     echo "CONFIG=${CONFIG:-}"
+    echo "ARTIFACT_SUFFIX=${ARTIFACT_SUFFIX:-}"
     echo "KERNEL_ROOT=${KERNEL_ROOT:-}"
     echo "DEFCONFIG=${DEFCONFIG:-}"
     echo "SUSFS_PATCH_EXPORT=${SUSFS_PATCH_EXPORT:-false}"
