@@ -99,8 +99,13 @@ permissions:
         type: string
         default: '不启用'
       artifact_upload_mode:
+        description: "产物上传策略：上传全部=刷入包+启动镜像 / 仅上传 AnyKernel3.zip / 不上传（探测工作流用它避免上百个任务灌满存储配额）"
         required: false
-        type: string
+        type: choice
+        options:
+          - 上传全部
+          - 仅上传 AnyKernel3.zip
+          - 不上传
         default: 上传全部
       droidspaces_ntsync:
         required: false
@@ -274,14 +279,34 @@ jobs:
         cache_key: ${{ github.ref_name }}-${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}
         cache_bucket: ccache-cache
         cache_sign_key: ${{ secrets.CACHE_SIGN_KEY }}
+    # 探测模式（susfs-probe）一次会起上百个子版本任务，照常写回缓存会把这些
+    # 一次性 key 灌满仓库的 10GB 配额、把 dev 的常用热缓存挤掉，
+    # 所以探测走只读恢复（actions/cache/restore），只取不存。
+    - name: 恢复 ccache 缓存（探测，只读）
+      if: ${{ inputs.susfs_raw_probe }}
+      uses: actions/cache/restore@v5
+      with:
+        path: ~/.ccache
+        key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-ccache-${{ github.sha }}
+        restore-keys: ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-ccache-
     - name: 恢复 ccache 缓存
+      if: ${{ !inputs.susfs_raw_probe }}
       uses: actions/cache@v5
       with:
         path: ~/.ccache
         key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-ccache-${{ github.sha }}
         restore-keys: ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-ccache-
+    - name: 恢复 bazel 磁盘缓存（探测，只读）
+      if: ${{ inputs.susfs_raw_probe && inputs.android_version != 'android12' && inputs.android_version != 'android13' }}
+      uses: actions/cache/restore@v5
+      with:
+        path: ~/.cache/bazel
+        key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-bazel-${{ github.sha }}
+        restore-keys: '${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-bazel-
+
+          ${{ inputs.android_version }}-${{ inputs.kernel_version }}-bazel-'
     - name: 恢复 bazel 磁盘缓存
-      if: inputs.android_version != 'android12' && inputs.android_version != 'android13'
+      if: ${{ !inputs.susfs_raw_probe && inputs.android_version != 'android12' && inputs.android_version != 'android13' }}
       uses: actions/cache@v5
       with:
         path: ~/.cache/bazel
@@ -326,6 +351,13 @@ jobs:
         DROIDSPACES_NTSYNC: ${{ inputs.droidspaces_ntsync }}
         ARTIFACT_UPLOAD_MODE: ${{ inputs.artifact_upload_mode }}
         USE_BBR: ${{ inputs.use_bbr }}
+        # SUSFS 原始补丁探测：apply.sh 是 build_kernel.sh 的 bash 子进程，
+        # 这三个开关在这里给出才能一路透到 apply.sh；缺失的话 apply.sh 里
+        # ${SUSFS_RAW_PROBE:-false} 恒为 false，探测会静默退化成常规构建。
+        SUSFS_RAW_PROBE: ${{ inputs.susfs_raw_probe || false }}
+        SUSFS_SIDE_FIXES: ${{ inputs.susfs_side_fixes || false }}
+        SUSFS_PIN_TIME: ${{ inputs.susfs_pin_time || '' }}
+        SUSFS_PROBE_DIR: ${{ github.workspace }}/susfs-probe
         # 用拆分步骤的结果而非原始入参：合并输入框里"逗号前一段"才是 SukiSU/管理器 hash。
         SUKISU_COMMIT: ${{ steps.resolve_commits.outputs.sukisu_commit }}
         KSU_BRANCH_MODE: ${{ inputs.ksu_branch_mode }}
@@ -346,7 +378,7 @@ jobs:
       if: failure()
       uses: actions/upload-artifact@v6
       with:
-        name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}-Build-Logs
+        name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}${{ env.ARTIFACT_SUFFIX }}-Build-Logs
         path: build-logs/
         if-no-files-found: ignore
         retention-days: 7
@@ -360,13 +392,15 @@ jobs:
         if-no-files-found: warn
         compression-level: 9
     - name: 上传 AnyKernel3 刷入包
-      if: inputs.artifact_upload_mode != '上传全部'
+      # 新增「不上传」模式给 susfs-probe 用：原本这里是「非上传全部即上传」的兜底分支，
+      # 若不同时排除 '不上传'，走任何其它值（包括新加的不上传）都会照传一份刷入包。
+      if: inputs.artifact_upload_mode != '上传全部' && inputs.artifact_upload_mode != '不上传'
       uses: actions/upload-artifact@v6
       with:
         # A-1 闭环：stage_prepare_anykernel3 生成的 zip 落在 workspace 根（../$_zip），
         # 不在 AnyKernel3/ 目录内。上传「上传全部」分支已用 '*AnyKernel3.zip' 收集，
         # 此处必须一致，否则 zip 生成后被静默丢弃，用户仍拿不到可刷包。
-        name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}-AnyKernel3
+        name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}${{ env.ARTIFACT_SUFFIX }}-AnyKernel3
         path: '*AnyKernel3.zip'
         if-no-files-found: warn
         compression-level: 9
@@ -376,7 +410,7 @@ jobs:
       if: inputs.artifact_upload_mode == '上传全部'
       uses: actions/upload-artifact@v6
       with:
-        name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}-AnyKernel3
+        name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}${{ env.ARTIFACT_SUFFIX }}-AnyKernel3
         path: '*AnyKernel3.zip'
         if-no-files-found: warn
         compression-level: 9
@@ -384,7 +418,7 @@ jobs:
       if: inputs.artifact_upload_mode == '上传全部'
       uses: actions/upload-artifact@v6
       with:
-        name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}-Images
+        name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}${{ env.ARTIFACT_SUFFIX }}-Images
         path: '*.img'
         if-no-files-found: warn
         compression-level: 9
@@ -392,7 +426,7 @@ jobs:
       if: always() && env.REJ_COUNT > 0
       uses: actions/upload-artifact@v6
       with:
-        name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}-Rejects
+        name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}${{ env.ARTIFACT_SUFFIX }}-Rejects
         path: patch-rejects/
         if-no-files-found: ignore
         compression-level: 9
@@ -425,3 +459,32 @@ jobs:
         USE_BBR: ${{ inputs.use_bbr }}
         WORKSPACE: ${{ github.workspace }}
       run: python3 scripts/telegram_notify.py single || true
+    # ==================== SUSFS 原始补丁探测结论 ====================
+    # 无论编译成败都写出结论：原始补丁打不上本身就是本次探测要的结论，
+    # 编译失败也要留下记录，否则汇总侧分不清是"没跑"还是"跑失败了"。
+    - name: 写入 SUSFS 探测结果
+      if: always() && inputs.susfs_raw_probe
+      env:
+        SUSFS_PROBE_DIR: ${{ github.workspace }}/susfs-probe
+        ANDROID_VERSION: ${{ inputs.android_version }}
+        KERNEL_VERSION: ${{ inputs.kernel_version }}
+        SUB_LEVEL: ${{ inputs.sub_level }}
+        OS_PATCH_LEVEL: ${{ inputs.os_patch_level }}
+        KSU_VARIANT: ${{ inputs.ksu_variant }}
+        KERNEL_ROOT: ${{ github.workspace }}/${{ env.CONFIG }}
+        SUSFS4KSU: ${{ github.workspace }}/susfs4ksu
+        REJ_COUNT: ${{ env.REJ_COUNT }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: python3 scripts/susfs_probe/write_result.py
+
+    - name: 上传 SUSFS 探测结果
+      if: always() && inputs.susfs_raw_probe
+      uses: actions/upload-artifact@v6
+      with:
+        # susfs-probe.yml 用 pattern SUSFS-Probe-* 一次性收走全部任务的结论
+        name: SUSFS-Probe-${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-${{ inputs.os_patch_level }}-${{ inputs.ksu_variant }}
+        path: susfs-probe/
+        if-no-files-found: error
+        retention-days: 30
+        overwrite: true
+        compression-level: 9
