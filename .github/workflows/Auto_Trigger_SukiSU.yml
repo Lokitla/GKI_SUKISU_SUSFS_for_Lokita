@@ -1,0 +1,291 @@
+# =============================================================================
+# SukiSU 上游更新检测 → 自动触发内核构建
+# -----------------------------------------------------------------------------
+# 流程：拉取 SukiSU-Ultra/SukiSU-Ultra main 最新提交号 → 与 sha 分支记录的旧值
+#       比对 → 有更新则回写 sha 分支，并按 build_scope 触发构建。
+#
+# 与 Auto_Trigger_ReSukiSU.yml 是一对：两者逻辑相同，差别只在「检测哪个上游仓库、
+# 回写哪个 sha 分支、用哪个变体构建、什么时刻跑」。拆开的原因是 ReSukiSU 与
+# SukiSU 上游是两个独立仓库、互不相关的发布节奏，合并成一个 workflow 时只能
+# 检测其中一个却构建另一个（语义错位），且两条本领跑也无法各自设日程。
+#
+# 定期日程刻意与 ReSukiSU 那条错开 12 小时：两路同时开跑会互相抢 Actions 并发
+# 配额，也会让 Release 时间挤在一起难分辨。
+#
+# 本条沿用既有的 sha 分支（拆分前的那个单文件版用的就是它），里面记的正是
+# SukiSU-Ultra 的提交号，所以拆过来后首次运行能读到已有基线、不会误触发一次构建。
+# ReSukiSU 那条用新的 sha-resukisu 分支，首次跑会触发一轮构建（那边注释有说明）。
+#
+# 关于默认范围：默认跑「全部版本」，即 5.10 / 5.15 / 6.1 / 6.6 的维护矩阵。
+#
+# 矩阵不在 workflow 里硬编码，由 .github/workflows/config/matrix.json 维护：
+#   auto —— 自动更新用（本 workflow → main.yml），共 19 个组合：
+#           5.10 : 136, 198, 209, 236, X(LTS)
+#           5.15 : 74, 123, 148, 170, 178, 180
+#           6.1  : 78, 90, 99, 124, 145
+#           6.6  : 50, 66, 102
+#
+#   full —— 手动触发用（直接跑 kernel-*.yml），共 84 个组合，保留全部历史子版本。
+#
+# 分流靠 kernel-*.yml 的 called_from_main 入参：main.yml 调用时传 true → auto，
+# 手动直接触发时为默认的 false → full。
+#
+# 关于 SukiSU 系变体：main.yml 的 kernelsu_variant 支持 SukiSU / SukiSU(40726) /
+# SukiSU(40548) / ReSukiSU / Official，本条固定用 SukiSU 并跟随 builtin 之外的
+# 自动选择（ksu_branch_mode 由 main.yml 默认 auto 决定）。
+#
+# 关于 6.12：
+#   6.12 与最新 SukiSU 存在兼容问题（详见 Auto_Trigger_ReSukiSU.yml 文件头关于
+#   KPM 与 cb_mutex 的说明），因此不在 auto 精简矩阵内。需要 6.12 请手动触发
+#   「内核构建 - Android 16 (6.12)」入口。
+# =============================================================================
+name: Auto Trigger on SukiSU Update
+
+on:
+  schedule:
+    # 每三天 UTC 12:00 检查一次（与 ReSukiSU 那条的 UTC 00:00 错开）。
+    # GitHub 的 cron 不保证准点，高峰期可能延后数十分钟，属正常现象。
+    - cron: '0 12 */3 * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 忽略「是否有新提交」，强制触发一次构建
+        type: boolean
+        default: false
+      build_scope:
+        description: 检测到更新后要构建的范围
+        type: choice
+        default: 全部版本
+        options:
+          - 全部版本
+          - 单版本冒烟
+          # 没有「固定 5.10.236」：那条走 build-236-marble.yml，其参数全部写死为
+          # ReSukiSU 自用取向，对本变体不成立。需要时请手动触发那一个 workflow。
+          - 不构建
+      include_612:
+        description: 尝试把 Android 16 (6.12) 纳入矩阵。注意：6.12 不在 auto 精简矩阵内，勾选后自动构建仍会跳过 6.12；构建 6.12 请手动触发「内核构建 - Android 16 (6.12)」入口
+        type: boolean
+        default: false
+      release_type:
+        description: 构建完成后的发布方式
+        type: choice
+        default: Release
+        options:
+          - Release
+          - Pre-Release
+          - Actions
+
+# 写：回写 sha 分支；actions：调用 workflow_dispatch 接口触发构建
+permissions:
+  contents: write
+  actions: write
+
+# 同一时间只允许同一个变体的检测任务在跑，避免定时任务和手动触发互相踩。
+# group 名带变体，两条 workflow 互不阻塞。
+concurrency:
+  group: auto-trigger-sukisu
+  cancel-in-progress: false
+
+jobs:
+  check-and-trigger:
+    runs-on: ubuntu-24.04
+    # [融合] 仓库所有者白名单：fork 后需把自己的用户名加进来，否则自动构建永不触发
+    if: contains(fromJSON('["zzh20188", "elysias123", "Lokitla"]'), github.repository_owner)
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: 获取 SukiSU-Ultra 最新提交号
+        id: get_sha
+        run: |
+          set -euo pipefail
+          LATEST_SHA=$(curl -fsSL https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/commits/main | jq -r '.sha')
+          # API 限流或仓库改名时会拿到空值/null，这时宁可不触发，也不要带着空提交号去构建
+          if [[ -z "$LATEST_SHA" || "$LATEST_SHA" == "null" ]]; then
+            echo "::error::无法获取 SukiSU 最新提交号（API 限流或接口变更），本次跳过"
+            exit 1
+          fi
+          echo "sha=$LATEST_SHA" >> "$GITHUB_OUTPUT"
+          echo "Latest SHA: $LATEST_SHA"
+
+      - name: 读取 sha 分支记录的旧提交号
+        id: get_prev_sha
+        env:
+          SHA_BRANCH: sha
+        run: |
+          set -euo pipefail
+          PREV_SHA=""
+          if git ls-remote --heads origin "$SHA_BRANCH" | grep -q "$SHA_BRANCH"; then
+            echo "$SHA_BRANCH 分支存在，读取历史记录…"
+            git fetch origin "$SHA_BRANCH:$SHA_BRANCH" || true
+            git checkout "$SHA_BRANCH" || true
+            if [ -f "latest_sha.txt" ]; then
+              PREV_SHA=$(cat latest_sha.txt)
+              echo "Previous SHA found: $PREV_SHA"
+            else
+              echo "$SHA_BRANCH 分支上没有 latest_sha.txt"
+            fi
+          else
+            echo "$SHA_BRANCH 分支尚不存在，视为首次运行"
+          fi
+          echo "prev_sha=$PREV_SHA" >> "$GITHUB_OUTPUT"
+          git checkout "${{ github.ref_name }}"
+
+      - name: 比对是否有新提交
+        id: compare
+        run: |
+          set -euo pipefail
+          CURR_SHA="${{ steps.get_sha.outputs.sha }}"
+          PREV_SHA="${{ steps.get_prev_sha.outputs.prev_sha }}"
+          FORCE="${{ inputs.force || 'false' }}"
+
+          echo "Current SHA: $CURR_SHA"
+          echo "Previous SHA: ${PREV_SHA:-<none>}"
+
+          if [[ "$FORCE" == "true" ]]; then
+            echo "new_commit=true"
+            echo "new_commit=true" >> "$GITHUB_OUTPUT"
+            echo "手动强制触发"
+          elif [[ "$CURR_SHA" != "$PREV_SHA" ]]; then
+            echo "new_commit=true" >> "$GITHUB_OUTPUT"
+            echo "检测到新提交"
+          else
+            echo "new_commit=false" >> "$GITHUB_OUTPUT"
+            echo "无新提交"
+          fi
+
+      - name: 回写最新提交号到 sha 分支
+        if: steps.compare.outputs.new_commit == 'true'
+        env:
+          SHA_BRANCH: sha
+        run: |
+          set -euo pipefail
+          git checkout "$SHA_BRANCH" 2>/dev/null || git checkout --orphan "$SHA_BRANCH"
+          if [ ! -f "latest_sha.txt" ]; then
+            git rm -rf . 2>/dev/null || true
+          fi
+          echo "${{ steps.get_sha.outputs.sha }}" > latest_sha.txt
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add latest_sha.txt
+          git commit -m "chore(sha): 更新 SukiSU 最新提交号为 ${{ steps.get_sha.outputs.sha }}" || exit 0
+          git push origin "$SHA_BRANCH"
+
+      - name: 触发构建工作流
+        if: steps.compare.outputs.new_commit == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SCOPE: ${{ inputs.build_scope || '全部版本' }}
+          RELEASE_TYPE: ${{ inputs.release_type || 'Release' }}
+          INCLUDE_612: ${{ inputs.include_612 || 'false' }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          # 上一步（回写 sha 分支）已经把工作区切到孤儿分支，那里只有
+          # latest_sha.txt，没有 config/。锚点文件在主分支上，必须先切回来再读，
+          # 否则自动触发的构建永远走零锚点。
+          git checkout "$REF_NAME" 2>/dev/null || git checkout "${{ github.ref_name }}"
+
+          # KPM 修补工具锚点（config/kpm_patch_sha256）不再透传：
+          # 该配置项已从所有手动入口隐藏，行为等同于留空不校验，
+          # 因此自动触发的构建一律为零锚点运行（与手动留空一致）。
+          # 锚点机制本身保留在 build_kernel.sh / build.py --kpm-patch-sha256 中。
+          #
+          # 同理 manager_spoofed：该 input 也已从 main.yml / kernel-custom.yml 的
+          # 手动入口隐藏（恒启用），main.yml → get-manager.yml 的调用处写死 true，
+          # 所以这里不要再把它加回载荷 —— 加了到不了任何环节。
+
+          case "$SCOPE" in
+            "不构建")
+              echo "本次只更新 sha 分支，不触发构建"
+              exit 0
+              ;;
+            "全部版本")
+              # 完整矩阵走「构建内核」(main.yml)。
+              # 构建目标用逗号分隔字符串 build_targets（原先的 5 个 build_a1x
+              # 布尔开关已合并，以便腾出 25 个 input 名额）：6.12 按需追加，
+              # 其余固定，避免 build_all 把 6.12 一起拉进来。
+              # 实际组合数由 matrix.json 决定（当前 19 个）。
+              BUILD_TARGETS="a12,a13,a14,a15"
+              if [ "$INCLUDE_612" = "true" ]; then
+                BUILD_TARGETS="$BUILD_TARGETS,a16"
+              fi
+              jq -n \
+                --arg ref "$REF_NAME" \
+                --arg release_type "$RELEASE_TYPE" \
+                --arg build_targets "$BUILD_TARGETS" \
+                '{
+                  ref: $ref,
+                  inputs: {
+                    release_type: $release_type,
+                    kernelsu_variant: "SukiSU",
+                    enable_susfs: true,
+                    use_kpm: "patched (开启并修补)",
+                    droidspaces: "不启用",
+                    build_time: "",
+                    build_targets: $build_targets,
+                    export_susfs_patches: true,
+                    use_zram: true,
+                    use_bbg: false,
+                    use_rekernel: false,
+                    cve_2026_43499_patch: false,
+                    droidspaces_ntsync: false,
+                    use_net_enhance: false,
+                    send_telegram: true,
+                    use_release_cache: false,
+                    supp_op: false,
+                    manager_commit: ""
+                  }
+                }' > /tmp/dispatch.json
+              echo "6.12 纳入范围: $INCLUDE_612"
+              TARGET_WF="main.yml"
+              ;;
+            *)
+              # 单版本冒烟走「Android 内核构建-自定义」(kernel-custom.yml)：
+              # 只有它支持精确到单个子版本，一次只编 1 个，几分钟就有结果。
+              # 5.10.66 是已实测可编的组合；只传 AnyKernel3 包，省掉三个 boot 镜像。
+              jq -n \
+                --arg ref "$REF_NAME" \
+                '{
+                  ref: $ref,
+                  inputs: {
+                    kernel_version: "5.10",
+                    kernelsu_variant: "SukiSU",
+                    enable_susfs: true,
+                    use_kpm: "patched (开启并修补)",
+                    droidspaces: "不启用",
+                    artifact_upload_mode: "仅上传 AnyKernel3.zip",
+                    build_scope: "指定版本",
+                    os_patch_level: "66",
+                    build_time: "",
+                    use_zram: true,
+                    use_bbg: false,
+                    use_rekernel: false,
+                    cve_2026_43499_patch: false,
+                    supp_op: false,
+                    droidspaces_ntsync: false,
+                    send_telegram: true,
+                    use_release_cache: false,
+                    manager_commit: ""
+                  }
+                }' > /tmp/dispatch.json
+              TARGET_WF="kernel-custom.yml"
+              ;;
+          esac
+
+          echo "触发范围：$SCOPE → $TARGET_WF"
+
+          # 注意：REST 字段是 inputs（复数）。写成 input 会被 422 拒掉。
+          # 这里直接构造 JSON 载荷，避免 -f 嵌套字段写法在不同 gh 版本上的差异。
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/${{ github.repository }}/actions/workflows/$TARGET_WF/dispatches" \
+            --input /tmp/dispatch.json
+
+          echo "已触发 $TARGET_WF"
