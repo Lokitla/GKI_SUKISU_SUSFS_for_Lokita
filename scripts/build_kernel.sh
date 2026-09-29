@@ -426,6 +426,10 @@ stage_setup_git() {
   local _pwd="$PWD"
   git config --global user.name "BuildBot"
   git config --global user.email "BuildGkiKernel@gmail.com"
+  # 上游 git 服务偶发连接停滞：传输速率低于 1KB/s 持续 180 秒即中止，
+  # 避免在 repo sync / git clone 中无限挂起直到 job 超时
+  git config --global http.lowSpeedLimit 1000
+  git config --global http.lowSpeedTime 180
 
   cd "$_pwd"
 }
@@ -655,6 +659,14 @@ except Exception:
     if [ "$attempt" -ge "$MAX_ATTEMPTS" ]; then
       echo "::error::内核源码同步连续 $MAX_ATTEMPTS 次失败"
       exit "$rc"
+    fi
+
+    # 清理残留的 git-remote-https 进程：AOSP 连接停滞时会留下僵尸进程，
+    # 占用文件句柄并导致后续 sync 以 "remote: error: RPC failed" 失败
+    if [ "$rc" -ne 0 ]; then
+      pkill -9 -f 'git-remote-https' 2>/dev/null || true
+      pkill -9 -f 'android\.googlesource\.com' 2>/dev/null || true
+      sleep 5
     fi
 
     # 最后一次重试前彻底清空：只删 .repo 会残留半检出的 project 目录，
@@ -1994,6 +2006,17 @@ stage_apply_unicode_fix() {
   else
     patch -p1 --forward < "$ACTION_BUILD/patches/unicode_bypass_fix_6.1+.patch" || _rc=$?
   fi
+
+  # SUSFS 主补丁或上游 ASB 已包含同款 fs/unicode 修改时，bypass 补丁的 hunk
+  # 会被 patch 判定为 previously applied：源码状态正确（可正常编译），但 hunk
+  # 仍被写入 .rej 并污染 Rejects 产物。此处剔除该预期冲突；
+  # mkutf8data.c 仍含 ignore_init 说明存在真实缺失，保留 .rej 以便排查。
+  if [ -f fs/unicode/mkutf8data.c.rej ] && [ -f fs/unicode/mkutf8data.c ] \
+    && ! grep -q 'ignore_init' fs/unicode/mkutf8data.c; then
+    echo "fs/unicode .rej 为已应用同款修改产生的预期冲突，剔除（构建未受影响）"
+    rm -f fs/unicode/*.rej
+  fi
+
   # patch 退出码 1 = 该 hunk 已应用过（--forward 主动跳过），正常；>=2 才是真的没打上。
   # 这个补丁属于 SUSFS 流程（仅在 ENABLE_SUSFS=true 时执行），静默失败会产出
   # 缺少 Unicode 绕过修复却看不出异常的内核，所以这里必须区分。
