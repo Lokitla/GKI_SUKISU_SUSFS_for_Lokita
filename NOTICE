@@ -14,7 +14,7 @@ GKI_SUKISU_SUSFS_for_Lokita
 本仓库采用**分层授权**，不同来源的代码适用不同条款（分层声明见 LICENSE 文件头部）：
 
   1. 上游继承部分 —— 衍生自上游 zzh20188/GKI_KernelSU_SUSFS 及其上游的代码，
-     **GPL-2.0**。上游未声明 "or-later"，本仓库沿用其原授权版本，不单方面升级。
+     **GPL-2.0-or-later**。本仓库统一采用 "or-later" 条款，兼容 GPL-3.0 及后续版本组件。
 
   2. 本仓库新增部分 —— 自身编写的构建脚本、工作流与文档，**GPL-2.0-or-later**。
 
