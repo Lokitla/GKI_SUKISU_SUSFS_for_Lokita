@@ -10,7 +10,7 @@
     python tools/push_contents.py <branch> <path> <local_commit> [message]
 
 例：
-    python tools/push_contents.py ling_ports_beta scripts/build_kernel.sh 59030e5 "fix: ..."
+    python tools/push_contents.py main scripts/build_kernel.sh 59030e5 "fix: ..."
 """
 import base64
 import json

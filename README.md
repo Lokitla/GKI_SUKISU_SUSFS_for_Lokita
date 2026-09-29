@@ -121,11 +121,7 @@ GitHub Actions  ──┐
 | Spoofed 管理器 | 一并拉取伪装包名的管理器 APK | 开启 |
 | Telegram 通知 | 构建完成后推送通知 | 开启 |
 
-> **关于空开关——已全仓核查，结果为 0。**
-> 所有 `USE_*` 开关都在 `scripts/build_kernel.sh` 里有真实落点，不存在
-> "勾了但代码里没人读"的情况。网络增强与 NoMount 还各自带写后校验：
-> 关键符号（如 `CONFIG_DEFAULT_BBR` / `CONFIG_IP_SET`）没落盘、或
-> `fs/nomount` 软链接缺失，会直接失败而不是静默跳过。
+
 
 ### 开关可用性矩阵（各入口是否真的传了这个开关）
 

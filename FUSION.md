@@ -180,7 +180,7 @@ shell 逻辑的，日常维护不需要再运行它。
 > 本仓库真正使用的 AnyKernel3 刷机包来自 `WildKernels/AnyKernel3`
 > （`scripts/build_kernel.sh` 的 `clone_deps` 阶段），那条链路不受本次移植影响。
 
-本仓库的 `ling_ports_beta` 分支即该工程的移植分支，已合并进 `main`。
+本仓库的上游移植分支即该工程的移植分支，已合并进 `main`。
 
 ### 已移植
 
@@ -189,7 +189,7 @@ shell 逻辑的，日常维护不需要再运行它。
   比上游 zzh20188 的 328 行更完整）；
 - NoMount 挂载元模块、网络增强等（与上游 zzh20188 同代，非 LingLuo 独有）。
 
-### 确定遗漏（合并 `ling_ports_beta` 时漏掉）
+### 确定遗漏（合并上游移植分支时漏掉）
 
 1. **6.12 的 ZRAM 补丁资源**：上游 `SukiSU_patch` 的 `other/zram/zram_patch/` 只有
    `5.10 / 5.15 / 6.1 / 6.6` 四个目录，没有 6.12。LingLuo 为此补了 6.12 补丁

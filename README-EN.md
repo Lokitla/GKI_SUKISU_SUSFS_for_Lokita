@@ -128,12 +128,7 @@ When build scope is "all versions" or "LTS only", the build target is ignored.
 | Spoofed manager | Also fetch the manager APK with a spoofed package name | On |
 | Telegram notify | Push a notification after the build | On |
 
-> **On "dead switches" — verified across the whole repo: 0 found.**
-> Every `USE_*` switch has a real code path in `scripts/build_kernel.sh`; there is no
-> switch that is configurable but never read. Network enhancement and NoMount each also
-> carry a post-write check: if key symbols (e.g. `CONFIG_DEFAULT_BBR`, `CONFIG_IP_SET`)
-> are missing from the defconfig, or the `fs/nomount` symlink is absent, the build fails
-> instead of silently skipping.
+
 
 ### Switch availability matrix (does this entry actually pass the switch?)
 
