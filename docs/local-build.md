@@ -28,7 +28,7 @@
 # 查看支持的版本组合（数据来自 data/）
 python3 build.py --list-configs
 
-# 列出全部 46 个构建阶段
+# 列出全部 47 个构建阶段
 python3 build.py --list-phases
 
 # 构建单个版本
@@ -65,7 +65,7 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 
 | 选项 | 说明 |
 |---|---|
-| `--ksu-variant` | KernelSU 变体，默认 `ReSukiSU`：`SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` |
+| `--ksu-variant` | KernelSU 变体，默认 `ReSukiSU`：`SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` / `Next` |
 | `--ksu-branch-mode` | SukiSU 拉取分支（仅 SukiSU 生效）：`auto`=跟随 SUSFS 开关自动选（默认）、`main`=纯管理器分支、`builtin`=内核内置实现 |
 | `--no-susfs` | 不集成 SUSFS（默认集成） |
 | `--version` | 自定义版本名 |

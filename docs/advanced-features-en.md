@@ -24,6 +24,8 @@ The vulnerability cannot be triggered directly over the network. However, a mali
 
 This project can check and apply the complete fix when building kernels 5.10, 5.15, 6.1, 6.6, and 6.12. The option is **disabled by default** (ShirkNeko upstream does not carry this fix). Enable `CVE-2026-43499 rtmutex fix chain` when starting a build to include GhostLock protection. Both vulnerability fixes must be present together, and the workflow handles this automatically. Kernels that already contain the complete fix are not patched again.
 
+> **Note on patch files:** Only `CVE-2026-43499` has dedicated `.patch` files in `security_patch/` (one per kernel line: 5.10 / 5.15 / 6.1–6.6 / 6.12). The `CVE-2026-53163` follow-up fixes are generated **inline** by `security_patch/apply_cve_2026_43499.sh` (functions `ensure_remove_waiter_null_guard` and `replace_proxy_cleanup_condition`), so no separate `.patch` file exists for it — that is by design, not a missing artifact.
+
 The fix has passed a [full build validation covering 84 kernel versions](https://github.com/zzh20188/GKI_KernelSU_SUSFS/actions/runs/29509099128). For vulnerability details, affected systems, public exploits, and mitigation guidance, read CIQ's article: [GhostLock Mitigation](https://kb.ciq.com/article/rocky-linux/rl-ghostlock-mitigation).
 
 ---
@@ -120,7 +122,7 @@ any existing `=m` to `=y`.
 The build fetches `setup.sh` from upstream and runs it, then verifies the `fs/nomount` symlink is
 in place before appending `CONFIG_NOMOUNT=y` to the defconfig.
 
-This phase (`integrate_nomount`) is #25 of the 46 build phases, and its **position is a hard
+This phase (`integrate_nomount`) is #25 of the 47 build phases, and its **position is a hard
 constraint**:
 
 - it must run **after** `gen_susfs_patch` — otherwise its changes leak into the exported `susfs.patch`

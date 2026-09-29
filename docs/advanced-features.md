@@ -23,6 +23,8 @@ GhostLock 是影响 Linux 内核的一组高风险漏洞，包括 `CVE-2026-4349
 
 本项目支持在构建 5.10、5.15、6.1、6.6 和 6.12 内核时检查并应用完整修复。该选项默认关闭（ShirkNeko 原仓库没有携带该修复），如需加入 GhostLock 防护，请在触发构建时手动开启 `CVE-2026-43499 rtmutex 修复链`。两个漏洞的修复必须同时存在，工作流会自动处理这一点；已经包含完整修复的内核不会重复打补丁。
 
+> **关于 patch 文件**：只有 `CVE-2026-43499` 在 `security_patch/` 目录下有独立 `.patch` 文件（按内核版本分为 5.10 / 5.15 / 6.1-6.6 / 6.12 五个）。`CVE-2026-53163` 的后续修复由 `security_patch/apply_cve_2026_43499.sh` **内联生成**（`ensure_remove_waiter_null_guard` 与 `replace_proxy_cleanup_condition` 两个 awk 函数），因此**没有独立的 `.patch` 文件**——这是设计如此，不是遗漏。
+
 该修复已完成 [84 个内核版本的全量构建验证](https://github.com/zzh20188/GKI_KernelSU_SUSFS/actions/runs/29509099128)。如果想了解漏洞原理、受影响范围、公开利用和缓解措施，请阅读 CIQ 的详细文章：[GhostLock Mitigation](https://kb.ciq.com/article/rocky-linux/rl-ghostlock-mitigation)。
 
 ---
@@ -113,7 +115,7 @@ bazel 会直接构建失败。所以本阶段写入时会把已存在的 `=m` �
 构建期从上游拉取 `setup.sh` 并执行，完成后校验 `fs/nomount` 软链接是否就位，
 再向 defconfig 追加 `CONFIG_NOMOUNT=y`。
 
-该阶段（`integrate_nomount`）在 46 个构建阶段中排第 25 位，**顺序有硬约束**：
+该阶段（`integrate_nomount`）在 47 个构建阶段中排第 25 位，**顺序有硬约束**：
 
 - 必须在 `gen_susfs_patch` **之后** —— 否则它的改动会被算进导出的 `susfs.patch`
 - 必须在 `backup_defconfig` **之后** —— 否则 `CONFIG_NOMOUNT` 不会被 bazel fragment 的 diff 捕获

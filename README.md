@@ -105,7 +105,7 @@ GitHub Actions  ──┐
 
 | 能力 | 说明 | 默认 |
 |---|---|---|
-| KernelSU 变体 | `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` | **`ReSukiSU`** |
+| KernelSU 变体 | `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` / `Next` | **`ReSukiSU`** |
 | SUSFS | 集成 SUSFS 补丁集，支持 Inline Hook | 开启 |
 | KPM | 编译后修补 Image 以加载 KPM 模块 | `patched`（开启并修补）※ |
 | ZRAM / LZ4KD | ZRAM 增强算法（LZ4KD / LZ4K_OPLUS） | 开启 |

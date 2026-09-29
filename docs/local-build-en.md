@@ -65,7 +65,7 @@ python3 build.py --android android14 --kernel 6.1 --dry-run
 
 | Option | Description |
 |---|---|
-| `--ksu-variant` | KernelSU variant, default `SukiSU`: `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` |
+| `--ksu-variant` | KernelSU variant, default `ReSukiSU`: `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` / `Next` |
 | `--ksu-branch-mode` | SukiSU branch to pull (SukiSU only): `auto`=follow the SUSFS toggle (default), `main`=manager branch, `builtin`=in-kernel implementation |
 | `--no-susfs` | Disable SUSFS (enabled by default) |
 | `--version` | Custom version name |

@@ -112,7 +112,7 @@ When build scope is "all versions" or "LTS only", the build target is ignored.
 
 | Feature | Description | Default |
 |---|---|---|
-| KernelSU variant | `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` | **`ReSukiSU`** |
+| KernelSU variant | `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` / `Next` | **`ReSukiSU`** |
 | SUSFS | SUSFS patch set with Inline Hook support | On |
 | KPM | Patch `Image` after build to load KPM modules | `patched` ※ |
 | ZRAM / LZ4KD | ZRAM enhancement (LZ4KD / LZ4K_OPLUS) | On |
