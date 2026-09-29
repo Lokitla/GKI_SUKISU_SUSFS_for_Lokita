@@ -191,8 +191,8 @@ def main():
     parser.add_argument("--sub-level", "-s", help="子版本号，如 124；省略则用最新")
     parser.add_argument("--os-patch", help="OS 补丁级别，如 2025-02")
     parser.add_argument("--revision", help="Android 12 revision（可选）")
-    parser.add_argument("--ksu-variant", default="SukiSU", choices=KSU_VARIANTS,
-                        metavar="变体", help="KernelSU 变体（默认 SukiSU）")
+    parser.add_argument("--ksu-variant", default="ReSukiSU", choices=KSU_VARIANTS,
+                        metavar="变体", help="KernelSU 变体（默认 ReSukiSU）")
     parser.add_argument("--ksu-branch-mode", default="auto", choices=["auto", "main", "builtin"],
                         metavar="{auto,main,builtin}",
                         help="SukiSU 拉取分支（仅 SukiSU 生效）：auto=跟随 SUSFS 开关自动选"

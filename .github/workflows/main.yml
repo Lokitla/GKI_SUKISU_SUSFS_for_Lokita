@@ -40,6 +40,10 @@ on:
           - SukiSU(40548)
           - ReSukiSU
           - Official
+          # Next 变体已在 build.py 与 kernel-custom.yml 支持（build.py:32 / kernel-custom.yml:27-32），
+          # 但 main.yml 手动入口未启用：其 workflow_dispatch 的 input 名额有限，
+          # 且默认 ReSukiSU 是发布通道，混入 Next（独立分支、无 config KPM）易误导用户。
+          # 需要 Next 请走「内核构建 - Android 1x (自定义)」入口或本地 build.py。
           #- Next
         default: ReSukiSU
       enable_susfs:

@@ -231,7 +231,6 @@ jobs:
                     use_net_enhance: false,
                     send_telegram: true,
                     use_release_cache: false,
-                    manager_spoofed: true,
                     supp_op: false,
                     manager_commit: ""
                   }
@@ -276,7 +275,6 @@ jobs:
                     droidspaces_ntsync: false,
                     send_telegram: true,
                     use_release_cache: false,
-                    manager_spoofed: true,
                     manager_commit: ""
                   }
                 }' > /tmp/dispatch.json
