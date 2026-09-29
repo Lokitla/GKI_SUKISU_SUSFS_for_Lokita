@@ -743,6 +743,18 @@ stage_extract_sublevel() {
   export ACTUAL_SUBLEVEL="$ACTUAL_SUBLEVEL"
   echo "实际子版本号: $ACTUAL_SUBLEVEL"
 
+  # LTS (X) 构建：产物命名使用实际子版本号，而非输入值 X
+  if [ "$SUB_LEVEL" = "X" ]; then
+    CONFIG="${ANDROID_VERSION}-${KERNEL_VERSION}-${ACTUAL_SUBLEVEL}"
+    echo "CONFIG=$CONFIG" >> "${GITHUB_ENV:-/dev/null}"
+    NAME_SUBLEVEL="$ACTUAL_SUBLEVEL"
+    echo "LTS 构建: 产物命名使用实际子版本号 $ACTUAL_SUBLEVEL"
+  else
+    NAME_SUBLEVEL="$SUB_LEVEL"
+  fi
+  export NAME_SUBLEVEL="$NAME_SUBLEVEL"
+  echo "NAME_SUBLEVEL=$NAME_SUBLEVEL" >> "${GITHUB_ENV:-/dev/null}"
+
   cd "$_pwd"
 }
 
@@ -3126,7 +3138,7 @@ rebuild_image_lz4() {
 
 # AnyKernel3 刷机包文件名：打包与拷贝两条路径必须一致
 anykernel3_zip_name() {
-  echo "${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-AnyKernel3.zip"
+  echo "${ANDROID_VERSION}-${KERNEL_VERSION}.${NAME_SUBLEVEL}-${OS_PATCH_LEVEL}-AnyKernel3.zip"
 }
 
 stage_prepare_boot() {
@@ -3256,16 +3268,16 @@ stage_build_boot_a12() {
 
   $MKBOOTIMG --header_version 4 --kernel Image --output boot.img --ramdisk out/ramdisk --os_version 12.0.0 --os_patch_level "${OS_PATCH_LEVEL}"
   $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
-  cp ./boot.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-boot.img
+  cp ./boot.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${NAME_SUBLEVEL}-${OS_PATCH_LEVEL}-boot.img
 
   $MKBOOTIMG --header_version 4 --kernel Image.gz --output boot-gz.img --ramdisk out/ramdisk --os_version 12.0.0 --os_patch_level "${OS_PATCH_LEVEL}"
   $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-gz.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
-  cp ./boot-gz.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-boot-gz.img
+  cp ./boot-gz.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${NAME_SUBLEVEL}-${OS_PATCH_LEVEL}-boot-gz.img
 
   if [ "${LZ4_KERNEL_READY:-0}" = "1" ] && [ -s ./Image.lz4 ]; then
     $MKBOOTIMG --header_version 4 --kernel Image.lz4 --output boot-lz4.img --ramdisk out/ramdisk --os_version 12.0.0 --os_patch_level "${OS_PATCH_LEVEL}"
     $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-lz4.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
-    cp ./boot-lz4.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-boot-lz4.img
+    cp ./boot-lz4.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${NAME_SUBLEVEL}-${OS_PATCH_LEVEL}-boot-lz4.img
   else
     echo "::warning::跳过 boot-lz4.img（Image.lz4 未就绪）"
   fi
@@ -3293,16 +3305,16 @@ stage_build_boot_a13plus() {
 
   $MKBOOTIMG --header_version 4 --kernel Image --output boot.img
   $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
-  cp ./boot.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-boot.img
+  cp ./boot.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${NAME_SUBLEVEL}-${OS_PATCH_LEVEL}-boot.img
 
   $MKBOOTIMG --header_version 4 --kernel Image.gz --output boot-gz.img
   $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-gz.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
-  cp ./boot-gz.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-boot-gz.img
+  cp ./boot-gz.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${NAME_SUBLEVEL}-${OS_PATCH_LEVEL}-boot-gz.img
 
   if [ "${LZ4_KERNEL_READY:-0}" = "1" ] && [ -s ./Image.lz4 ]; then
     $MKBOOTIMG --header_version 4 --kernel Image.lz4 --output boot-lz4.img
     $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-lz4.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
-    cp ./boot-lz4.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-boot-lz4.img
+    cp ./boot-lz4.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${NAME_SUBLEVEL}-${OS_PATCH_LEVEL}-boot-lz4.img
   else
     echo "::warning::跳过 boot-lz4.img（Image.lz4 未就绪）"
   fi
