@@ -49,9 +49,10 @@ name: 自用构建-5.10.236（ReSukiSU / marble）
 # 行为等同于留空（KPM 锚点为空时 build_kernel.sh 会回读 config/kpm_patch_sha256，
 # 等价于「始终跟随仓库锚点」，写死反而会漏掉上游变更带来的校验）。
 #
-# 注意：本文件被 .github/workflows/Auto_Trigger.yml 的「固定 5.10.236」
+# 注意：本文件被 .github/workflows/Auto_Trigger_ReSukiSU.yml 的「固定 5.10.236」
 # 分支硬引用（TARGET_WF），改名或删除前必须同步改那一行，否则自动触发会
 # 因找不到 workflow 而 404。
+# 本文件参数写死为 ReSukiSU 自用取向，所以只有 ReSukiSU 那条自动触发工作流提供这个选项。
 # =============================================================================
 
 on:
