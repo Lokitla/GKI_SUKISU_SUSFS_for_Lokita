@@ -509,16 +509,18 @@ jobs:
           # 不同，标成目标值会让人误以为拿到的就是严格匹配的那个 APK——这也是之前
           # 明明差了 43 个版本、产物名却一直是 (40922) 的原因。
           # cf784f5: 改为下载后验证实际版本，避免估算版本与实际版本不一致。
-          # 注意：用临时文件避免子 shell 和 tab 字符丢失问题
+          # 注意：用 awk 解析 tab 分隔值，避免 IFS 问题
           echo "开始下载并验证 Manager APK 实际版本..."
           
           # 创建临时候选目录
           CANDIDATE_BASE="/tmp/manager_candidates_$$"
           mkdir -p "$CANDIDATE_BASE"
           
-          # 将下载列表写入临时文件（保留 tab 和换行）
+          # 将下载列表写入临时文件（用 heredoc 保留 tab 和换行）
           DOWNLOAD_LIST_FILE="/tmp/download_list_$$.txt"
-          printf '%s\n' "$DOWNLOAD_LIST" > "$DOWNLOAD_LIST_FILE"
+          cat << EOF > "$DOWNLOAD_LIST_FILE"
+$DOWNLOAD_LIST
+EOF
           
           FETCHED=0
           MATCHED=0
@@ -526,9 +528,17 @@ jobs:
           BEST_DIR=""
           
           # 下载并验证每个候选 APK
-          while IFS=$'\t' read -r NAME URL; do
+          while IFS= read -r LINE; do
             # 跳过空行
+            [ -z "$LINE" ] && continue
+            
+            # 用 awk 解析 tab 分隔的 NAME 和 URL
+            NAME=$(echo "$LINE" | awk -F'\t' '{print $1}')
+            URL=$(echo "$LINE" | awk -F'\t' '{print $2}')
+            
+            # 跳过无效行
             [ -z "$NAME" ] && continue
+            [ -z "$URL" ] && continue
             
             # 限制下载数量
             FETCHED=$((FETCHED + 1))
