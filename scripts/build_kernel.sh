@@ -1293,6 +1293,42 @@ run_add_kernelsu() {
   fi
 }
 
+stage_apply_sukisu_compat() {
+  log_stage "apply_sukisu_compat" "应用 SukiSU 内核 API 兼容补丁 (6.8+ lsm_id / 6.11+ netlink cb_mutex)"
+  local _pwd="$PWD"
+  cd ${KERNEL_ROOT}
+
+  # 仅当 KSU_VARIANT 为 SukiSU 时执行
+  if [ "$KSU_VARIANT" != "SukiSU" ]; then
+    echo "跳过：当前变体 ${KSU_VARIANT} 不需要 SukiSU compat 补丁"
+    cd "$_pwd"
+    return 0
+  fi
+
+  if [ ! -f "$WORKSPACE/scripts/sukisu_compat/apply.sh" ]; then
+    echo "::warning::未找到 scripts/sukisu_compat/apply.sh，跳过 SukiSU compat 补丁"
+    cd "$_pwd"
+    return 0
+  fi
+
+  bash "$WORKSPACE/scripts/sukisu_compat/apply.sh" KernelSU || {
+    echo "::warning::SukiSU compat 补丁应用失败（可能已应用或上下文不匹配）"
+    cd "$_pwd"
+    return 0
+  }
+
+  echo "SukiSU compat 补丁应用完成"
+  cd "$_pwd"
+}
+
+run_apply_sukisu_compat() {
+  if [ "$KSU_MODE" != "禁用KSU" ] && [ "$KSU_VARIANT" = "SukiSU" ]; then
+    stage_apply_sukisu_compat "$@"
+  else
+    echo "跳过阶段: apply_sukisu_compat（条件不满足）"
+  fi
+}
+
 stage_config_sukisu_manager() {
   log_stage "config_sukisu_manager" "配置 SukiSU 管理器信息"
   local _pwd="$PWD"
@@ -3347,6 +3383,7 @@ PHASES=(
   add_oneplus8e
   resolve_ksu_branch
   add_kernelsu
+  apply_sukisu_compat
   config_sukisu_manager
   susfs_baseline
   apply_susfs
@@ -3459,7 +3496,7 @@ validate_inputs() {
 phase_skippable() {
   case "$1" in
     setup_zram_lz4|config_zram) return 0 ;;
-    add_bbg|apply_rekernel|integrate_nomount) return 0 ;;
+    add_bbg|apply_rekernel|integrate_nomount|apply_sukisu_compat) return 0 ;;
     clone_droidspaces|integrate_droidspaces|inject_ntsync) return 0 ;;
     apply_cve_patch|apply_unicode_fix|patch_kpm_image) return 0 ;;
     config_net_enhance) return 0 ;;
