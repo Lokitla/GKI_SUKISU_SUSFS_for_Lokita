@@ -283,7 +283,7 @@ cadences, so auto-triggering is split into **two independent workflows**:
 | Workflow | Upstream watched | Baseline branch | Variant built | Schedule (UTC) |
 |---|---|---|---|---|
 | `.github/workflows/Auto_Trigger_ReSukiSU.yml` | [ReSukiSU/ReSukiSU](https://github.com/ReSukiSU/ReSukiSU) `main` | `sha-resukisu` | `ReSukiSU` | every 3 days at 00:00 |
-| `.github/workflows/Auto_Trigger_SukiSU.yml` | [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) `main` | `sha` | `SukiSU` | every 3 days at 12:00 |
+| `.github/workflows/Auto_Trigger_SukiSU.yml` | [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) `main` | `sha-sukisu` | `SukiSU` | every 3 days at 12:00 |
 
 The two are offset by 12 hours so they never contend for runner concurrency and so the two
 releases stay easy to tell apart. Both follow the same procedure: fetch the upstream head
@@ -306,7 +306,7 @@ Defaults to "all versions", expanding the **auto slim matrix of 19 kernel versio
 > **The ReSukiSU workflow fires a full matrix build the first time it runs**, because its
 > `sha-resukisu` baseline does not exist yet. To establish the baseline without building,
 > run it manually once with `build_scope` set to "no build".
-> The SukiSU workflow reuses the existing `sha` branch, which already holds a
+> The SukiSU workflow reuses the existing `sha-sukisu` branch, which already holds a
 > SukiSU-Ultra commit, so it will not misfire.
 
 Manual run options:
@@ -323,7 +323,7 @@ Manual run options:
 > artifacts and **no Release is created**.
 >
 > Requires **Settings → Actions → Workflow permissions** to be `Read and write`,
-> otherwise writing back to the `sha` branch is rejected with 403.
+> otherwise writing back to the sha branch is rejected with 403.
 
 ---
 

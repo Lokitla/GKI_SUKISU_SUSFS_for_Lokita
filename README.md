@@ -258,7 +258,7 @@ ReSukiSU 与 SukiSU 是两个互不相干的上游仓库，各有独立的更新
 | 工作流 | 检测的上游 | 记录的基线分支 | 构建变体 | 定时（UTC） |
 |---|---|---|---|---|
 | `.github/workflows/Auto_Trigger_ReSukiSU.yml` | [ReSukiSU/ReSukiSU](https://github.com/ReSukiSU/ReSukiSU) `main` | `sha-resukisu` | `ReSukiSU` | 每 3 天 00:00 |
-| `.github/workflows/Auto_Trigger_SukiSU.yml` | [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) `main` | `sha` | `SukiSU` | 每 3 天 12:00 |
+| `.github/workflows/Auto_Trigger_SukiSU.yml` | [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) `main` | `sha-sukisu` | `SukiSU` | 每 3 天 12:00 |
 
 两者时刻错开 12 小时，避免同时抢占 Runner 并发、也让两版发布时间好区分。
 流程一致：拉取上游最新提交号 → 与各自基线分支记录的旧值比对 →
@@ -281,7 +281,7 @@ ReSukiSU 与 SukiSU 是两个互不相干的上游仓库，各有独立的更新
 > **ReSukiSU 那条首次启用会立刻触发一轮全矩阵构建** —— `sha-resukisu` 分支
 > 此前不存在，首次运行视为「有更新」。只想建基线不想编的话，先手动跑一次它
 > 并把 `build_scope` 选成「不构建」。
-> SukiSU 那条沿用既有的 `sha` 分支，里面已是 SukiSU-Ultra 的提交号，不会误触发。
+> SukiSU 那条沿用既有的 `sha-sukisu` 分支，里面已是 SukiSU-Ultra 的提交号，不会误触发。
 
 手动运行时可改：
 
@@ -296,7 +296,7 @@ ReSukiSU 与 SukiSU 是两个互不相干的上游仓库，各有独立的更新
 > 代号 marble），参数全写死，产物只留 Actions artifacts、**不发 Release**。
 >
 > 需要仓库 **Settings → Actions → Workflow permissions** 为 `Read and write`，
-> 否则回写 `sha` 分支会被 403 拦下。
+> 否则回写 sha 分支会被 403 拦下。
 
 ---
 

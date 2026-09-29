@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-or-later
 # SukiSU 内核源码 API 兼容补丁（SukiSU-Ultra builtin / main 分支均适用）
 #
 # 背景：

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#!/usr/bin/env python3
 """用 Contents API 把单个文件从本地提交推到远端分支（绕开 git push）。
 
 本环境的 `git push` 会被沙箱 SIGTERM 硬拦（含官方 github.com 直连），

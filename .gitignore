@@ -39,3 +39,6 @@ Thumbs.db
 
 # Work buddy memory (local only)
 .workbuddy/
+
+# Local helper scripts
+.rebase_auto.sh
