@@ -349,10 +349,26 @@ jobs:
             fi
           }
 
+          # ═══════════════════════════════════════════════════════════
+          # 从 APK 文件名提取实际 versionCode
+          # 文件名格式：KernelSU_v40924_20260929_arm64.apk
+          # 提取最后一个 _数字 作为 versionCode
+          # ═══════════════════════════════════════════════════════════
+          extract_apk_version() {
+            local apk_name="$1"
+            echo "$apk_name" | grep -oE '_[0-9]+' | tail -n 1 | tr -d '_'
+          }
+
           DOWNLOAD_LIST=""
           BEST_VERSION=0
           BEST_BUILD_ID=""
           BEST_BRANCH=""
+          # 实际版本验证（cf784f5）：下载后从 APK 文件名提取实际版本
+          BEST_ACTUAL=0        # 实际版本最大值
+          BEST_DIR=""          # 最佳候选目录
+          MATCHED=0            # 是否精确匹配
+          MAX_FETCH=6          # 限制下载数量，避免浪费带宽
+          FETCHED=0            # 已下载数量
           # 严格对齐用：精确等于内核 KSU 版本的候选
           EXACT_LIST=""
           EXACT_ID=""
@@ -492,18 +508,100 @@ jobs:
           # 产物名要写【实际下载到的 APK 版本】而不是内核目标版本。回退发生时两者
           # 不同，标成目标值会让人误以为拿到的就是严格匹配的那个 APK——这也是之前
           # 明明差了 43 个版本、产物名却一直是 (40922) 的原因。
-          echo "MANAGER_VERSION=$BEST_VERSION" >> $GITHUB_ENV
-
-          # 下载并解压所有 Manager 产物
+          # cf784f5: 改为下载后验证实际版本，避免估算版本与实际版本不一致。
+          echo "开始下载并验证 Manager APK 实际版本..."
+          
+          # 创建临时候选目录
+          CANDIDATE_BASE="/tmp/manager_candidates_$$"
+          mkdir -p "$CANDIDATE_BASE"
+          
+          # 下载并验证每个候选 APK
           echo "$DOWNLOAD_LIST" | while IFS=$'\t' read -r NAME URL; do
+            # 限制下载数量
+            FETCHED=$((FETCHED + 1))
+            if [ "$FETCHED" -gt "$MAX_FETCH" ]; then
+              echo "已达下载上限 $MAX_FETCH，停止扫描"
+              break
+            fi
+            
             SAFE_NAME=$(echo "$NAME" | tr '/ ' '__')
             ZIP_NAME="$KSU_VARIANT-${SAFE_NAME}(${{ env.KSU_VERSION }}).zip"
-            echo "下载 $NAME -> $ZIP_NAME"
-            curl -L -H "Authorization: token $GH_TOKEN" -o "$ZIP_NAME" "$URL"
-            mkdir -p "manager-artifacts/$SAFE_NAME"
-            unzip -o "$ZIP_NAME" -d "manager-artifacts/$SAFE_NAME"
-            rm -rf "$ZIP_NAME"
+            
+            # 下载 APK 到临时目录
+            CANDIDATE_DIR="$CANDIDATE_BASE/$FETCHED"
+            mkdir -p "$CANDIDATE_DIR"
+            APK_PATH="$CANDIDATE_DIR/$NAME"
+            
+            echo "下载候选 $FETCHED: $NAME"
+            curl -L -H "Authorization: token $GH_TOKEN" -o "$APK_PATH" "$URL"
+            
+            # 从文件名提取实际版本
+            ACTUAL_VERSION=$(extract_apk_version "$NAME")
+            
+            if ! [[ "$ACTUAL_VERSION" =~ ^[0-9]+$ ]]; then
+              echo "⚠️  无法提取版本，跳过：$NAME"
+              rm -rf "$CANDIDATE_DIR"
+              continue
+            fi
+            
+            echo "候选 $FETCHED: 实际版本=$ACTUAL_VERSION, 目标版本=$TARGET_KSU_VERSION"
+            
+            # ═══ 版本验证 ═══
+            if [ "$ACTUAL_VERSION" -gt "$TARGET_KSU_VERSION" ]; then
+              # ❌ 实际版本 > 内核版本 → 拒绝
+              echo "❌ 拒绝：实际版本 $ACTUAL_VERSION > 内核版本 $TARGET_KSU_VERSION"
+              rm -rf "$CANDIDATE_DIR"
+              continue
+            fi
+            
+            if [ "$ACTUAL_VERSION" -eq "$TARGET_KSU_VERSION" ]; then
+              # ✅ 精确匹配 → 立即停止，清理其他候选
+              echo "✅ 精确匹配：实际版本 $ACTUAL_VERSION"
+              MATCHED=1
+              BEST_ACTUAL="$ACTUAL_VERSION"
+              BEST_DIR="$CANDIDATE_DIR"
+              # 清理其他候选
+              find "$CANDIDATE_BASE" -mindepth 1 -maxdepth 1 -type d \
+                ! -path "$CANDIDATE_DIR" -exec rm -rf {} +
+              break
+            elif [ "$ACTUAL_VERSION" -gt "$BEST_ACTUAL" ]; then
+              # ⚠️ 未匹配但更高 → 记录为备选
+              echo "⚠️  备选：实际版本 $ACTUAL_VERSION (当前最佳 $BEST_ACTUAL)"
+              rm -rf "$BEST_DIR" 2>/dev/null || true
+              BEST_ACTUAL="$ACTUAL_VERSION"
+              BEST_DIR="$CANDIDATE_DIR"
+            else
+              # 更低版本 → 丢弃
+              echo "丢弃：实际版本 $ACTUAL_VERSION < 当前最佳 $BEST_ACTUAL"
+              rm -rf "$CANDIDATE_DIR"
+            fi
           done
+          
+          # ═══ 裁决：用实际版本命名 ═══
+          if [ -n "$BEST_DIR" ]; then
+            # 解压最佳候选到工作目录
+            mkdir -p "manager-artifacts"
+            for f in "$BEST_DIR"/*; do
+              SAFE_NAME=$(basename "$f" | tr '/ ' '__')
+              unzip -o "$f" -d "manager-artifacts/$SAFE_NAME"
+            done
+            
+            if [ "$MATCHED" -eq 1 ]; then
+              echo "✅ 精确匹配成功：版本 $BEST_ACTUAL"
+            else
+              echo "⚠️  未找到精确匹配，使用最高版本 $BEST_ACTUAL (目标 $TARGET_KSU_VERSION)"
+              echo "::warning::管理器版本 $BEST_ACTUAL 落后内核版本 $TARGET_KSU_VERSION"
+            fi
+            
+            # 用实际版本命名
+            echo "MANAGER_VERSION=$BEST_ACTUAL" >> $GITHUB_ENV
+          else
+            echo "::error::未找到任何有效 Manager APK"
+            exit 1
+          fi
+          
+          # 清理临时目录
+          rm -rf "$CANDIDATE_BASE"
 
           if [ "$KSU_VARIANT" == "ReSukiSU" ]; then
             echo "仅保留 ReSukiSU arm64-v8a release 管理器..."
