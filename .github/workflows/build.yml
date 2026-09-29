@@ -101,11 +101,7 @@ permissions:
       artifact_upload_mode:
         description: "产物上传策略：上传全部=刷入包+启动镜像 / 仅上传 AnyKernel3.zip / 不上传（探测工作流用它避免上百个任务灌满存储配额）"
         required: false
-        type: choice
-        options:
-          - 上传全部
-          - 仅上传 AnyKernel3.zip
-          - 不上传
+        type: string
         default: 上传全部
       droidspaces_ntsync:
         required: false

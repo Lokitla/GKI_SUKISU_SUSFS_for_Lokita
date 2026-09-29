@@ -114,7 +114,7 @@ jobs:
       - name: 读取 sha 分支记录的旧提交号
         id: get_prev_sha
         env:
-          SHA_BRANCH: sha
+          SHA_BRANCH: sha-sukisu
         run: |
           set -euo pipefail
           PREV_SHA=""
@@ -160,7 +160,7 @@ jobs:
       - name: 回写最新提交号到 sha 分支
         if: steps.compare.outputs.new_commit == 'true'
         env:
-          SHA_BRANCH: sha
+          SHA_BRANCH: sha-sukisu
         run: |
           set -euo pipefail
           git checkout "$SHA_BRANCH" 2>/dev/null || git checkout --orphan "$SHA_BRANCH"
