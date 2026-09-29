@@ -37,7 +37,7 @@
 
 ## 这是什么
 
-本仓库以 [zzh20188](https://github.com/zzh20188) 的 GKI 构建基架为主体，移植了 [ShirkNeko](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) 的 KPM 镜像修补与本地 CLI 设计，参考了 [coolzyd9107](https://github.com/coolzyd9107/GKI_SukiSU_Ultra_SUSFS) 的 Release 呈现方式，并把构建流程收敛到**同一份脚本**：
+本仓库以 [zzh20188](https://github.com/zzh20188) 的 GKI 构建基架为主体，移植了 [ShirkNeko](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) 的 KPM 镜像修补与本地 CLI 设计，参考了 [coolzyd9107](https://github.com/coolzyd9107/GKI_SukiSU_Ultra_SUSFS) 的 Release 呈现方式，并合并了 [LingLuo17](https://github.com/LingLuo17) 的 6.12 ZRAM 补丁、SukiSU compat 补丁与网络增强，把构建流程收敛到**同一份脚本**：
 
 ```
 GitHub Actions  ──┐

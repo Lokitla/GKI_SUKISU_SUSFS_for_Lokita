@@ -41,7 +41,8 @@ English | [简体中文](README.md)
 Built on [zzh20188](https://github.com/zzh20188)'s GKI build scaffolding, with
 [ShirkNeko](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS)'s KPM image patching and
 local CLI design ported in, [coolzyd9107](https://github.com/coolzyd9107/GKI_SukiSU_Ultra_SUSFS)'s
-release presentation as reference, and the whole build flow converged into **one script**:
+release presentation as reference, and [LingLuo17](https://github.com/LingLuo17)'s
+6.12 ZRAM patches, SukiSU compat patches, and network enhancement merged in, with the whole build flow converged into **one script**:
 
 ```
 GitHub Actions  ──┐
