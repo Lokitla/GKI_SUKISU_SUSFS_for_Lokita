@@ -426,6 +426,10 @@ stage_setup_git() {
   local _pwd="$PWD"
   git config --global user.name "BuildBot"
   git config --global user.email "BuildGkiKernel@gmail.com"
+  # 上游 git 服务偶发连接停滞：传输速率低于 1KB/s 持续 180 秒即中止，
+  # 避免在 repo sync / git clone 中无限挂起直到 job 超时
+  git config --global http.lowSpeedLimit 1000
+  git config --global http.lowSpeedTime 180
 
   cd "$_pwd"
 }
@@ -657,6 +661,14 @@ except Exception:
       exit "$rc"
     fi
 
+    # 清理残留的 git-remote-https 进程：AOSP 连接停滞时会留下僵尸进程，
+    # 占用文件句柄并导致后续 sync 以 "remote: error: RPC failed" 失败
+    if [ "$rc" -ne 0 ]; then
+      pkill -9 -f 'git-remote-https' 2>/dev/null || true
+      pkill -9 -f 'android\.googlesource\.com' 2>/dev/null || true
+      sleep 5
+    fi
+
     # 最后一次重试前彻底清空：只删 .repo 会残留半检出的 project 目录，
     # 之后每次 sync 都会以 "Checking out local projects failed" 收场。
     if [ "$attempt" -eq $((MAX_ATTEMPTS - 1)) ]; then
@@ -742,6 +754,18 @@ stage_extract_sublevel() {
   fi
   export ACTUAL_SUBLEVEL="$ACTUAL_SUBLEVEL"
   echo "实际子版本号: $ACTUAL_SUBLEVEL"
+
+  # LTS (X) 构建：产物命名使用实际子版本号，而非输入值 X
+  if [ "$SUB_LEVEL" = "X" ]; then
+    CONFIG="${ANDROID_VERSION}-${KERNEL_VERSION}-${ACTUAL_SUBLEVEL}"
+    echo "CONFIG=$CONFIG" >> "${GITHUB_ENV:-/dev/null}"
+    NAME_SUBLEVEL="$ACTUAL_SUBLEVEL"
+    echo "LTS 构建: 产物命名使用实际子版本号 $ACTUAL_SUBLEVEL"
+  else
+    NAME_SUBLEVEL="$SUB_LEVEL"
+  fi
+  export NAME_SUBLEVEL="$NAME_SUBLEVEL"
+  echo "NAME_SUBLEVEL=$NAME_SUBLEVEL" >> "${GITHUB_ENV:-/dev/null}"
 
   cd "$_pwd"
 }
@@ -1290,6 +1314,42 @@ run_add_kernelsu() {
     stage_add_kernelsu "$@"
   else
     echo "跳过阶段: add_kernelsu（条件不满足）"
+  fi
+}
+
+stage_apply_sukisu_compat() {
+  log_stage "apply_sukisu_compat" "应用 SukiSU 内核 API 兼容补丁 (6.8+ lsm_id / 6.11+ netlink cb_mutex)"
+  local _pwd="$PWD"
+  cd ${KERNEL_ROOT}
+
+  # 仅当 KSU_VARIANT 为 SukiSU 时执行
+  if [ "$KSU_VARIANT" != "SukiSU" ]; then
+    echo "跳过：当前变体 ${KSU_VARIANT} 不需要 SukiSU compat 补丁"
+    cd "$_pwd"
+    return 0
+  fi
+
+  if [ ! -f "$WORKSPACE/scripts/sukisu_compat/apply.sh" ]; then
+    echo "::warning::未找到 scripts/sukisu_compat/apply.sh，跳过 SukiSU compat 补丁"
+    cd "$_pwd"
+    return 0
+  fi
+
+  bash "$WORKSPACE/scripts/sukisu_compat/apply.sh" KernelSU || {
+    echo "::warning::SukiSU compat 补丁应用失败（可能已应用或上下文不匹配）"
+    cd "$_pwd"
+    return 0
+  }
+
+  echo "SukiSU compat 补丁应用完成"
+  cd "$_pwd"
+}
+
+run_apply_sukisu_compat() {
+  if [ "$KSU_MODE" != "禁用KSU" ] && [ "$KSU_VARIANT" = "SukiSU" ]; then
+    stage_apply_sukisu_compat "$@"
+  else
+    echo "跳过阶段: apply_sukisu_compat（条件不满足）"
   fi
 }
 
@@ -1935,10 +1995,28 @@ stage_apply_unicode_fix() {
   local _rc=0
   cd ${KERNEL_ROOT}/common
   if [ "${KERNEL_VERSION}" = "5.10" ] || [ "${KERNEL_VERSION}" = "5.15" ]; then
+    # 上游 2023-11、2024-01、2024-03 月度分支已带有 "unicode: Don't special case ignorable code points"，
+    # patch --forward 会判定为已应用并跳过，但被忽略的 hunk 仍会写成 .rej，先做幂等检查
+    if [ -f fs/unicode/mkutf8data.c ] && ! grep -q 'ignore_init' fs/unicode/mkutf8data.c; then
+      echo "源码已包含 Unicode 绕过修复，跳过补丁"
+      cd "$_pwd"
+      return 0
+    fi
     patch -p1 --forward < "$ACTION_BUILD/patches/unicode_bypass_fix_6.1-.patch" || _rc=$?
   else
     patch -p1 --forward < "$ACTION_BUILD/patches/unicode_bypass_fix_6.1+.patch" || _rc=$?
   fi
+
+  # SUSFS 主补丁或上游 ASB 已包含同款 fs/unicode 修改时，bypass 补丁的 hunk
+  # 会被 patch 判定为 previously applied：源码状态正确（可正常编译），但 hunk
+  # 仍被写入 .rej 并污染 Rejects 产物。此处剔除该预期冲突；
+  # mkutf8data.c 仍含 ignore_init 说明存在真实缺失，保留 .rej 以便排查。
+  if [ -f fs/unicode/mkutf8data.c.rej ] && [ -f fs/unicode/mkutf8data.c ] \
+    && ! grep -q 'ignore_init' fs/unicode/mkutf8data.c; then
+    echo "fs/unicode .rej 为已应用同款修改产生的预期冲突，剔除（构建未受影响）"
+    rm -f fs/unicode/*.rej
+  fi
+
   # patch 退出码 1 = 该 hunk 已应用过（--forward 主动跳过），正常；>=2 才是真的没打上。
   # 这个补丁属于 SUSFS 流程（仅在 ENABLE_SUSFS=true 时执行），静默失败会产出
   # 缺少 Unicode 绕过修复却看不出异常的内核，所以这里必须区分。
@@ -2146,7 +2224,14 @@ EOF
   # ZRAM_LZ4K_OK 由 setup_zram_lz4 算好（无上游 lz4k 补丁的内核为 0）。
   if [ "${ZRAM_LZ4K_OK:-0}" = "1" ] \
      && grep -q "CONFIG_ZSMALLOC=y" "$CONFIG_FILE" && grep -q "CONFIG_ZRAM=y" "$CONFIG_FILE"; then
-    cat "$ZZH_PATCHES/config/zram.config" >> "$CONFIG_FILE"
+    # ZRAM_BACKEND_* 仅在 6.12+ 的 Kconfig 中声明；bazel 构建的 kernel_config
+    # 会校验 fragment 中每个配置项都必须存在于 Kconfig，旧版本内核带上
+    # 这些行会直接导致编译失败，因此 6.12 以下需剔除
+    if [ "$(printf '%s\n' "6.12" "${KERNEL_VERSION}" | sort -V | head -1)" = "6.12" ]; then
+      cat "$ZZH_PATCHES/config/zram.config" >> "$CONFIG_FILE"
+    else
+      grep -v '^CONFIG_ZRAM_BACKEND_' "$ZZH_PATCHES/config/zram.config" >> "$CONFIG_FILE"
+    fi
   fi
 
   cd "$_pwd"
@@ -3083,7 +3168,7 @@ rebuild_image_lz4() {
 
 # AnyKernel3 刷机包文件名：打包与拷贝两条路径必须一致
 anykernel3_zip_name() {
-  echo "${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-AnyKernel3.zip"
+  echo "${ANDROID_VERSION}-${KERNEL_VERSION}.${NAME_SUBLEVEL}-${OS_PATCH_LEVEL}-AnyKernel3.zip"
 }
 
 stage_prepare_boot() {
@@ -3213,16 +3298,16 @@ stage_build_boot_a12() {
 
   $MKBOOTIMG --header_version 4 --kernel Image --output boot.img --ramdisk out/ramdisk --os_version 12.0.0 --os_patch_level "${OS_PATCH_LEVEL}"
   $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
-  cp ./boot.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-boot.img
+  cp ./boot.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${NAME_SUBLEVEL}-${OS_PATCH_LEVEL}-boot.img
 
   $MKBOOTIMG --header_version 4 --kernel Image.gz --output boot-gz.img --ramdisk out/ramdisk --os_version 12.0.0 --os_patch_level "${OS_PATCH_LEVEL}"
   $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-gz.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
-  cp ./boot-gz.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-boot-gz.img
+  cp ./boot-gz.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${NAME_SUBLEVEL}-${OS_PATCH_LEVEL}-boot-gz.img
 
   if [ "${LZ4_KERNEL_READY:-0}" = "1" ] && [ -s ./Image.lz4 ]; then
     $MKBOOTIMG --header_version 4 --kernel Image.lz4 --output boot-lz4.img --ramdisk out/ramdisk --os_version 12.0.0 --os_patch_level "${OS_PATCH_LEVEL}"
     $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-lz4.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
-    cp ./boot-lz4.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-boot-lz4.img
+    cp ./boot-lz4.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${NAME_SUBLEVEL}-${OS_PATCH_LEVEL}-boot-lz4.img
   else
     echo "::warning::跳过 boot-lz4.img（Image.lz4 未就绪）"
   fi
@@ -3250,16 +3335,16 @@ stage_build_boot_a13plus() {
 
   $MKBOOTIMG --header_version 4 --kernel Image --output boot.img
   $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
-  cp ./boot.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-boot.img
+  cp ./boot.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${NAME_SUBLEVEL}-${OS_PATCH_LEVEL}-boot.img
 
   $MKBOOTIMG --header_version 4 --kernel Image.gz --output boot-gz.img
   $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-gz.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
-  cp ./boot-gz.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-boot-gz.img
+  cp ./boot-gz.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${NAME_SUBLEVEL}-${OS_PATCH_LEVEL}-boot-gz.img
 
   if [ "${LZ4_KERNEL_READY:-0}" = "1" ] && [ -s ./Image.lz4 ]; then
     $MKBOOTIMG --header_version 4 --kernel Image.lz4 --output boot-lz4.img
     $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-lz4.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
-    cp ./boot-lz4.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${SUB_LEVEL}-${OS_PATCH_LEVEL}-boot-lz4.img
+    cp ./boot-lz4.img ../${ANDROID_VERSION}-${KERNEL_VERSION}.${NAME_SUBLEVEL}-${OS_PATCH_LEVEL}-boot-lz4.img
   else
     echo "::warning::跳过 boot-lz4.img（Image.lz4 未就绪）"
   fi
@@ -3283,7 +3368,16 @@ stage_collect_conflicts() {
   REJECTS_DIR="$WORKSPACE/patch-rejects"
   mkdir -p "$REJECTS_DIR"
 
-  mapfile -t REJS < <(find "$KERNEL_ROOT" -type f -name '*.rej')
+  mapfile -t REJS < <(
+    find "$KERNEL_ROOT" -type f -name '*.rej' | sort | while IFS= read -r rej; do
+      if git -C "$(dirname "$rej")" ls-files --error-unmatch -- "$(basename "$rej")" >/dev/null 2>&1 \
+        && git -C "$(dirname "$rej")" diff --quiet -- "$(basename "$rej")" 2>/dev/null; then
+        echo "跳过上游自带的 .rej: ${rej#"$KERNEL_ROOT"/}" >&2
+        continue
+      fi
+      echo "$rej"
+    done
+  )
   REJ_COUNT=${#REJS[@]}
   echo "发现 $REJ_COUNT 个 .rej 文件"
   export REJ_COUNT="$REJ_COUNT"
@@ -3347,6 +3441,7 @@ PHASES=(
   add_oneplus8e
   resolve_ksu_branch
   add_kernelsu
+  apply_sukisu_compat
   config_sukisu_manager
   susfs_baseline
   apply_susfs
@@ -3459,7 +3554,7 @@ validate_inputs() {
 phase_skippable() {
   case "$1" in
     setup_zram_lz4|config_zram) return 0 ;;
-    add_bbg|apply_rekernel|integrate_nomount) return 0 ;;
+    add_bbg|apply_rekernel|integrate_nomount|apply_sukisu_compat) return 0 ;;
     clone_droidspaces|integrate_droidspaces|inject_ntsync) return 0 ;;
     apply_cve_patch|apply_unicode_fix|patch_kpm_image) return 0 ;;
     config_net_enhance) return 0 ;;
