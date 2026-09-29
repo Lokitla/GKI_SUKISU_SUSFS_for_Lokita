@@ -509,20 +509,33 @@ jobs:
           # 不同，标成目标值会让人误以为拿到的就是严格匹配的那个 APK——这也是之前
           # 明明差了 43 个版本、产物名却一直是 (40922) 的原因。
           # cf784f5: 改为下载后验证实际版本，避免估算版本与实际版本不一致。
+          # 注意：不能用 pipe while（子 shell 变量不传回），改用 mapfile 读入数组
           echo "开始下载并验证 Manager APK 实际版本..."
           
           # 创建临时候选目录
           CANDIDATE_BASE="/tmp/manager_candidates_$$"
           mkdir -p "$CANDIDATE_BASE"
           
+          # 将下载列表读入数组（避免子 shell 问题）
+          mapfile -t CANDIDATES < <(echo "$DOWNLOAD_LIST")
+          
+          FETCHED=0
+          MATCHED=0
+          BEST_ACTUAL=0
+          BEST_DIR=""
+          
           # 下载并验证每个候选 APK
-          echo "$DOWNLOAD_LIST" | while IFS=$'\t' read -r NAME URL; do
+          for CAND in "${CANDIDATES[@]}"; do
             # 限制下载数量
             FETCHED=$((FETCHED + 1))
             if [ "$FETCHED" -gt "$MAX_FETCH" ]; then
               echo "已达下载上限 $MAX_FETCH，停止扫描"
               break
             fi
+            
+            # 解析 tab 分隔的 NAME 和 URL
+            NAME=$(echo "$CAND" | cut -f1)
+            URL=$(echo "$CAND" | cut -f2)
             
             SAFE_NAME=$(echo "$NAME" | tr '/ ' '__')
             ZIP_NAME="$KSU_VARIANT-${SAFE_NAME}(${{ env.KSU_VERSION }}).zip"
