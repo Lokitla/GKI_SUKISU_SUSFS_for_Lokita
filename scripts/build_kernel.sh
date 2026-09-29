@@ -2201,7 +2201,14 @@ EOF
   # ZRAM_LZ4K_OK 由 setup_zram_lz4 算好（无上游 lz4k 补丁的内核为 0）。
   if [ "${ZRAM_LZ4K_OK:-0}" = "1" ] \
      && grep -q "CONFIG_ZSMALLOC=y" "$CONFIG_FILE" && grep -q "CONFIG_ZRAM=y" "$CONFIG_FILE"; then
-    cat "$ZZH_PATCHES/config/zram.config" >> "$CONFIG_FILE"
+    # ZRAM_BACKEND_* 仅在 6.12+ 的 Kconfig 中声明；bazel 构建的 kernel_config
+    # 会校验 fragment 中每个配置项都必须存在于 Kconfig，旧版本内核带上
+    # 这些行会直接导致编译失败，因此 6.12 以下需剔除
+    if [ "$(printf '%s\n' "6.12" "${KERNEL_VERSION}" | sort -V | head -1)" = "6.12" ]; then
+      cat "$ZZH_PATCHES/config/zram.config" >> "$CONFIG_FILE"
+    else
+      grep -v '^CONFIG_ZRAM_BACKEND_' "$ZZH_PATCHES/config/zram.config" >> "$CONFIG_FILE"
+    fi
   fi
 
   cd "$_pwd"
