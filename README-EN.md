@@ -454,6 +454,7 @@ was done by this repository's maintainer. All credit and respect goes to them:
 - **[zzh20188](https://github.com/zzh20188)** — the scaffolding; most of the matrix and script work is his;
 - **[ShirkNeko](https://github.com/ShirkNeko)** — KPM image patching and local CLI design;
 - **[coolzyd9107](https://github.com/coolzyd9107)** — release presentation;
+- **[LingLuo17](https://github.com/LingLuo17)** — 6.12 ZRAM patches, SukiSU compat patches, and network enhancement;
 - and all contributors of [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra),
   [susfs4ksu](https://gitlab.com/simonpunk/susfs4ksu),
   [KernelSU](https://kernelsu.org/) and

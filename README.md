@@ -419,6 +419,7 @@ SukiSU / SUSFS / KernelSU 源码也可从其官方仓库获取。任何二次分
 - **[zzh20188](https://github.com/zzh20188)** —— 本仓库的基座，构建矩阵与脚本的绝大部分工作出自他手；
 - **[ShirkNeko](https://github.com/ShirkNeko)** —— KPM 镜像修补与本地 CLI 设计；
 - **[coolzyd9107](https://github.com/coolzyd9107)** —— Release 呈现方式；
+- **[LingLuo17](https://github.com/LingLuo17)** —— 6.12 ZRAM 补丁、SukiSU compat 补丁与网络增强；
 - 以及 [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra)、
   [susfs4ksu](https://gitlab.com/simonpunk/susfs4ksu)、
   [KernelSU](https://kernelsu.org/)、
