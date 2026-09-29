@@ -1971,6 +1971,13 @@ stage_apply_unicode_fix() {
   local _rc=0
   cd ${KERNEL_ROOT}/common
   if [ "${KERNEL_VERSION}" = "5.10" ] || [ "${KERNEL_VERSION}" = "5.15" ]; then
+    # 上游 2023-11、2024-01、2024-03 月度分支已带有 "unicode: Don't special case ignorable code points"，
+    # patch --forward 会判定为已应用并跳过，但被忽略的 hunk 仍会写成 .rej，先做幂等检查
+    if [ -f fs/unicode/mkutf8data.c ] && ! grep -q 'ignore_init' fs/unicode/mkutf8data.c; then
+      echo "源码已包含 Unicode 绕过修复，跳过补丁"
+      cd "$_pwd"
+      return 0
+    fi
     patch -p1 --forward < "$ACTION_BUILD/patches/unicode_bypass_fix_6.1-.patch" || _rc=$?
   else
     patch -p1 --forward < "$ACTION_BUILD/patches/unicode_bypass_fix_6.1+.patch" || _rc=$?
@@ -3319,7 +3326,16 @@ stage_collect_conflicts() {
   REJECTS_DIR="$WORKSPACE/patch-rejects"
   mkdir -p "$REJECTS_DIR"
 
-  mapfile -t REJS < <(find "$KERNEL_ROOT" -type f -name '*.rej')
+  mapfile -t REJS < <(
+    find "$KERNEL_ROOT" -type f -name '*.rej' | sort | while IFS= read -r rej; do
+      if git -C "$(dirname "$rej")" ls-files --error-unmatch -- "$(basename "$rej")" >/dev/null 2>&1 \
+        && git -C "$(dirname "$rej")" diff --quiet -- "$(basename "$rej")" 2>/dev/null; then
+        echo "跳过上游自带的 .rej: ${rej#"$KERNEL_ROOT"/}" >&2
+        continue
+      fi
+      echo "$rej"
+    done
+  )
   REJ_COUNT=${#REJS[@]}
   echo "发现 $REJ_COUNT 个 .rej 文件"
   export REJ_COUNT="$REJ_COUNT"
