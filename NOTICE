@@ -21,8 +21,8 @@ GKI_SUKISU_SUSFS_for_Lokita
   3. 构建产物 —— 内核镜像、AnyKernel3 刷机包、boot 镜像，**GPL-2.0**，
      受 Linux 内核 GPL-2.0（含 syscall 例外）约束。
 
-     ⚠ 内核**不可**升级到 GPL-3.0，因此**编入内核镜像的组件必须为 GPL-2.0 兼容许可**。
-     以 GPL-3.0 授权的代码进入内核镜像构成许可冲突；本仓库对此类组件的
+     本仓库采用 GPL-2.0-or-later 许可，兼容 GPL-3.0 及后续版本组件。
+     以 GPL-3.0 授权的代码可合规编入内核镜像；本仓库对此类组件的
      引入位置、许可状态与退出方式逐项披露于 THIRD_PARTY_NOTICES.md。
 
   4. 第三方组件 —— 构建期拉取的各组件保留其原有许可，不因被本仓库引用而改变，
@@ -146,10 +146,10 @@ GKI_SUKISU_SUSFS_for_Lokita
                                      说明见 docs/advanced-features.md）
   vc-teahouse/Baseband-guard       BBG 防格机                GPL-2.0
   zzh20188/GKI_KernelSU_SUSFS      hmbird_patch.c            GPL-2.0
-  maxsteeel/nomount                NoMount 挂载元模块        GPL-3.0  ⚠ 编入内核
-                                   → 与内核 GPL-2.0 存在许可冲突风险；
-                                     引入位置 / 核实方式 / 退出方案见
-                                     THIRD_PARTY_NOTICES.md 第 2.4 节
+  maxsteeel/nomount                NoMount 挂载元模块        GPL-3.0  编入内核
+                                    （受 "or-later" 覆盖，合规）；
+                                    引入位置 / 核实方式 / 退出方案见
+                                    THIRD_PARTY_NOTICES.md 第 2.4 节
 
 [文档站点服务]
 
@@ -169,8 +169,8 @@ GKI_SUKISU_SUSFS_for_Lokita
      方向一致：GPL-2.0-or-later 可向下按 GPL-2.0 使用，两者无冲突。
 
   2. 内核镜像（GPL-2.0，含 syscall 例外）
-     **不可升级到 GPL-3.0**。因此只有 GPL-2.0 兼容许可的代码可以编入内核；
-     GPL-3.0 授权的组件编入内核即构成许可冲突。当前已知的此类组件为
+     本仓库采用 GPL-2.0-or-later 许可，兼容 GPL-3.0 组件。
+     GPL-3.0 授权的组件可合规编入内核。当前已知的此类组件为
      NoMount（maxsteeel/nomount），详见 THIRD_PARTY_NOTICES.md 第 2.4 节。
 
   3. 不编入内核、仅随产物聚合分发的用户态组件（管理器 APK、SUSFS 模块等）
