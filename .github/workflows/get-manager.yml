@@ -404,6 +404,16 @@ jobs:
               "https://api.github.com/repos/$REPO/actions/workflows/$FILENAME/runs?head_sha=$SUKISU_COMMIT&status=success&per_page=5")
             PINNED_ID=$(printf '%s' "$PINNED_RUNS" | jq -r '.workflow_runs[0].id // empty')
             if [ -n "$PINNED_ID" ]; then
+              # 过滤 pull_request 事件：fork 的 main 分支发起 PR 时 head_branch 也是 main，
+              # 但 head_sha 指向的是 fork 的提交，不是上游的发布构建。
+              PINNED_EVENT=$(printf '%s' "$PINNED_RUNS" | jq -r '.workflow_runs[0].event // "push"')
+              PINNED_BRANCH=$(printf '%s' "$PINNED_RUNS" | jq -r '.workflow_runs[0].head_branch // "main"')
+              if [ "$PINNED_EVENT" = "pull_request" ]; then
+                echo "::warning::提交 $SUKISU_COMMIT 的构建 $PINNED_ID 来自 pull_request（$PINNED_BRANCH），跳过（仅接受 push/workflow_dispatch）"
+                PINNED_ID=""
+              fi
+            fi
+            if [ -n "$PINNED_ID" ]; then
               ARTIFACTS=$(curl -s -H "Authorization: token $GH_TOKEN" \
                 "https://api.github.com/repos/$REPO/actions/runs/$PINNED_ID/artifacts")
               CANDIDATE_LIST=$(get_manager_artifacts "$ARTIFACTS")
@@ -416,7 +426,7 @@ jobs:
                 echo "::warning::提交 $SUKISU_COMMIT 的构建 $PINNED_ID 中没有匹配的 Manager 产物，回退按版本查找"
               fi
             else
-              echo "::warning::提交 $SUKISU_COMMIT 没有成功的 Manager 构建，回退按版本查找（将取不高于该版本的最新产物）"
+              echo "::warning::提交 $SUKISU_COMMIT 没有成功的 Manager 构建（或来自 PR），回退按版本查找（将取不高于该版本的最新产物）"
             fi
           fi
 
@@ -437,9 +447,12 @@ jobs:
               BUILD_ID=$(printf '%s' "$RUNS" | jq -r ".workflow_runs[$INDEX].id")
               HEAD_SHA=$(printf '%s' "$RUNS" | jq -r ".workflow_runs[$INDEX].head_sha")
               HEAD_BRANCH=$(printf '%s' "$RUNS" | jq -r ".workflow_runs[$INDEX].head_branch")
+              EVENT_NAME=$(printf '%s' "$RUNS" | jq -r ".workflow_runs[$INDEX].event")
 
-              # 发布分支过滤在这里自己做，而不是交给 API 的 branch= 参数（见上方说明）
-              if [ "$HEAD_BRANCH" != "$RELEASE_BRANCH" ]; then
+              # 发布分支过滤在这里自己做，而不是交给 API 的 branch= 参数（见上方说明）。
+              # 必须同时排除 pull_request 事件：fork 的 main 分支发起 PR 时 head_branch 也是 main，
+              # 但产物是 PR 构建（未合入 main），不能当发布版本用。
+              if [ "$HEAD_BRANCH" != "$RELEASE_BRANCH" ] || [ "$EVENT_NAME" = "pull_request" ]; then
                 continue
               fi
 
