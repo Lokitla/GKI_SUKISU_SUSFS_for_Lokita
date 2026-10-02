@@ -351,12 +351,15 @@ jobs:
 
           # ═══════════════════════════════════════════════════════════
           # 从 APK 文件名提取实际 versionCode
-          # 文件名格式：KernelSU_v40924_20260929_arm64.apk
-          # 提取最后一个 _数字 作为 versionCode
+          # 文件名格式：ReSukiSU_v4.2.0-rc2_35163-arm64-v8a-release.apk
+          #          KernelSU_v40924_20260929_arm64.apk
+          # 取第一段 >=4 位数字（与「校验管理器 APK 版本」步骤同一口径）：
+          #   ReSukiSU_v4.2.0-rc2_35163-... → 35163
+          #   KernelSU_v40924_20260929_... → 40924（不会误取日期 20260929）
           # ═══════════════════════════════════════════════════════════
           extract_apk_version() {
             local apk_name="$1"
-            echo "$apk_name" | grep -oE '_[0-9]+' | tail -n 1 | tr -d '_'
+            echo "$apk_name" | grep -oE '[0-9]{4,}' | head -n 1
           }
 
           DOWNLOAD_LIST=""
@@ -569,8 +572,23 @@ jobs:
             echo "下载候选 $FETCHED: $NAME"
             curl -L -H "Authorization: token $GH_TOKEN" -o "$APK_PATH" "$URL"
             
-            # 从文件名提取实际版本
-            ACTUAL_VERSION=$(extract_apk_version "$NAME")
+            # artifact 是 zip 压缩包，真实版本号在包内 APK 文件名上：
+            # 先解压再找 APK，不能拿 artifact 名（如 Spoofed-Manager-release）提取版本
+            mkdir -p "$CANDIDATE_DIR/extracted"
+            if ! unzip -q "$APK_PATH" -d "$CANDIDATE_DIR/extracted" 2>/dev/null; then
+              echo "⚠️  无法解压产物，跳过：$NAME"
+              rm -rf "$CANDIDATE_DIR"
+              continue
+            fi
+            APK_FILE=$(find "$CANDIDATE_DIR/extracted" -type f -name "*.apk" -print -quit)
+            if [ -z "$APK_FILE" ]; then
+              echo "⚠️  产物中没有 APK，跳过：$NAME"
+              rm -rf "$CANDIDATE_DIR"
+              continue
+            fi
+            
+            # 从 APK 文件名提取实际版本
+            ACTUAL_VERSION=$(extract_apk_version "$(basename "$APK_FILE")")
             
             if ! [[ "$ACTUAL_VERSION" =~ ^[0-9]+$ ]]; then
               echo "⚠️  无法提取版本，跳过：$NAME"
@@ -619,6 +637,9 @@ jobs:
             # 解压最佳候选到工作目录
             mkdir -p "manager-artifacts"
             for f in "$BEST_DIR"/*; do
+              # 跳过 extracted 子目录，只解压下载下来的 zip（文件名即 artifact 名，
+              # 分流步骤依赖这个子目录名区分 spoofed/普通）
+              [ -f "$f" ] || continue
               SAFE_NAME=$(basename "$f" | tr '/ ' '__')
               unzip -o "$f" -d "manager-artifacts/$SAFE_NAME"
             done
