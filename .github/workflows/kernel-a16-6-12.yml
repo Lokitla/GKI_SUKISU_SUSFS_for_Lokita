@@ -237,6 +237,11 @@ on:
         required: false
         type: string
         default: ""
+      ksu_commit:
+        description: "对齐用：内核 KernelSU 检出到该提交（所选 Manager 构建同一提交；留空跟随 main HEAD）"
+        required: false
+        type: string
+        default: ""
       ksu_mode:
         description: "KernelSU 模式：关闭=正常集成 KernelSU / 禁用KSU=不集成任何 KernelSU 代码（SUSFS 的启停由 enable_susfs 独立控制，不要写在这里）"
         required: false
@@ -269,7 +274,9 @@ jobs:
           fi
 
   build-kernels-a16-6-12:
-    needs: prepare-matrix
+    needs: [prepare-matrix, get-ksu-manager]
+    # 管理器拉取失败/被跳过时不阻塞内核构建（ksuCommit 为空则内核跟随 main HEAD）
+    if: ${{ !cancelled() && needs.prepare-matrix.result == 'success' }}
     name: "6.12.${{ matrix.sub_level }}-${{ matrix.os_patch_level }}"
     if: needs.prepare-matrix.outputs.count != '0'
     strategy:
@@ -284,6 +291,8 @@ jobs:
       sub_level: ${{ matrix.sub_level }}
       os_patch_level: ${{ matrix.os_patch_level }}
       ksu_variant: ${{ inputs.kernelsu_variant }}
+      # 内核对齐：KernelSU 检出到所选 Manager 构建同一提交（BakaSU 生效）
+      ksu_commit: ${{ inputs.ksu_commit }}
       version: ${{ inputs.version || '' }}
       build_time: ${{ inputs.build_time || '' }}
       # 这里原本写死 false，把 use_zram 的默认值（true）静默盖掉 ——

@@ -189,6 +189,7 @@ jobs:
       manager_spoofed: true
   # ==================== Android 12 - 5.10 构建 ====================
   build-a12-5-10:
+    needs: get-manager
     if: contains(inputs.build_targets, 'a12') || contains(inputs.build_targets, 'all')
     uses: ./.github/workflows/kernel-a12-5-10.yml
     secrets: inherit
@@ -214,6 +215,8 @@ jobs:
       manager_commit: ${{ inputs.manager_commit }}
       # ksu_mode 不传：build.yml 默认「关闭」（正常集成 KernelSU）。
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
+      # 内核对齐：KernelSU 检出到所选 Manager 构建同一提交（BakaSU 生效）
+      ksu_commit: ${{ needs.get-manager.outputs.ksuCommit }}
       # 以下两项目前仍未在手动界面暴露（25 个 input 名额已用满）：
       #   skip_incompatible —— 可选阶段失败时降级为 warning 而非中断
       #   ksu_branch_mode   —— 上方已注明，不声明时自然回退 auto
@@ -222,6 +225,7 @@ jobs:
       skip_incompatible: false
   # ==================== Android 13 - 5.15 构建 ====================
   build-a13-5-15:
+    needs: get-manager
     if: contains(inputs.build_targets, 'a13') || contains(inputs.build_targets, 'all')
     uses: ./.github/workflows/kernel-a13-5-15.yml
     secrets: inherit
@@ -246,6 +250,8 @@ jobs:
       supp_op: ${{ inputs.supp_op || false }}
       manager_commit: ${{ inputs.manager_commit }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
+      # 内核对齐：KernelSU 检出到所选 Manager 构建同一提交（BakaSU 生效）
+      ksu_commit: ${{ needs.get-manager.outputs.ksuCommit }}
       # 以下两项目前仍未在手动界面暴露（25 个 input 名额已用满）：
       #   skip_incompatible —— 可选阶段失败时降级为 warning 而非中断
       #   ksu_branch_mode   —— 上方已注明，不声明时自然回退 auto
@@ -254,6 +260,7 @@ jobs:
       skip_incompatible: false
   # ==================== Android 14 - 6.1 构建 ====================
   build-a14-6-1:
+    needs: get-manager
     if: contains(inputs.build_targets, 'a14') || contains(inputs.build_targets, 'all')
     uses: ./.github/workflows/kernel-a14-6-1.yml
     secrets: inherit
@@ -278,6 +285,8 @@ jobs:
       supp_op: ${{ inputs.supp_op || false }}
       manager_commit: ${{ inputs.manager_commit }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
+      # 内核对齐：KernelSU 检出到所选 Manager 构建同一提交（BakaSU 生效）
+      ksu_commit: ${{ needs.get-manager.outputs.ksuCommit }}
       # 以下两项目前仍未在手动界面暴露（25 个 input 名额已用满）：
       #   skip_incompatible —— 可选阶段失败时降级为 warning 而非中断
       #   ksu_branch_mode   —— 上方已注明，不声明时自然回退 auto
@@ -286,6 +295,7 @@ jobs:
       skip_incompatible: false
   # ==================== Android 15 - 6.6 构建 ====================
   build-a15-6-6:
+    needs: get-manager
     if: contains(inputs.build_targets, 'a15') || contains(inputs.build_targets, 'all')
     uses: ./.github/workflows/kernel-a15-6-6.yml
     secrets: inherit
@@ -310,6 +320,8 @@ jobs:
       supp_op: ${{ inputs.supp_op || false }}
       manager_commit: ${{ inputs.manager_commit }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
+      # 内核对齐：KernelSU 检出到所选 Manager 构建同一提交（BakaSU 生效）
+      ksu_commit: ${{ needs.get-manager.outputs.ksuCommit }}
       # 以下两项目前仍未在手动界面暴露（25 个 input 名额已用满）：
       #   skip_incompatible —— 可选阶段失败时降级为 warning 而非中断
       #   ksu_branch_mode   —— 上方已注明，不声明时自然回退 auto
@@ -318,6 +330,7 @@ jobs:
       skip_incompatible: false
   # ==================== Android 16 - 6.12 构建 ====================
   build-a16-6-12:
+    needs: get-manager
     if: contains(inputs.build_targets, 'a16') || contains(inputs.build_targets, 'all')
     uses: ./.github/workflows/kernel-a16-6-12.yml
     secrets: inherit
@@ -342,6 +355,8 @@ jobs:
       supp_op: ${{ inputs.supp_op || false }}
       manager_commit: ${{ inputs.manager_commit }}
       ksu_branch_mode: ${{ inputs.ksu_branch_mode || 'auto' }}
+      # 内核对齐：KernelSU 检出到所选 Manager 构建同一提交（BakaSU 生效）
+      ksu_commit: ${{ needs.get-manager.outputs.ksuCommit }}
       # 以下两项目前仍未在手动界面暴露（25 个 input 名额已用满）：
       #   skip_incompatible —— 可选阶段失败时降级为 warning 而非中断
       #   ksu_branch_mode   —— 上方已注明，不声明时自然回退 auto

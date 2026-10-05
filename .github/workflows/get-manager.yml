@@ -36,6 +36,14 @@ on:
         description: "The calculated KSU version number"
         value: ${{ jobs.get_ksu_manager.outputs.ksuVer }}
 
+      managerVer:
+        description: "实测下载到的 Manager APK versionCode（cf784f5 下载验证后）"
+        value: ${{ jobs.get_ksu_manager.outputs.managerVer }}
+
+      ksuCommit:
+        description: "所选 Manager 构建对应的提交 SHA（内核侧对齐用；空=未对齐）"
+        value: ${{ jobs.get_ksu_manager.outputs.ksuCommit }}
+
 jobs:
   get_ksu_manager:
     runs-on: ubuntu-24.04
@@ -44,6 +52,10 @@ jobs:
       ksuVer: ${{ steps.get_version.outputs.kversion }}
       # 输出2: SUSFS版本号
       susVer: ${{ steps.get_version.outputs.sversion }}
+      # 输出3: Manager 实测版本号
+      managerVer: ${{ steps.add_KSU.outputs.managerVer }}
+      # 输出4: 所选 Manager 构建的提交 SHA（ksu_commit 对齐用）
+      ksuCommit: ${{ steps.align_commit.outputs.ksuCommit }}
     env:
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
       CCACHE_NOHASHDIR: "true"
@@ -372,11 +384,13 @@ jobs:
           MATCHED=0            # 是否精确匹配
           MAX_FETCH=6          # 限制下载数量，避免浪费带宽
           FETCHED=0            # 已下载数量
+          BEST_SHA=""          # 最佳候选 run 的 head_sha（内核对齐用）
           # 严格对齐用：精确等于内核 KSU 版本的候选
           EXACT_LIST=""
           EXACT_ID=""
           EXACT_BRANCH=""
           EXACT_VERSION=0
+          EXACT_SHA=""
           # 分支过滤（重要）：早期这里不加过滤，因为上游 Manager CI 一度只跑在
           # 发布分支上（见下方 calculate_run_ksu_version 的说明）。但上游现在会在
           # 各类功能/修复分支上触发 build-manager.yml —— 实测 SukiSU-Ultra 最近 30
@@ -424,6 +438,7 @@ jobs:
                 DOWNLOAD_LIST="$CANDIDATE_LIST"
                 BEST_BUILD_ID="$PINNED_ID"
                 BEST_BRANCH="pinned"
+                BEST_SHA="$SUKISU_COMMIT"
                 echo "命中指定提交的 Manager 构建: $PINNED_ID"
               else
                 echo "::warning::提交 $SUKISU_COMMIT 的构建 $PINNED_ID 中没有匹配的 Manager 产物，回退按版本查找"
@@ -484,6 +499,7 @@ jobs:
                 EXACT_ID="$BUILD_ID"
                 EXACT_BRANCH="$HEAD_BRANCH"
                 EXACT_VERSION="$RUN_KSU_VERSION"
+                EXACT_SHA="$HEAD_SHA"
                 echo "候选 Manager(严格命中): 构建 $BUILD_ID ($HEAD_BRANCH), KSU $RUN_KSU_VERSION"
                 break 2
               fi
@@ -494,6 +510,7 @@ jobs:
                 BEST_VERSION="$RUN_KSU_VERSION"
                 BEST_BUILD_ID="$BUILD_ID"
                 BEST_BRANCH="$HEAD_BRANCH"
+                BEST_SHA="$HEAD_SHA"
                 echo "候选 Manager(备选): 构建 $BUILD_ID ($HEAD_BRANCH), KSU $RUN_KSU_VERSION"
               fi
             done
@@ -509,6 +526,7 @@ jobs:
             BEST_BUILD_ID="$EXACT_ID"
             BEST_BRANCH="$EXACT_BRANCH"
             BEST_VERSION="$EXACT_VERSION"
+            BEST_SHA="$EXACT_SHA"
             echo "✓ 管理器与内核严格对齐: KSU $TARGET_KSU_VERSION（构建 $BEST_BUILD_ID @ $BEST_BRANCH）"
           elif [ -n "$DOWNLOAD_LIST" ]; then
             LAG=$((TARGET_KSU_VERSION - BEST_VERSION))
@@ -650,9 +668,12 @@ jobs:
               echo "⚠️  未找到精确匹配，使用最高版本 $BEST_ACTUAL (目标 $TARGET_KSU_VERSION)"
               echo "::warning::管理器版本 $BEST_ACTUAL 落后内核版本 $TARGET_KSU_VERSION"
             fi
-            
-            # 用实际版本命名
+
+            # 用实际版本命名（对齐原始数据交给「计算对齐提交」步骤）
             echo "MANAGER_VERSION=$BEST_ACTUAL" >> $GITHUB_ENV
+            echo "managerVer=$BEST_ACTUAL" >> $GITHUB_OUTPUT
+            echo "MANAGER_SHA=${BEST_SHA:-}" >> $GITHUB_ENV
+            echo "MANAGER_MATCHED=$MATCHED" >> $GITHUB_ENV
           else
             echo "::error::未找到任何有效 Manager APK"
             exit 1
@@ -671,6 +692,32 @@ jobs:
             fi
             find manager-artifacts -type f -name "*.apk" -print
           fi
+
+      - name: 计算对齐提交（ksu_commit）
+        id: align_commit
+        if: steps.add_KSU.outcome == 'success'
+        env:
+          KSU_VERSION: ${{ env.KSU_VERSION }}
+          MANAGER_VERSION: ${{ env.MANAGER_VERSION }}
+          MANAGER_SHA: ${{ env.MANAGER_SHA }}
+          MANAGER_MATCHED: ${{ env.MANAGER_MATCHED }}
+        run: |
+          # BakaSU 对齐：内核 KernelSU 检出到所选 Manager 构建同一提交；
+          # 回退落后超过 ALIGN_CAP(=5) 时放弃对齐（KSU_COMMIT 空=main HEAD）
+          TARGET_KSU_VERSION="${KSU_VERSION:-}"
+          ALIGN_CAP="${ALIGN_CAP:-5}"
+          KSU_COMMIT=""
+          if [ -n "$MANAGER_SHA" ] && [ -n "$TARGET_KSU_VERSION" ] && [ -n "$MANAGER_VERSION" ]; then
+            LAG=$((TARGET_KSU_VERSION - MANAGER_VERSION))
+            if [ "$LAG" -ge 0 ] 2>/dev/null && [ "$LAG" -le "$ALIGN_CAP" ] 2>/dev/null; then
+              KSU_COMMIT="$MANAGER_SHA"
+              echo "✅ 内核对齐 Manager 构建提交 ${MANAGER_SHA:0:9}（KSU $MANAGER_VERSION）"
+            else
+              echo "::warning::Manager 落后超过 $ALIGN_CAP，放弃内核对齐（保持上游 main HEAD）"
+            fi
+          fi
+          echo "KSU_COMMIT=${KSU_COMMIT:-}" >> $GITHUB_ENV
+          echo "ksuCommit=${KSU_COMMIT}" >> $GITHUB_OUTPUT
 
       - name: 添加 SUSFS 模块
         id: add_SUSFS
