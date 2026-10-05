@@ -349,10 +349,29 @@ jobs:
             fi
           }
 
+          # ═══════════════════════════════════════════════════════════
+          # 从 APK 文件名提取实际 versionCode
+          # 文件名格式：ReSukiSU_v4.2.0-rc2_35163-arm64-v8a-release.apk
+          #          KernelSU_v40924_20260929_arm64.apk
+          # 取第一段 >=4 位数字（与「校验管理器 APK 版本」步骤同一口径）：
+          #   ReSukiSU_v4.2.0-rc2_35163-... → 35163
+          #   KernelSU_v40924_20260929_... → 40924（不会误取日期 20260929）
+          # ═══════════════════════════════════════════════════════════
+          extract_apk_version() {
+            local apk_name="$1"
+            echo "$apk_name" | grep -oE '[0-9]{4,}' | head -n 1
+          }
+
           DOWNLOAD_LIST=""
           BEST_VERSION=0
           BEST_BUILD_ID=""
           BEST_BRANCH=""
+          # 实际版本验证（cf784f5）：下载后从 APK 文件名提取实际版本
+          BEST_ACTUAL=0        # 实际版本最大值
+          BEST_DIR=""          # 最佳候选目录
+          MATCHED=0            # 是否精确匹配
+          MAX_FETCH=6          # 限制下载数量，避免浪费带宽
+          FETCHED=0            # 已下载数量
           # 严格对齐用：精确等于内核 KSU 版本的候选
           EXACT_LIST=""
           EXACT_ID=""
@@ -388,6 +407,16 @@ jobs:
               "https://api.github.com/repos/$REPO/actions/workflows/$FILENAME/runs?head_sha=$SUKISU_COMMIT&status=success&per_page=5")
             PINNED_ID=$(printf '%s' "$PINNED_RUNS" | jq -r '.workflow_runs[0].id // empty')
             if [ -n "$PINNED_ID" ]; then
+              # 过滤 pull_request 事件：fork 的 main 分支发起 PR 时 head_branch 也是 main，
+              # 但 head_sha 指向的是 fork 的提交，不是上游的发布构建。
+              PINNED_EVENT=$(printf '%s' "$PINNED_RUNS" | jq -r '.workflow_runs[0].event // "push"')
+              PINNED_BRANCH=$(printf '%s' "$PINNED_RUNS" | jq -r '.workflow_runs[0].head_branch // "main"')
+              if [ "$PINNED_EVENT" = "pull_request" ]; then
+                echo "::warning::提交 $SUKISU_COMMIT 的构建 $PINNED_ID 来自 pull_request（$PINNED_BRANCH），跳过（仅接受 push/workflow_dispatch）"
+                PINNED_ID=""
+              fi
+            fi
+            if [ -n "$PINNED_ID" ]; then
               ARTIFACTS=$(curl -s -H "Authorization: token $GH_TOKEN" \
                 "https://api.github.com/repos/$REPO/actions/runs/$PINNED_ID/artifacts")
               CANDIDATE_LIST=$(get_manager_artifacts "$ARTIFACTS")
@@ -400,7 +429,7 @@ jobs:
                 echo "::warning::提交 $SUKISU_COMMIT 的构建 $PINNED_ID 中没有匹配的 Manager 产物，回退按版本查找"
               fi
             else
-              echo "::warning::提交 $SUKISU_COMMIT 没有成功的 Manager 构建，回退按版本查找（将取不高于该版本的最新产物）"
+              echo "::warning::提交 $SUKISU_COMMIT 没有成功的 Manager 构建（或来自 PR），回退按版本查找（将取不高于该版本的最新产物）"
             fi
           fi
 
@@ -421,9 +450,12 @@ jobs:
               BUILD_ID=$(printf '%s' "$RUNS" | jq -r ".workflow_runs[$INDEX].id")
               HEAD_SHA=$(printf '%s' "$RUNS" | jq -r ".workflow_runs[$INDEX].head_sha")
               HEAD_BRANCH=$(printf '%s' "$RUNS" | jq -r ".workflow_runs[$INDEX].head_branch")
+              EVENT_NAME=$(printf '%s' "$RUNS" | jq -r ".workflow_runs[$INDEX].event")
 
-              # 发布分支过滤在这里自己做，而不是交给 API 的 branch= 参数（见上方说明）
-              if [ "$HEAD_BRANCH" != "$RELEASE_BRANCH" ]; then
+              # 发布分支过滤在这里自己做，而不是交给 API 的 branch= 参数（见上方说明）。
+              # 必须同时排除 pull_request 事件：fork 的 main 分支发起 PR 时 head_branch 也是 main，
+              # 但产物是 PR 构建（未合入 main），不能当发布版本用。
+              if [ "$HEAD_BRANCH" != "$RELEASE_BRANCH" ] || [ "$EVENT_NAME" = "pull_request" ]; then
                 continue
               fi
 
@@ -492,18 +524,142 @@ jobs:
           # 产物名要写【实际下载到的 APK 版本】而不是内核目标版本。回退发生时两者
           # 不同，标成目标值会让人误以为拿到的就是严格匹配的那个 APK——这也是之前
           # 明明差了 43 个版本、产物名却一直是 (40922) 的原因。
-          echo "MANAGER_VERSION=$BEST_VERSION" >> $GITHUB_ENV
-
-          # 下载并解压所有 Manager 产物
-          echo "$DOWNLOAD_LIST" | while IFS=$'\t' read -r NAME URL; do
+          # cf784f5: 改为下载后验证实际版本，避免估算版本与实际版本不一致。
+          # 注意：用 printf %b 写入临时文件，保留 tab 和换行
+          echo "开始下载并验证 Manager APK 实际版本..."
+          
+          # 创建临时候选目录
+          CANDIDATE_BASE="/tmp/manager_candidates_$$"
+          mkdir -p "$CANDIDATE_BASE"
+          
+          # 将下载列表写入临时文件（用 printf %b 保留 tab 和换行）
+          DOWNLOAD_LIST_FILE="/tmp/download_list_$$.txt"
+          printf '%b' "$DOWNLOAD_LIST" > "$DOWNLOAD_LIST_FILE"
+          
+          FETCHED=0
+          MATCHED=0
+          BEST_ACTUAL=0
+          BEST_DIR=""
+          
+          # 下载并验证每个候选 APK
+          while IFS= read -r LINE; do
+            # 跳过空行
+            [ -z "$LINE" ] && continue
+            
+            # 用 awk 解析 tab 分隔的 NAME 和 URL
+            NAME=$(echo "$LINE" | awk -F'\t' '{print $1}')
+            URL=$(echo "$LINE" | awk -F'\t' '{print $2}')
+            
+            # 跳过无效行
+            [ -z "$NAME" ] && continue
+            [ -z "$URL" ] && continue
+            
+            # 限制下载数量
+            FETCHED=$((FETCHED + 1))
+            if [ "$FETCHED" -gt "$MAX_FETCH" ]; then
+              echo "已达下载上限 $MAX_FETCH，停止扫描"
+              break
+            fi
+            
             SAFE_NAME=$(echo "$NAME" | tr '/ ' '__')
             ZIP_NAME="$KSU_VARIANT-${SAFE_NAME}(${{ env.KSU_VERSION }}).zip"
-            echo "下载 $NAME -> $ZIP_NAME"
-            curl -L -H "Authorization: token $GH_TOKEN" -o "$ZIP_NAME" "$URL"
-            mkdir -p "manager-artifacts/$SAFE_NAME"
-            unzip -o "$ZIP_NAME" -d "manager-artifacts/$SAFE_NAME"
-            rm -rf "$ZIP_NAME"
-          done
+            
+            # 下载 APK 到临时目录
+            CANDIDATE_DIR="$CANDIDATE_BASE/$FETCHED"
+            mkdir -p "$CANDIDATE_DIR"
+            APK_PATH="$CANDIDATE_DIR/$NAME"
+            
+            echo "下载候选 $FETCHED: $NAME"
+            curl -L -H "Authorization: token $GH_TOKEN" -o "$APK_PATH" "$URL"
+            
+            # artifact 是 zip 压缩包，真实版本号在包内 APK 文件名上：
+            # 先解压再找 APK，不能拿 artifact 名（如 Spoofed-Manager-release）提取版本
+            mkdir -p "$CANDIDATE_DIR/extracted"
+            if ! unzip -q "$APK_PATH" -d "$CANDIDATE_DIR/extracted" 2>/dev/null; then
+              echo "⚠️  无法解压产物，跳过：$NAME"
+              rm -rf "$CANDIDATE_DIR"
+              continue
+            fi
+            APK_FILE=$(find "$CANDIDATE_DIR/extracted" -type f -name "*.apk" -print -quit)
+            if [ -z "$APK_FILE" ]; then
+              echo "⚠️  产物中没有 APK，跳过：$NAME"
+              rm -rf "$CANDIDATE_DIR"
+              continue
+            fi
+            
+            # 从 APK 文件名提取实际版本
+            ACTUAL_VERSION=$(extract_apk_version "$(basename "$APK_FILE")")
+            
+            if ! [[ "$ACTUAL_VERSION" =~ ^[0-9]+$ ]]; then
+              echo "⚠️  无法提取版本，跳过：$NAME"
+              rm -rf "$CANDIDATE_DIR"
+              continue
+            fi
+            
+            echo "候选 $FETCHED: 实际版本=$ACTUAL_VERSION, 目标版本=$TARGET_KSU_VERSION"
+            
+            # ═══ 版本验证 ═══
+            if [ "$ACTUAL_VERSION" -gt "$TARGET_KSU_VERSION" ]; then
+              # ❌ 实际版本 > 内核版本 → 拒绝
+              echo "❌ 拒绝：实际版本 $ACTUAL_VERSION > 内核版本 $TARGET_KSU_VERSION"
+              rm -rf "$CANDIDATE_DIR"
+              continue
+            fi
+            
+            if [ "$ACTUAL_VERSION" -eq "$TARGET_KSU_VERSION" ]; then
+              # ✅ 精确匹配 → 立即停止，清理其他候选
+              echo "✅ 精确匹配：实际版本 $ACTUAL_VERSION"
+              MATCHED=1
+              BEST_ACTUAL="$ACTUAL_VERSION"
+              BEST_DIR="$CANDIDATE_DIR"
+              # 清理其他候选
+              find "$CANDIDATE_BASE" -mindepth 1 -maxdepth 1 -type d \
+                ! -path "$CANDIDATE_DIR" -exec rm -rf {} +
+              break
+            elif [ "$ACTUAL_VERSION" -gt "$BEST_ACTUAL" ]; then
+              # ⚠️ 未匹配但更高 → 记录为备选
+              echo "⚠️  备选：实际版本 $ACTUAL_VERSION (当前最佳 $BEST_ACTUAL)"
+              rm -rf "$BEST_DIR" 2>/dev/null || true
+              BEST_ACTUAL="$ACTUAL_VERSION"
+              BEST_DIR="$CANDIDATE_DIR"
+            else
+              # 更低版本 → 丢弃
+              echo "丢弃：实际版本 $ACTUAL_VERSION < 当前最佳 $BEST_ACTUAL"
+              rm -rf "$CANDIDATE_DIR"
+            fi
+          done < "$DOWNLOAD_LIST_FILE"
+          
+          # 清理临时文件
+          rm -f "$DOWNLOAD_LIST_FILE"
+          
+          # ═══ 裁决：用实际版本命名 ═══
+          if [ -n "$BEST_DIR" ]; then
+            # 解压最佳候选到工作目录
+            mkdir -p "manager-artifacts"
+            for f in "$BEST_DIR"/*; do
+              # 跳过 extracted 子目录，只解压下载下来的 zip（文件名即 artifact 名，
+              # 分流步骤依赖这个子目录名区分 spoofed/普通）
+              [ -f "$f" ] || continue
+              SAFE_NAME=$(basename "$f" | tr '/ ' '__')
+              unzip -o "$f" -d "manager-artifacts/$SAFE_NAME"
+            done
+            
+            if [ "$MATCHED" -eq 1 ]; then
+              echo "✅ 精确匹配成功：版本 $BEST_ACTUAL"
+            else
+              echo "⚠️  未找到精确匹配，使用最高版本 $BEST_ACTUAL (目标 $TARGET_KSU_VERSION)"
+              echo "::warning::管理器版本 $BEST_ACTUAL 落后内核版本 $TARGET_KSU_VERSION"
+            fi
+            
+            # 用实际版本命名
+            echo "MANAGER_VERSION=$BEST_ACTUAL" >> $GITHUB_ENV
+          else
+            echo "::error::未找到任何有效 Manager APK"
+            exit 1
+          fi
+          
+          # 清理临时目录
+          rm -rf "$CANDIDATE_BASE"
 
           if [ "$KSU_VARIANT" == "ReSukiSU" ]; then
             echo "仅保留 ReSukiSU arm64-v8a release 管理器..."
