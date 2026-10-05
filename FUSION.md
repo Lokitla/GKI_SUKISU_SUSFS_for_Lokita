@@ -223,3 +223,9 @@ TGluZ0x1bw==                  →  LingLuo
 被本仓库引用而改变"。
 
 **不要移植这一项。** 记录在此，避免日后有人又把它捡回来。
+
+## LingLuo17/GKI_KernelSU_SUSFS 移植记录
+
+- `patch-1` 分支 `73fe0336c`（GPL-2.0）：Android 16 6.12 `getname_flags`
+  三参数调用编译修复，已移植进 `scripts/susfs_fixes/apply.sh` 的
+  Android 16 - 6.12 修复块（带 `grep -qF` guard，不匹配时跳过）。

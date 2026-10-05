@@ -518,4 +518,11 @@ if [[ "$ANDROID_VERSION" == "android16" && "$KERNEL_VERSION" == "6.12" ]]; then
     sed -i 's/defined(CONFIG_KSU_MANUAL_HOOK))/!defined(CONFIG_KSU_SUSFS) \&\& defined(CONFIG_KSU_MANUAL_HOOK))/' "$SETUID_HOOK"
     echo "已修复 setuid_hook.c 重复定义问题"
   fi
+
+  # 移植自 LingLuo17/GKI_KernelSU_SUSFS patch-1 73fe0336c（GPL-2.0）：
+  # 修复 6.12 getname_flags 三参数调用（ACK 6.12 声明为 2 参数，do_faccessat 传了 3 参数导致编译失败）
+  if grep -qF 'getname_flags(filename, lookup_flags, NULL)' fs/open.c; then
+    sed -i 's/getname_flags(filename, lookup_flags, NULL)/getname_flags(filename, lookup_flags)/' fs/open.c
+    echo "已修复 fs/open.c getname_flags 三参数问题"
+  fi
 fi
