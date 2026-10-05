@@ -1183,10 +1183,28 @@ stage_add_kernelsu() {
       ;;
     "BakaSU")
       echo "添加 BakaSU..."
-      # P1-2 修复：下载后显式校验再执行（不钉 commit，跟随上游 main 分支）
+      # P1-2 修复：下载后显式校验再执行（默认跟随上游 main 分支）
       KSU_SETUP="https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh"
       fetch_ksu_setup "$KSU_SETUP" "BakaSU" || return 1
       bash -s "$BRANCH" < /tmp/ksu_setup.sh || { echo "::error::BakaSU setup.sh 执行失败"; return 1; }
+
+      # [对齐] 内核侧 KernelSU 检出到所选官方 Manager 构建的同一提交
+      #（Kbuild 以 30700 + git 提交数 计算版本，与官方管理器 versionCode 同源同值），
+      # 保证内核 KSU 版本与拉取的管理器安装包严格一致。KSU_COMMIT 为空 = 跟随 main HEAD。
+      if [ -n "${KSU_COMMIT:-}" ]; then
+        echo "KernelSU 对齐官方 Manager 构建提交: $KSU_COMMIT"
+        if ! git -C KernelSU checkout --detach "$KSU_COMMIT" 2>/dev/null; then
+          git -C KernelSU fetch --no-tags origin "$KSU_COMMIT" >/dev/null 2>&1 \
+            || { echo "::error::无法 fetch KernelSU 对齐提交 $KSU_COMMIT"; return 1; }
+          git -C KernelSU checkout --detach "$KSU_COMMIT" \
+            || { echo "::error::无法检出 KernelSU 对齐提交 $KSU_COMMIT"; return 1; }
+        fi
+        if [ "$(git -C KernelSU rev-parse HEAD 2>/dev/null)" != "$KSU_COMMIT" ]; then
+          echo "::error::KernelSU 检出官方构建提交 $KSU_COMMIT 失败，无法对齐管理器版本"
+          return 1
+        fi
+        echo "KernelSU 已对齐到 $KSU_COMMIT（KSU 版本 = $((30700 + $(git -C KernelSU rev-list --count HEAD 2>/dev/null || echo 0)))）"
+      fi
       ;;
     *)
       if [ -z "$LEGACY_SUKISU_CONFIG" ]; then
@@ -1206,16 +1224,17 @@ stage_add_kernelsu() {
   # 这句静默吞掉，脚本照常收尾"成功"，实际却停在默认分支——此前"声称 builtin、
   # 实际编的是 main"，SELinux 隐藏因此互相踩踏失效，就是被这一句藏住的。
   # 所以这里复核 KernelSU 真实位置，对不上立刻终止。
-  if [ -d "KernelSU/.git" ] && [ -n "$BRANCH" ]; then
+  KSU_EXPECT_REF="${KSU_COMMIT:-$BRANCH}"
+  if [ -d "KernelSU/.git" ] && [ -n "$KSU_EXPECT_REF" ]; then
     KSU_ACTUAL_BRANCH=$(git -C KernelSU rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
     KSU_ACTUAL_HEAD=$(git -C KernelSU rev-parse HEAD 2>/dev/null || echo "")
-    # BRANCH 既可能是分支名也可能是 40/64 位 commit（后者是 detached HEAD，
-    # --abbrev-ref 会返回 HEAD），两种形态都要认
-    if [ "$KSU_ACTUAL_BRANCH" != "$BRANCH" ] && [[ "$KSU_ACTUAL_HEAD" != "$BRANCH"* ]]; then
-      echo "::error::KernelSU 分支未生效：期望 $BRANCH，实际分支=$KSU_ACTUAL_BRANCH HEAD=$KSU_ACTUAL_HEAD"
+    # 期望值既可能是分支名也可能是 40/64 位 commit（后者是 detached HEAD，
+    # --abbrev-ref 会返回 HEAD），两种形态都要认；对齐时 KSU_COMMIT 优先。
+    if [ "$KSU_ACTUAL_BRANCH" != "$KSU_EXPECT_REF" ] && [[ "$KSU_ACTUAL_HEAD" != "$KSU_EXPECT_REF"* ]]; then
+      echo "::error::KernelSU 分支未生效：期望 $KSU_EXPECT_REF，实际分支=$KSU_ACTUAL_BRANCH HEAD=$KSU_ACTUAL_HEAD"
       return 1
     fi
-    echo "KernelSU 分支校验通过：$BRANCH（HEAD=${KSU_ACTUAL_HEAD:0:9}）"
+    echo "KernelSU 分支校验通过：$KSU_EXPECT_REF（HEAD=${KSU_ACTUAL_HEAD:0:9}）"
 
     # 终极防线：直接看源码有没有 ksu_patch_text。分支名/提交号都可能骗人，
     # 但"这段内核里到底有没有在运行时改写 context_write/access_write/

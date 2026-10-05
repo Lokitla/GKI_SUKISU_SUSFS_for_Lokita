@@ -323,7 +323,9 @@ jobs:
 
   build-custom-kernel:
     name: "${{ matrix.kernel_full }}-${{ needs.resolve-version.outputs.android_version }}-${{ matrix.os_patch_level }}"
-    needs: resolve-version
+    needs: [resolve-version, get-ksu-manager]
+    # 管理器拉取失败时不阻塞内核构建（ksuCommit 为空则内核跟随 main HEAD）
+    if: ${{ !cancelled() && needs.resolve-version.result == 'success' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.resolve-version.outputs.matrix) }}
@@ -336,6 +338,9 @@ jobs:
       os_patch_level: ${{ matrix.os_patch_level }}
       revision: "r1"
       ksu_variant: ${{ inputs.kernelsu_variant }}
+      # 内核侧 KernelSU 检出到所选 Manager 构建的同一提交，
+      # 使内核 KSU 版本与拉取的管理器安装包严格一致（BakaSU 生效）
+      ksu_commit: ${{ needs.get-ksu-manager.outputs.ksuCommit }}
       version: ${{ inputs.version || '' }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}

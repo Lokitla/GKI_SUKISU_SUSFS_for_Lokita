@@ -27,6 +27,11 @@ permissions:
       ksu_variant:
         required: true
         type: string
+      ksu_commit:
+        description: "对齐用：内核 KernelSU 检出到该提交（所选官方 Manager 构建的同一提交；留空跟随上游 main HEAD）"
+        required: false
+        type: string
+        default: ""
       ksu_mode:
         description: "KernelSU 模式：关闭=正常集成 KernelSU / 禁用KSU=不集成任何 KernelSU 代码（SUSFS 的启停由 enable_susfs 独立控制）"
         required: false
@@ -347,6 +352,8 @@ jobs:
         DROIDSPACES_NTSYNC: ${{ inputs.droidspaces_ntsync }}
         ARTIFACT_UPLOAD_MODE: ${{ inputs.artifact_upload_mode }}
         USE_BBR: ${{ inputs.use_bbr }}
+        # BakaSU 对齐：内核 KernelSU 检出到所选 Manager 构建的同一提交（空=main HEAD）
+        KSU_COMMIT: ${{ inputs.ksu_commit }}
         # SUSFS 原始补丁探测：apply.sh 是 build_kernel.sh 的 bash 子进程，
         # 这三个开关在这里给出才能一路透到 apply.sh；缺失的话 apply.sh 里
         # ${SUSFS_RAW_PROBE:-false} 恒为 false，探测会静默退化成常规构建。

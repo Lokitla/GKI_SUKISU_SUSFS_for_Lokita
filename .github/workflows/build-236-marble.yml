@@ -70,6 +70,9 @@ concurrency:
 jobs:
   build-marble:
     name: "5.10.236-android12-2025-05"
+    needs: get-ksu-manager
+    # 管理器拉取失败时不阻塞内核构建（ksuCommit 为空则内核跟随 main HEAD）
+    if: ${{ !cancelled() }}
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
@@ -79,6 +82,8 @@ jobs:
       os_patch_level: "2025-05"
       revision: "r1"
       ksu_variant: "BakaSU"
+      # 内核对齐：KernelSU 检出到所选 Manager 构建同一提交（BakaSU 生效）
+      ksu_commit: ${{ needs.get-ksu-manager.outputs.ksuCommit }}
       # ksu_mode 不传：build.yml 默认「关闭」= 正常集成 KernelSU
       version: "5.10.236-android12-9-00003-gfb24cf99ad97-ab14313284"
       build_time: "Tue Oct 21 03:03:12 UTC 2025"
