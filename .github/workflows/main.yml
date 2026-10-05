@@ -38,14 +38,14 @@ on:
           - SukiSU
           - SukiSU(40726)
           - SukiSU(40548)
-          - ReSukiSU
+          - BakaSU
           - Official
           # Next 变体已在 build.py 与 kernel-custom.yml 支持（build.py:32 / kernel-custom.yml:27-32），
           # 但 main.yml 手动入口未启用：其 workflow_dispatch 的 input 名额有限，
-          # 且默认 ReSukiSU 是发布通道，混入 Next（独立分支、无 config KPM）易误导用户。
+          # 且默认 BakaSU 是发布通道，混入 Next（独立分支、无 config KPM）易误导用户。
           # 需要 Next 请走「内核构建 - Android 1x (自定义)」入口或本地 build.py。
           #- Next
-        default: ReSukiSU
+        default: BakaSU
       enable_susfs:
         description: "集成 SUSFS"
         required: false
@@ -87,7 +87,7 @@ on:
         type: boolean
         default: true
       export_susfs_patches:
-        description: "收集 SUSFS 集成补丁（仅 SukiSU / ReSukiSU）"
+        description: "收集 SUSFS 集成补丁（仅 SukiSU / BakaSU）"
         type: boolean
         default: true
 
@@ -468,9 +468,9 @@ jobs:
 
   # ==================== 收集 SUSFS 集成补丁 ====================
   # 汇总各构建任务导出的 SUSFS 集成补丁，打成一个 zip 供 Release 分发
-  # 仅 SukiSU / ReSukiSU 且启用 SUSFS 时有产物
+  # 仅 SukiSU / BakaSU 且启用 SUSFS 时有产物
   collect-susfs-patches:
-    if: ${{ !cancelled() && inputs.export_susfs_patches && inputs.enable_susfs && (inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'ReSukiSU') }}
+    if: ${{ !cancelled() && inputs.export_susfs_patches && inputs.enable_susfs && (inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'BakaSU') }}
     runs-on: ubuntu-24.04
     needs:
       - build-a12-5-10
@@ -668,7 +668,7 @@ jobs:
             "Next")      KSU_NAME="KernelSU-Next" ;;
             "Official")  KSU_NAME="KernelSU" ;;
             "SukiSU"|"SukiSU(40726)"|"SukiSU(40548)") KSU_NAME="SukiSU" ;;
-            "ReSukiSU")  KSU_NAME="ReSukiSU" ;;
+            "BakaSU")  KSU_NAME="BakaSU" ;;
           esac
           echo "KSU_NAME=$KSU_NAME" >> $GITHUB_ENV
 
@@ -681,10 +681,10 @@ jobs:
           # 功能开关显示
           echo "LZ4_STATUS=${{ inputs.use_zram && '开启' || '未开启' }}" >> $GITHUB_ENV
           echo "BBG_STATUS=${{ inputs.use_bbg && '支持' || '不支持' }}" >> $GITHUB_ENV
-          # KPM 只有 SukiSU 变体提供。ReSukiSU / Official / Next 的内核 Kconfig 里
+          # KPM 只有 SukiSU 变体提供。BakaSU / Official / Next 的内核 Kconfig 里
           # 没有 config KPM，构建脚本会把 KPM 阶段整段跳过，这里如实反映——
           # 否则 Release 列表会挂着「支持（已修补镜像）」，实际却加载不了 KPM 模块。
-          if [[ "${{ inputs.kernelsu_variant }}" == "ReSukiSU" ]] \
+          if [[ "${{ inputs.kernelsu_variant }}" == "BakaSU" ]] \
              || [[ "${{ inputs.kernelsu_variant }}" == "Official" ]] \
              || [[ "${{ inputs.kernelsu_variant }}" == "Next" ]]; then
             echo "KPM_STATUS=不支持（变体未提供 KPM）" >> $GITHUB_ENV
@@ -697,7 +697,7 @@ jobs:
           fi
 
           # Hook 类型
-          if [ "${{ inputs.kernelsu_variant }}" = "SukiSU" ] || [ "${{ inputs.kernelsu_variant }}" = "SukiSU(40726)" ] || [ "${{ inputs.kernelsu_variant }}" = "SukiSU(40548)" ] || [ "${{ inputs.kernelsu_variant }}" = "ReSukiSU" ]; then
+          if [ "${{ inputs.kernelsu_variant }}" = "SukiSU" ] || [ "${{ inputs.kernelsu_variant }}" = "SukiSU(40726)" ] || [ "${{ inputs.kernelsu_variant }}" = "SukiSU(40548)" ] || [ "${{ inputs.kernelsu_variant }}" = "BakaSU" ]; then
             echo "HOOK_TYPE=SUSFS Inline Hooks" >> $GITHUB_ENV
           else
             echo "HOOK_TYPE=KPROBE Hooks" >> $GITHUB_ENV
@@ -759,7 +759,7 @@ jobs:
                 BRANCH="builtin"
               fi
               ;;
-            "ReSukiSU") BRANCH="main" ;;
+            "BakaSU") BRANCH="main" ;;
             "Next") BRANCH="dev" ;;
             *) echo "错误: 未知变体" >&2; exit 1 ;;
           esac
@@ -774,7 +774,7 @@ jobs:
             "Official") REPO_URL="https://github.com/tiann/KernelSU.git"; REPO_URL2="tiann/KernelSU" ;;
             "Next") REPO_URL="https://github.com/KernelSU-Next/KernelSU-Next.git"; REPO_URL2="KernelSU-Next/KernelSU-Next" ;;
             "SukiSU"|"SukiSU(40726)"|"SukiSU(40548)") REPO_URL="https://github.com/SukiSU-Ultra/SukiSU-Ultra.git"; REPO_URL2="SukiSU-Ultra/SukiSU-Ultra" ;;
-            "ReSukiSU") REPO_URL="https://github.com/ReSukiSU/ReSukiSU.git"; REPO_URL2="ReSukiSU/ReSukiSU" ;;
+            "BakaSU") REPO_URL="https://github.com/Baka-SU/BakaSU.git"; REPO_URL2="Baka-SU/BakaSU" ;;
           esac
 
           if [ "${{ inputs.kernelsu_variant }}" = "SukiSU" ] && [ -f "config/config" ]; then
@@ -906,7 +906,7 @@ jobs:
           | \`boot.img\` / \`boot-gz.img\` / \`boot-lz4.img\` | 可直接刷入的 boot 镜像（boot-lz4 仅在 Image.lz4 重建成功时产出，否则仅有前两者） |
           | \`*.apk\` | KernelSU 管理器 |
           | \`susfs-*.zip\` | SUSFS 配套模块 |
-          | \`SUSFS-Patches-*.zip\` | SUSFS 集成补丁（仅 SukiSU / ReSukiSU，供自行编译内核使用） |
+          | \`SUSFS-Patches-*.zip\` | SUSFS 集成补丁（仅 SukiSU / BakaSU，供自行编译内核使用） |
 
           > [!IMPORTANT]
           > 刷入前请备份原厂 Boot 镜像。
@@ -970,7 +970,7 @@ jobs:
 
       # ==================== 生成版本标签 ====================
       # tag 形如 <SUSFS版本>-r<N>-<变体>。
-      # 变体后缀是必须的：ReSukiSU 与 SukiSU 各有独立的定时检测工作流，两路若共用
+      # 变体后缀是必须的：BakaSU 与 SukiSU 各有独立的定时检测工作流，两路若共用
       # 同一套 -rN 序列，后发那次会算出已存在的 tag，gh release create 失败、
       # 该次全部产物静默丢失。所以按变体各自计数。
       - name: 生成版本标签

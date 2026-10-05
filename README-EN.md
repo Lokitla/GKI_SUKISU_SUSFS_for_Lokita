@@ -113,7 +113,7 @@ When build scope is "all versions" or "LTS only", the build target is ignored.
 
 | Feature | Description | Default |
 |---|---|---|
-| KernelSU variant | `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` / `Next` | **`ReSukiSU`** |
+| KernelSU variant | `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `BakaSU` / `Official` / `Next` | **`BakaSU`** |
 | SUSFS | SUSFS patch set with Inline Hook support | On |
 | KPM | Patch `Image` after build to load KPM modules | `patched` ※ |
 | ZRAM / LZ4KD | ZRAM enhancement (LZ4KD / LZ4K_OPLUS) | On |
@@ -199,7 +199,7 @@ limitation, not a configuration problem:
 ### Three common pitfalls
 
 **1. KPM does nothing on the default variant.** KPM is only provided by the SukiSU
-variant; `ReSukiSU` / `Official` / `Next` have no `config KPM` in their kernel Kconfig.
+variant; `BakaSU` / `Official` / `Next` have no `config KPM` in their kernel Kconfig.
 The relevant stages are skipped automatically — the build does not fail, but the kernel
 cannot load KPM modules. Switch the variant back to `SukiSU` if you need KPM.
 
@@ -277,12 +277,12 @@ half-applied ZRAM patch that breaks GKI defconfig validation.
 
 ## Upstream update auto trigger
 
-ReSukiSU and SukiSU ship from two unrelated upstream repositories with their own release
+BakaSU (formerly ReSukiSU) and SukiSU ship from two unrelated upstream repositories with their own release
 cadences, so auto-triggering is split into **two independent workflows**:
 
 | Workflow | Upstream watched | Baseline branch | Variant built | Schedule (UTC) |
 |---|---|---|---|---|
-| `.github/workflows/Auto_Trigger_ReSukiSU.yml` | [ReSukiSU/ReSukiSU](https://github.com/ReSukiSU/ReSukiSU) `main` | `sha-resukisu` | `ReSukiSU` | every 3 days at 00:00 |
+| `.github/workflows/Auto_Trigger_BakaSU.yml` | [Baka-SU/BakaSU](https://github.com/Baka-SU/BakaSU) `main` | `sha-resukisu` (legacy name retained) | `BakaSU` | every 3 days at 00:00 |
 | `.github/workflows/Auto_Trigger_SukiSU.yml` | [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) `main` | `sha-sukisu` | `SukiSU` | every 3 days at 12:00 |
 
 The two are offset by 12 hours so they never contend for runner concurrency and so the two
@@ -303,8 +303,8 @@ Defaults to "all versions", expanding the **auto slim matrix of 19 kernel versio
 > Sharing a single `-rN` sequence would let the second release compute an already-existing
 > tag — `gh release create` would then fail and that run's artifacts would be silently lost.
 
-> **The ReSukiSU workflow fires a full matrix build the first time it runs**, because its
-> `sha-resukisu` baseline does not exist yet. To establish the baseline without building,
+> **The BakaSU workflow fires a full matrix build the first time it runs**, because its
+> `sha-resukisu` (retained legacy branch name) baseline does not exist yet. To establish the baseline without building,
 > run it manually once with `build_scope` set to "no build".
 > The SukiSU workflow reuses the existing `sha-sukisu` branch, which already holds a
 > SukiSU-Ultra commit, so it will not misfire.
@@ -357,7 +357,7 @@ Supports all 47 stages, resume from a stage (`--from`) and re-run a single stage
 | `.github/workflows/kernel-a1*.yml` | Per-Android-version standalone entries |
 | `.github/workflows/kernel-custom.yml` | Custom single-version entry |
 | `.github/workflows/build-236-marble.yml` | **Personal**: fixed build for Redmi Note 12 Turbo |
-| `.github/workflows/Auto_Trigger_ReSukiSU.yml` | Detects ReSukiSU upstream updates and triggers builds (ReSukiSU variant) |
+| `.github/workflows/Auto_Trigger_BakaSU.yml` | Detects BakaSU upstream updates and triggers builds (BakaSU variant) |
 | `.github/workflows/Auto_Trigger_SukiSU.yml` | Detects SukiSU upstream updates and triggers builds (SukiSU variant) |
 | `.github/workflows/get-manager.yml` | Fetches manager APKs |
 | `.github/workflows/update-pages.yml` | Updates `data/` and deploys Pages |

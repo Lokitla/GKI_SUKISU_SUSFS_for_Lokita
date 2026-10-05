@@ -105,7 +105,7 @@ GitHub Actions  ──┐
 
 | 能力 | 说明 | 默认 |
 |---|---|---|
-| KernelSU 变体 | `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `ReSukiSU` / `Official` / `Next` | **`ReSukiSU`** |
+| KernelSU 变体 | `SukiSU` / `SukiSU(40726)` / `SukiSU(40548)` / `BakaSU` / `Official` / `Next` | **`BakaSU`** |
 | SUSFS | 集成 SUSFS 补丁集，支持 Inline Hook | 开启 |
 | KPM | 编译后修补 Image 以加载 KPM 模块 | `patched`（开启并修补）※ |
 | ZRAM / LZ4KD | ZRAM 增强算法（LZ4KD / LZ4K_OPLUS） | 开启 |
@@ -182,7 +182,7 @@ GitHub Actions  ──┐
 
 ### 三个容易踩的坑
 
-**1. KPM 在默认变体下不生效。** KPM 只有 SukiSU 变体提供，`ReSukiSU` / `Official` /
+**1. KPM 在默认变体下不生效。** KPM 只有 SukiSU 变体提供，`BakaSU` / `Official` /
 `Next` 的内核 Kconfig 里没有 `config KPM`。默认变体下相关阶段自动跳过——构建不中断，
 但内核加载不了 KPM 模块。需要 KPM 请把变体切回 `SukiSU`。
 
@@ -252,12 +252,12 @@ GitHub Actions  ──┐
 
 ## 上游更新自动触发
 
-ReSukiSU 与 SukiSU 是两个互不相干的上游仓库，各有独立的更新节奏，
+BakaSU（上游由 ReSukiSU 更名而来）与 SukiSU 是两个互不相干的上游仓库，各有独立的更新节奏，
 因此拆成**两个各自独立、互不影响**的工作流：
 
 | 工作流 | 检测的上游 | 记录的基线分支 | 构建变体 | 定时（UTC） |
 |---|---|---|---|---|
-| `.github/workflows/Auto_Trigger_ReSukiSU.yml` | [ReSukiSU/ReSukiSU](https://github.com/ReSukiSU/ReSukiSU) `main` | `sha-resukisu` | `ReSukiSU` | 每 3 天 00:00 |
+| `.github/workflows/Auto_Trigger_BakaSU.yml` | [Baka-SU/BakaSU](https://github.com/Baka-SU/BakaSU) `main` | `sha-resukisu`（沿用旧名） | `BakaSU` | 每 3 天 00:00 |
 | `.github/workflows/Auto_Trigger_SukiSU.yml` | [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) `main` | `sha-sukisu` | `SukiSU` | 每 3 天 12:00 |
 
 两者时刻错开 12 小时，避免同时抢占 Runner 并发、也让两版发布时间好区分。
@@ -278,7 +278,7 @@ ReSukiSU 与 SukiSU 是两个互不相干的上游仓库，各有独立的更新
 > 若两路共用一套 `-rN` 序列，后发那次会算出已存在的 tag，
 > `gh release create` 失败、该次产物全部静默丢失。
 
-> **ReSukiSU 那条首次启用会立刻触发一轮全矩阵构建** —— `sha-resukisu` 分支
+> **BakaSU 那条首次启用会立刻触发一轮全矩阵构建** —— `sha-resukisu` 分支（历史分支名保留）
 > 此前不存在，首次运行视为「有更新」。只想建基线不想编的话，先手动跑一次它
 > 并把 `build_scope` 选成「不构建」。
 > SukiSU 那条沿用既有的 `sha-sukisu` 分支，里面已是 SukiSU-Ultra 的提交号，不会误触发。
@@ -329,7 +329,7 @@ python3 build.py --android android12 --kernel 5.10 --sub-level 236 \
 | `.github/workflows/kernel-a1*.yml` | 按 Android 版本拆分的独立入口 |
 | `.github/workflows/kernel-custom.yml` | 自定义单版本入口 |
 | `.github/workflows/build-236-marble.yml` | **自用**：Redmi Note 12 Turbo 固定构建 |
-| `.github/workflows/Auto_Trigger_ReSukiSU.yml` | 检测 ReSukiSU 上游更新并自动触发（ReSukiSU 变体） |
+| `.github/workflows/Auto_Trigger_BakaSU.yml` | 检测 BakaSU 上游更新并自动触发（BakaSU 变体） |
 | `.github/workflows/Auto_Trigger_SukiSU.yml` | 检测 SukiSU 上游更新并自动触发（SukiSU 变体） |
 | `.github/workflows/get-manager.yml` | 抓取管理器 APK |
 | `.github/workflows/update-pages.yml` | 更新 `data/` 并部署 Pages |

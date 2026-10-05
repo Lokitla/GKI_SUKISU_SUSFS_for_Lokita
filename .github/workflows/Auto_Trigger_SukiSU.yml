@@ -4,17 +4,17 @@
 # 流程：拉取 SukiSU-Ultra/SukiSU-Ultra main 最新提交号 → 与 sha 分支记录的旧值
 #       比对 → 有更新则回写 sha 分支，并按 build_scope 触发构建。
 #
-# 与 Auto_Trigger_ReSukiSU.yml 是一对：两者逻辑相同，差别只在「检测哪个上游仓库、
-# 回写哪个 sha 分支、用哪个变体构建、什么时刻跑」。拆开的原因是 ReSukiSU 与
+# 与 Auto_Trigger_BakaSU.yml 是一对：两者逻辑相同，差别只在「检测哪个上游仓库、
+# 回写哪个 sha 分支、用哪个变体构建、什么时刻跑」。拆开的原因是 BakaSU 与
 # SukiSU 上游是两个独立仓库、互不相关的发布节奏，合并成一个 workflow 时只能
 # 检测其中一个却构建另一个（语义错位），且两条本领跑也无法各自设日程。
 #
-# 定期日程刻意与 ReSukiSU 那条错开 12 小时：两路同时开跑会互相抢 Actions 并发
+# 定期日程刻意与 BakaSU 那条错开 12 小时：两路同时开跑会互相抢 Actions 并发
 # 配额，也会让 Release 时间挤在一起难分辨。
 #
 # 本条沿用既有的 sha 分支（拆分前的那个单文件版用的就是它），里面记的正是
 # SukiSU-Ultra 的提交号，所以拆过来后首次运行能读到已有基线、不会误触发一次构建。
-# ReSukiSU 那条用新的 sha-resukisu 分支，首次跑会触发一轮构建（那边注释有说明）。
+# BakaSU 那条沿用历史分支名 sha-resukisu，首次跑会触发一轮构建（那边注释有说明）。
 #
 # 关于默认范围：默认跑「全部版本」，即 5.10 / 5.15 / 6.1 / 6.6 的维护矩阵。
 #
@@ -31,11 +31,11 @@
 # 手动直接触发时为默认的 false → full。
 #
 # 关于 SukiSU 系变体：main.yml 的 kernelsu_variant 支持 SukiSU / SukiSU(40726) /
-# SukiSU(40548) / ReSukiSU / Official，本条固定用 SukiSU 并跟随 builtin 之外的
+# SukiSU(40548) / BakaSU / Official，本条固定用 SukiSU 并跟随 builtin 之外的
 # 自动选择（ksu_branch_mode 由 main.yml 默认 auto 决定）。
 #
 # 关于 6.12：
-#   6.12 与最新 SukiSU 存在兼容问题（详见 Auto_Trigger_ReSukiSU.yml 文件头关于
+#   6.12 与最新 SukiSU 存在兼容问题（详见 Auto_Trigger_BakaSU.yml 文件头关于
 #   KPM 与 cb_mutex 的说明），因此不在 auto 精简矩阵内。需要 6.12 请手动触发
 #   「内核构建 - Android 16 (6.12)」入口。
 # =============================================================================
@@ -43,7 +43,7 @@ name: Auto Trigger on SukiSU Update
 
 on:
   schedule:
-    # 每三天 UTC 12:00 检查一次（与 ReSukiSU 那条的 UTC 00:00 错开）。
+    # 每三天 UTC 12:00 检查一次（与 BakaSU 那条的 UTC 00:00 错开）。
     # GitHub 的 cron 不保证准点，高峰期可能延后数十分钟，属正常现象。
     - cron: '0 12 */3 * *'
   workflow_dispatch:
@@ -60,7 +60,7 @@ on:
           - 全部版本
           - 单版本冒烟
           # 没有「固定 5.10.236」：那条走 build-236-marble.yml，其参数全部写死为
-          # ReSukiSU 自用取向，对本变体不成立。需要时请手动触发那一个 workflow。
+          # BakaSU 自用取向，对本变体不成立。需要时请手动触发那一个 workflow。
           - 不构建
       include_612:
         description: 尝试把 Android 16 (6.12) 纳入矩阵。注意：6.12 不在 auto 精简矩阵内，勾选后自动构建仍会跳过 6.12；构建 6.12 请手动触发「内核构建 - Android 16 (6.12)」入口

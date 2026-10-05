@@ -16,10 +16,10 @@ on:
           - SukiSU
           - SukiSU(40726)
           - SukiSU(40548)
-          - ReSukiSU
+          - BakaSU
           - Official
           - Next
-        default: ReSukiSU
+        default: BakaSU
       enable_susfs:
         description: "集成 SUSFS"
         required: false

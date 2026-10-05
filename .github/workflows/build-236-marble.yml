@@ -1,10 +1,10 @@
-name: 自用构建-5.10.236（ReSukiSU / marble）
+name: 自用构建-5.10.236（BakaSU / marble）
 
 # =============================================================================
 # 【自用】参数全写死，不带任何 inputs，触发即跑固定配置。
 #   适配机型：Redmi Note 12 Turbo（代号 marble），android12 / 5.10.236。
 #   启用项：
-#     - ReSukiSU + SUSFS（一并导出补丁）
+#     - BakaSU + SUSFS（一并导出补丁）
 #     - zram（LZ4KD）
 #     - 网络增强：IPSet 全类型 + BBR + FQ/FQ_CODEL + IPv6 NAT + 附加拥塞算法
 #     - Re-Kernel（rek）启用
@@ -21,7 +21,7 @@ name: 自用构建-5.10.236（ReSukiSU / marble）
 #   use_rekernel / use_net_enhance / use_nomount 三项从 false 改为 true。
 #
 # 三项开关在 scripts/build_kernel.sh 里都是纯布尔量、没有变体门控，
-# ReSukiSU 下会真实参与构建，不存在"写了但被跳过"的情况：
+# BakaSU 下会真实参与构建，不存在"写了但被跳过"的情况：
 #   use_rekernel     -> stage_apply_rekernel（build_kernel.sh:2187）
 #   use_net_enhance  -> stage_config_net_enhance（build_kernel.sh:2194）
 #                       内含写后校验：DEFAULT_BBR / IP_SET / NET_SCH_FQ 等
@@ -36,7 +36,7 @@ name: 自用构建-5.10.236（ReSukiSU / marble）
 # （stage_config_net_enhance 会写 CONFIG_DEFAULT_BBR=y），再开 use_bbr 只是
 # 让 config_kernel 阶段重复走一遍同样的写入，属于冗余。
 #
-# ReSukiSU 内核不提供 KPM，use_kpm 的「patched」不会写进 defconfig，
+# BakaSU 内核不提供 KPM，use_kpm 的「patched」不会写进 defconfig，
 # KPM 修补阶段也会被跳过——这是变体限制，不是配置失效。
 #
 # 不发 Release（这是刻意的设计，不是遗漏）：
@@ -49,10 +49,10 @@ name: 自用构建-5.10.236（ReSukiSU / marble）
 # 行为等同于留空（KPM 锚点为空时 build_kernel.sh 会回读 config/kpm_patch_sha256，
 # 等价于「始终跟随仓库锚点」，写死反而会漏掉上游变更带来的校验）。
 #
-# 注意：本文件被 .github/workflows/Auto_Trigger_ReSukiSU.yml 的「固定 5.10.236」
+# 注意：本文件被 .github/workflows/Auto_Trigger_BakaSU.yml 的「固定 5.10.236」
 # 分支硬引用（TARGET_WF），改名或删除前必须同步改那一行，否则自动触发会
 # 因找不到 workflow 而 404。
-# 本文件参数写死为 ReSukiSU 自用取向，所以只有 ReSukiSU 那条自动触发工作流提供这个选项。
+# 本文件参数写死为 BakaSU 自用取向，所以只有 BakaSU 那条自动触发工作流提供这个选项。
 # =============================================================================
 
 on:
@@ -78,7 +78,7 @@ jobs:
       sub_level: "236"
       os_patch_level: "2025-05"
       revision: "r1"
-      ksu_variant: "ReSukiSU"
+      ksu_variant: "BakaSU"
       # ksu_mode 不传：build.yml 默认「关闭」= 正常集成 KernelSU
       version: "5.10.236-android12-9-00003-gfb24cf99ad97-ab14313284"
       build_time: "Tue Oct 21 03:03:12 UTC 2025"
@@ -104,6 +104,6 @@ jobs:
     uses: ./.github/workflows/get-manager.yml
     secrets: inherit
     with:
-      kernelsu_variant: "ReSukiSU"
+      kernelsu_variant: "BakaSU"
       manager_spoofed: true
       manager_commit: ""

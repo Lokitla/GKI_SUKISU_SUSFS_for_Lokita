@@ -72,8 +72,8 @@ GKI_SUKISU_SUSFS_for_Lokita
     许可：仓库根 GPL-3.0；**kernel/ 目录单独为 GPL-2.0**（已核实 kernel/LICENSE）
           本仓库仅将其 kernel/ 部分编入内核，该部分按 GPL-2.0 适用，与内核许可一致
 
-  ReSukiSU/ReSukiSU
-    用途：KernelSU 变体（ReSukiSU）
+  Baka-SU/BakaSU
+    用途：KernelSU 变体（BakaSU）
     许可：仓库根 GPL-3.0；**kernel/ 目录单独为 GPL-2.0**（已核实 kernel/LICENSE）
           本仓库仅将其 kernel/ 部分编入内核，该部分按 GPL-2.0 适用，与内核许可一致
 

@@ -1,11 +1,12 @@
 # =============================================================================
-# ReSukiSU 上游更新检测 → 自动触发内核构建
+# BakaSU 上游更新检测 → 自动触发内核构建
 # -----------------------------------------------------------------------------
-# 流程：拉取 ReSukiSU/ReSukiSU main 最新提交号 → 与 sha-resukisu 分支记录的旧值
+# 跟踪分支沿用历史名 sha-resukisu（上游更名前叫 ReSukiSU，分支名不随仓库改名）。
+# 流程：拉取 Baka-SU/BakaSU main 最新提交号 → 与 sha-resukisu 分支记录的旧值
 #       比对 → 有更新则回写 sha-resukisu 分支，并按 build_scope 触发构建。
 #
 # 与 Auto_Trigger_SukiSU.yml 是一对：两者逻辑相同，差别只在「检测哪个上游仓库、
-# 回写哪个 sha 分支、用哪个变体构建、什么时刻跑」。拆开的原因是 ReSukiSU 与
+# 回写哪个 sha 分支、用哪个变体构建、什么时刻跑」。拆开的原因是 BakaSU 与
 # SukiSU 上游是两个独立仓库、互不相关的发布节奏，合并成一个 workflow 时只能
 # 检测其中一个却构建另一个（语义错位），且两条本领跑也无法各自设日程。
 #
@@ -35,14 +36,14 @@
 #   第一次构建必失败，要靠 COMPILE_MAX_ATTEMPTS 重试丢掉 ksu.fragment 才出包，
 #   每版多花约 18 分钟；现在早期闸门直接把 KPM_SUPPORTED 置 0 自动关闭。
 #   → KPM 在 6.12 上等于不可用，需要 KPM 只能用 ≤ 6.6 的内核。
-#   另：ReSukiSU / Official / Next 变体本身就不提供 KPM，build_kernel.sh 会
+#   另：BakaSU / Official / Next 变体本身就不提供 KPM，build_kernel.sh 会
 #   警告后跳过 —— 载荷里仍传 patched 是故意的，将来上游补齐时可自动生效。
 #
 # 首次启用注意：sha-resukisu 分支此前不存在，首次运行会视为「检测到新提交」
 # 并立刻触发一轮全矩阵构建。若只想建立基线、不想马上编，先手动跑一次本
 # workflow 并把 build_scope 选成「不构建」。
 # =============================================================================
-name: Auto Trigger on ReSukiSU Update
+name: Auto Trigger on BakaSU Update
 
 on:
   schedule:
@@ -85,7 +86,7 @@ permissions:
 # 同一时间只允许同一个变体的检测任务在跑，避免定时任务和手动触发互相踩。
 # group 名带变体，两条 workflow 互不阻塞。
 concurrency:
-  group: auto-trigger-resukisu
+  group: auto-trigger-bakasu
   cancel-in-progress: false
 
 jobs:
@@ -100,14 +101,14 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: 获取 ReSukiSU 最新提交号
+      - name: 获取 BakaSU 最新提交号
         id: get_sha
         run: |
           set -euo pipefail
-          LATEST_SHA=$(curl -fsSL https://api.github.com/repos/ReSukiSU/ReSukiSU/commits/main | jq -r '.sha')
+          LATEST_SHA=$(curl -fsSL https://api.github.com/repos/Baka-SU/BakaSU/commits/main | jq -r '.sha')
           # API 限流或仓库改名时会拿到空值/null，这时宁可不触发，也不要带着空提交号去构建
           if [[ -z "$LATEST_SHA" || "$LATEST_SHA" == "null" ]]; then
-            echo "::error::无法获取 ReSukiSU 最新提交号（API 限流或接口变更），本次跳过"
+            echo "::error::无法获取 BakaSU 最新提交号（API 限流或接口变更），本次跳过"
             exit 1
           fi
           echo "sha=$LATEST_SHA" >> "$GITHUB_OUTPUT"
@@ -173,7 +174,7 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add latest_sha.txt
-          git commit -m "chore(sha): 更新 ReSukiSU 最新提交号为 ${{ steps.get_sha.outputs.sha }}" || exit 0
+          git commit -m "chore(sha): 更新 BakaSU 最新提交号为 ${{ steps.get_sha.outputs.sha }}" || exit 0
           git push origin "$SHA_BRANCH"
 
       - name: 触发构建工作流
@@ -224,7 +225,7 @@ jobs:
                   ref: $ref,
                   inputs: {
                     release_type: $release_type,
-                    kernelsu_variant: "ReSukiSU",
+                    kernelsu_variant: "BakaSU",
                     enable_susfs: true,
                     use_kpm: "patched (开启并修补)",
                     droidspaces: "不启用",
@@ -248,7 +249,7 @@ jobs:
               ;;
             "固定 5.10.236")
               # 走专用的固定 workflow（build-236-marble.yml）：那边的参数全部写死，
-              # 面向 Redmi Note 12 Turbo（marble），配置为 ReSukiSU + zram + 网络
+              # 面向 Redmi Note 12 Turbo（marble），配置为 BakaSU + zram + 网络
               # 增强 + rek + nomount。不需要传任何 inputs，所以载荷只有 ref。
               # 产物留在 Actions artifacts，不发 Release —— 它没有经过负责
               # gh release create 的 main.yml 编排层。
@@ -266,7 +267,7 @@ jobs:
                   ref: $ref,
                   inputs: {
                     kernel_version: "5.10",
-                    kernelsu_variant: "ReSukiSU",
+                    kernelsu_variant: "BakaSU",
                     enable_susfs: true,
                     use_kpm: "patched (开启并修补)",
                     droidspaces: "不启用",

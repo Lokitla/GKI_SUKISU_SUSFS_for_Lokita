@@ -22,7 +22,7 @@ set -eo pipefail
 : "${KERNEL_VERSION:=6.1}"
 : "${SUB_LEVEL:=124}"
 : "${OS_PATCH_LEVEL:=2025-02}"
-: "${KSU_VARIANT:=ReSukiSU}"
+: "${KSU_VARIANT:=BakaSU}"
 : "${KSU_MODE:=关闭}"
 : "${VERSION:=}"
 : "${REVISION:=}"
@@ -934,7 +934,7 @@ stage_resolve_ksu_branch() {
   BRANCH_MODE="${KSU_BRANCH_MODE:-auto}"
 
   case "$variant_input" in
-    "Official"|"ReSukiSU")
+    "Official"|"BakaSU")
       BRANCH="main"
       ;;
     "SukiSU")
@@ -1020,7 +1020,7 @@ stage_resolve_ksu_branch() {
   # 这里提前拦掉，并直说该换哪个变体。
   if [ "$variant_input" = "Next" ] && [ "${ENABLE_SUSFS}" = "true" ]; then
     echo "::error::KernelSU-Next（dev 分支）未提供 SUSFS 开关，不能同时勾选「集成 SUSFS」"
-    echo "::error::需要 SUSFS 请改用 ReSukiSU 或 SukiSU（auto 模式会自动选 builtin）"
+    echo "::error::需要 SUSFS 请改用 BakaSU 或 SukiSU（auto 模式会自动选 builtin）"
     return 1
   fi
 
@@ -1040,7 +1040,7 @@ stage_resolve_ksu_branch() {
   fi
 
   # BRANCH 为纯 ref（分支名或 commit hash），不再带 "-s" 前缀。
-  # SukiSU/KernelSU 官方/ReSukiSU 的 setup.sh 用法是 `setup.sh [--cleanup | <commit-or-tag>]`，
+  # SukiSU/KernelSU 官方/BakaSU 的 setup.sh 用法是 `setup.sh [--cleanup | <commit-or-tag>]`，
   # 即 ref 作为位置参数传入。此前写成 "bash setup.sh -s builtin" 会把 "-s" 本身当作
   # 位置参数，git checkout "-s builtin" 报 unknown switch 后静默回退默认分支，
   # 导致"说要 builtin 实际编了 main"。调用侧统一改回 `bash -s "$BRANCH"`。
@@ -1181,12 +1181,12 @@ stage_add_kernelsu() {
         fi
       fi
       ;;
-    "ReSukiSU")
-      echo "添加 ReSukiSU..."
+    "BakaSU")
+      echo "添加 BakaSU..."
       # P1-2 修复：下载后显式校验再执行（不钉 commit，跟随上游 main 分支）
-      KSU_SETUP="https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh"
-      fetch_ksu_setup "$KSU_SETUP" "ReSukiSU" || return 1
-      bash -s "$BRANCH" < /tmp/ksu_setup.sh || { echo "::error::ReSukiSU setup.sh 执行失败"; return 1; }
+      KSU_SETUP="https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh"
+      fetch_ksu_setup "$KSU_SETUP" "BakaSU" || return 1
+      bash -s "$BRANCH" < /tmp/ksu_setup.sh || { echo "::error::BakaSU setup.sh 执行失败"; return 1; }
       ;;
     *)
       if [ -z "$LEGACY_SUKISU_CONFIG" ]; then
@@ -1221,7 +1221,7 @@ stage_add_kernelsu() {
     # 但"这段内核里到底有没有在运行时改写 context_write/access_write/
     # sel_open_handle_status"骗不了人——有就和 SUSFS 的 my_* 替换打架。
     #
-    # 例外：下游（ReSukiSU）官方为 SUSFS 做了共存适配——
+    # 例外：下游（BakaSU）官方为 SUSFS 做了共存适配——
     #   kernel/tools/susfs_compat.mk 在 CONFIG_KSU_SUSFS 下检测
     #   security/selinux/hooks.c 是否含 SUSFS 注入的 ksu_selinux_hide_running，
     #   命中就加 -DKSU_COMPAT_HAS_SUSFS_FEATURE_SELINUX_HIDE，把 selinux_hide.c
@@ -1232,7 +1232,7 @@ stage_add_kernelsu() {
       if grep -q "KSU_COMPAT_HAS_SUSFS_FEATURE_SELINUX_HIDE" "$KSU_HIDE_SRC"; then
         echo "SELinux 兼容性校验通过：selinux_hide.c 的 ksu_patch_text 受 KSU_COMPAT_HAS_SUSFS_FEATURE_SELINUX_HIDE 包裹"
         echo "  SUSFS 补丁把 ksu_selinux_hide_running 注入 hooks.c 后，susfs_compat.mk 会定义该宏，"
-        echo "  上述补丁代码在编译期被 #ifndef 剔除（ReSukiSU 官方共存机制，非冲突）"
+        echo "  上述补丁代码在编译期被 #ifndef 剔除（BakaSU 官方共存机制，非冲突）"
       elif grep -q "ksu_patch_text" "$KSU_HIDE_SRC"; then
         echo "::error::KernelSU 源码含 ksu_patch_text（main 血统），与 SUSFS 的 SELinux 补丁冲突，隐藏必然失效"
         echo "::error::请切到 builtin 分支；确知后果要继续请设 ALLOW_SUSFS_WITH_MAIN=1"
@@ -1243,14 +1243,14 @@ stage_add_kernelsu() {
     fi
   fi
 
-  # KPM 是 SukiSU-Ultra 独有的模块加载功能，KernelSU 官方 / ReSukiSU / KernelSU-Next
+  # KPM 是 SukiSU-Ultra 独有的模块加载功能，KernelSU 官方 / BakaSU / KernelSU-Next
   # 都没移植（它们的 Kconfig 里没有 `config KPM`）。此前这个组合要到 config_kernel
   # 阶段才报错，而那时克隆、打补丁、写 defconfig 全都跑完了——一次白等十几分钟。
   # 这里在 KernelSU 源码就位后立刻查。
   #
   # 要区分两种「没有 KPM」：
-  #   1) 变体本身就不提供（ReSukiSU / Official / Next）——这是上游的既定事实，
-  #      警告后跳过即可。默认变体已切到 ReSukiSU，而 use_kpm 默认仍是「patched」，
+  #   1) 变体本身就不提供（BakaSU / Official / Next）——这是上游的既定事实，
+  #      警告后跳过即可。默认变体已切到 BakaSU，而 use_kpm 默认仍是「patched」，
   #      硬失败会让整条默认链路（含自动更新）一次都跑不起来。
   #   2) SukiSU 系却找不到 `config KPM`——那是异常（上游该有却没有），照旧报错。
   #
@@ -1259,7 +1259,7 @@ stage_add_kernelsu() {
   KPM_SUPPORTED=1
   if [ -d "KernelSU" ] && { [[ "${USE_KPM}" == enabled* ]] || [[ "${USE_KPM}" == patched* ]]; }; then
     case "${KSU_VARIANT}" in
-      ReSukiSU|Official|Next)
+      BakaSU|Official|Next)
         KPM_SUPPORTED=0
         echo "::warning::变体 ${KSU_VARIANT} 的内核不提供 KPM（Kconfig 里没有 config KPM）"
         echo "::warning::本次构建已按 ${USE_KPM} 请求 KPM，但 KPM 相关阶段会全部跳过："
@@ -1451,7 +1451,7 @@ stage_susfs_baseline() {
 
 # 条件执行（等价原工作流 if:）
 run_susfs_baseline() {
-  if [ "$EXPORT_SUSFS_PATCHES" = "true" ] && [ "$ENABLE_SUSFS" = "true" ] && [ "$KSU_MODE" != "禁用KSU" ] && { [ "$KSU_VARIANT" = "SukiSU" ] || [ "$KSU_VARIANT" = "ReSukiSU" ]; }; then
+  if [ "$EXPORT_SUSFS_PATCHES" = "true" ] && [ "$ENABLE_SUSFS" = "true" ] && [ "$KSU_MODE" != "禁用KSU" ] && { [ "$KSU_VARIANT" = "SukiSU" ] || [ "$KSU_VARIANT" = "BakaSU" ]; }; then
     stage_susfs_baseline "$@"
   else
     echo "跳过阶段: susfs_baseline（条件不满足）"
@@ -1527,11 +1527,11 @@ stage_apply_susfs() {
   fi
 }
 
-# ReSukiSU 的 KSU_COMPAT_HAS_SUSFS_FEATURE_SELINUX_HIDE 只能由 susfs_compat.mk
+# BakaSU 的 KSU_COMPAT_HAS_SUSFS_FEATURE_SELINUX_HIDE 只能由 susfs_compat.mk
 # 在编译 Makefile 解析时定义，触发条件是 security/selinux/hooks.c 里出现
 # ksu_selinux_hide_running（SUSFS 补丁注入）。add_kernelsu 阶段做静态检查时
 # SUSFS 还没打，看不出这个宏到底成不成立；只有补丁落地后复查 hooks.c 才抓得到
-# ——宏没定义时 ReSukiSU 的 ksu_patch_text 会照常编进来，和 SUSFS 的替换互相
+# ——宏没定义时 BakaSU 的 ksu_patch_text 会照常编进来，和 SUSFS 的替换互相
 # 踩踏，表现就是 SELinux 隐藏失效，且只在真机上才暴露。
 verify_susfs_selinux_compat() {
   # KERNEL_ROOT 下内核源码不一定在根：GKI 分支里实际在 <KERNEL_ROOT>/common。
@@ -1552,7 +1552,7 @@ verify_susfs_selinux_compat() {
   else
     echo "::warning::security/selinux/hooks.c 未找到 ksu_selinux_hide_running"
     echo "  SUSFS 的 SELinux 补丁可能没打上，或该 SUSFS 分支换了符号名"
-    echo "  结果：KSU_COMPAT_HAS_SUSFS_FEATURE_SELINUX_HIDE 不会被定义，ReSukiSU 的"
+    echo "  结果：KSU_COMPAT_HAS_SUSFS_FEATURE_SELINUX_HIDE 不会被定义，BakaSU 的"
     echo "  ksu_patch_text 会与 SUSFS 的 my_* 替换冲突，SELinux 隐藏可能失效"
   fi
 }
@@ -2451,10 +2451,10 @@ EOF
   fi
 
   # CONFIG_KPM=y 只在变体确实提供 KPM 时才写。KPM_SUPPORTED 由 stage_add_kernelsu
-  # 在源码就位后算好（那里已经对不支持的变体打过警告）。此前这里对 ReSukiSU / Next
+  # 在源码就位后算好（那里已经对不支持的变体打过警告）。此前这里对 BakaSU / Next
   # 一律 exit 1，与上一处重复拦一道，且把默认链路整个堵死。
   if [ "${KSU_MODE}" != "禁用KSU" ] \
-     && { [ "${KSU_VARIANT}" == "SukiSU" ] || [ "${KSU_VARIANT}" == "SukiSU(40726)" ] || [ "${KSU_VARIANT}" == "SukiSU(40548)" ] || [ "${KSU_VARIANT}" == "ReSukiSU" ] || [ "${KSU_VARIANT}" == "Next" ]; }; then
+     && { [ "${KSU_VARIANT}" == "SukiSU" ] || [ "${KSU_VARIANT}" == "SukiSU(40726)" ] || [ "${KSU_VARIANT}" == "SukiSU(40548)" ] || [ "${KSU_VARIANT}" == "BakaSU" ] || [ "${KSU_VARIANT}" == "Next" ]; }; then
     if { [[ "${USE_KPM}" == enabled* ]] || [[ "${USE_KPM}" == patched* ]]; } && [ "${KPM_SUPPORTED:-1}" = "1" ]; then
       echo "CONFIG_KPM=y" >> "$DEFCONFIG"
     fi
@@ -2464,12 +2464,12 @@ EOF
   if [[ ! "$CURRENT_SUB" =~ ^[0-9]+$ ]]; then
     CURRENT_SUB=99999
   fi
-  if [[ "${KSU_VARIANT}" == "ReSukiSU" && "${ANDROID_VERSION}" == "android13" && "${KERNEL_VERSION}" == "5.15" && "$CURRENT_SUB" -ge 74 && "$CURRENT_SUB" -le 137 ]]; then
+  if [[ "${KSU_VARIANT}" == "BakaSU" && "${ANDROID_VERSION}" == "android13" && "${KERNEL_VERSION}" == "5.15" && "$CURRENT_SUB" -ge 74 && "$CURRENT_SUB" -le 137 ]]; then
     {
       echo "CONFIG_KALLSYMS=y"
       echo "CONFIG_KALLSYMS_ALL=y"
     } >> "$DEFCONFIG"
-    # 修复 5.15.74~5.15.137: kallsyms_on_each_symbol 仅在 LIVEPATCH 下编译，导致 ReSukiSU 链接失败
+    # 修复 5.15.74~5.15.137: kallsyms_on_each_symbol 仅在 LIVEPATCH 下编译，导致 BakaSU 链接失败
     KALLSYMS_C="./common/kernel/kallsyms.c"
     if [ -f "$KALLSYMS_C" ] \
       && grep -qF 'int kallsyms_on_each_symbol' "$KALLSYMS_C" \
@@ -2492,7 +2492,7 @@ EOF
   # 这里用宏在编译期分流，让各版本都传对类型，不必按内核版本开关补丁。
   #
   # 两个文件名都要试（各变体命名不同，且不存在时跳过）：
-  #   lsm_hooks.c —— ReSukiSU / 官方系（Kbuild 里只在 < 6.8 时编，故实际不触发）
+  #   lsm_hooks.c —— BakaSU / 官方系（Kbuild 里只在 < 6.8 时编，故实际不触发）
   #   lsm_hook.c  —— SukiSU builtin（ksu.c 用 #include 无条件把它并进来，必触发）
   if [ "${KSU_MODE}" != "禁用KSU" ]; then
     for LSM_HOOKS_C in KernelSU/kernel/hook/lsm_hooks.c \

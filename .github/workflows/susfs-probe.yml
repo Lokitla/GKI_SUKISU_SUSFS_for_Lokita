@@ -43,12 +43,12 @@ on:
         required: true
         type: choice
         options:
-          - ReSukiSU
+          - BakaSU
           - SukiSU
           - SukiSU(40726)
           - SukiSU(40548)
           - Official
-        default: ReSukiSU
+        default: BakaSU
       sub_level_min:
         description: "最小子版本号（留空不限）"
         required: false

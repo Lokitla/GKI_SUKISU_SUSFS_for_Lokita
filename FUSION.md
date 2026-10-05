@@ -207,12 +207,12 @@ shell 逻辑的，日常维护不需要再运行它。
 把脚本里的 base64 常量解出来，实际行为是：
 
 ```
-UkVQT19OQU1FIDo9IFJlU3VraVNV  →  REPO_NAME := ReSukiSU
+UkVQT19OQU1FIDo9IEJha2FTVQ==  →  REPO_NAME := BakaSU
 QCQoY2FsbCBnaXRfYnJhbmNoKQ==  →  @$(call git_branch)
 TGluZ0x1bw==                  →  LingLuo
 ```
 
-即：把 `KernelSU/kernel/Kbuild` 里的 `REPO_NAME := ReSukiSU` 改成
+即：把 `KernelSU/kernel/Kbuild` 里的 `REPO_NAME := BakaSU` 改成
 `REPO_NAME := LingLuo`，把版本字符串里的 `@$(call git_branch)` 改成 `@LingLuo`，
 然后用 `git update-index --skip-worktree` 把这次改动从 git 状态里藏起来
 （`git status` / `git diff` 都看不到）。

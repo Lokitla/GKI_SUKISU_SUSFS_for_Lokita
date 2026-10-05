@@ -127,9 +127,9 @@ jobs:
             echo "This is the SukiSU(40548) variant"
             git clone https://github.com/SukiSU-Ultra/SukiSU-Ultra.git KernelSU
             git -C KernelSU checkout 3170a48c508f6330ea636c51835a84573fe56ef5
-          elif [ "$KSU_VARIANT" == "ReSukiSU" ]; then
-            echo "This is the ReSukiSU variant"
-            git clone https://github.com/ReSukiSU/ReSukiSU.git KernelSU
+          elif [ "$KSU_VARIANT" == "BakaSU" ]; then
+            echo "This is the BakaSU variant"
+            git clone https://github.com/Baka-SU/BakaSU.git KernelSU
           elif [ "$KSU_VARIANT" == "Official" ]; then
             echo "This is the Official"
             git clone https://github.com/tiann/KernelSU.git KernelSU
@@ -190,7 +190,7 @@ jobs:
             KSU_VERSION=40726
           elif [ "$KSU_VARIANT" == "SukiSU(40548)" ]; then
             KSU_VERSION=40548
-          elif [ "$KSU_VARIANT" == "ReSukiSU" ]; then
+          elif [ "$KSU_VARIANT" == "BakaSU" ]; then
             KSU_VERSION=$((30700 + KSU_GIT_VERSION))
           elif [ "$KSU_VARIANT" == "Official" ]; then
             KSU_VERSION=$((20000 + KSU_GIT_VERSION))
@@ -249,9 +249,9 @@ jobs:
             echo "SukiSU..."
             REPO="SukiSU-Ultra/SukiSU-Ultra"
             KSUM="manager"
-          elif [ "$KSU_VARIANT" == "ReSukiSU" ]; then
-            echo "ReSukiSU..."
-            REPO="ReSukiSU/ReSukiSU"
+          elif [ "$KSU_VARIANT" == "BakaSU" ]; then
+            echo "BakaSU..."
+            REPO="Baka-SU/BakaSU"
             KSUM="manager"
           elif [ "$KSU_VARIANT" == "Official" ]; then
             echo "KSU..."
@@ -312,7 +312,7 @@ jobs:
 
             case "$KSU_VARIANT" in
               "SukiSU") echo $((40000 + git_version - 2815)) ;;
-              "ReSukiSU") echo $((30700 + git_version)) ;;
+              "BakaSU") echo $((30700 + git_version)) ;;
               "Official") echo $((20000 + git_version)) ;;
               "Next") echo $((30000 + git_version)) ;;
               *) return 1 ;;
@@ -334,7 +334,7 @@ jobs:
             if [ "$KSU_VARIANT" == "Next" ]; then
               printf '%s' "$artifacts" | jq -r --arg name "$KSUM" --argjson sp "$JQ_SPOOFED" \
                 '.artifacts[] | select(.name == $name) | select($sp or ((.name | ascii_downcase) | contains("spoofed") | not)) | "\(.name)\t\(.archive_download_url)"'
-            elif [ "$KSU_VARIANT" == "ReSukiSU" ]; then
+            elif [ "$KSU_VARIANT" == "BakaSU" ]; then
               printf '%s' "$artifacts" | jq -r --argjson sp "$JQ_SPOOFED" \
                 '.artifacts[] | select(.name == "Manager-release" or ($sp and .name == "Spoofed-Manager-release")) | "\(.name)\t\(.archive_download_url)"'
             else
@@ -351,10 +351,10 @@ jobs:
 
           # ═══════════════════════════════════════════════════════════
           # 从 APK 文件名提取实际 versionCode
-          # 文件名格式：ReSukiSU_v4.2.0-rc2_35163-arm64-v8a-release.apk
+          # 文件名格式：BakaSU_v4.2.0-rc2_35163-arm64-v8a-release.apk
           #          KernelSU_v40924_20260929_arm64.apk
           # 取第一段 >=4 位数字（与「校验管理器 APK 版本」步骤同一口径）：
-          #   ReSukiSU_v4.2.0-rc2_35163-... → 35163
+          #   BakaSU_v4.2.0-rc2_35163-... → 35163
           #   KernelSU_v40924_20260929_... → 40924（不会误取日期 20260929）
           # ═══════════════════════════════════════════════════════════
           extract_apk_version() {
@@ -661,12 +661,12 @@ jobs:
           # 清理临时目录
           rm -rf "$CANDIDATE_BASE"
 
-          if [ "$KSU_VARIANT" == "ReSukiSU" ]; then
-            echo "仅保留 ReSukiSU arm64-v8a release 管理器..."
+          if [ "$KSU_VARIANT" == "BakaSU" ]; then
+            echo "仅保留 BakaSU arm64-v8a release 管理器..."
             find manager-artifacts -type f -name "*.apk" ! -name "*-arm64-v8a-release.apk" -delete
             find manager-artifacts -type f -name "*debug*.apk" -delete
             if ! find manager-artifacts -type f -name "*-arm64-v8a-release.apk" | grep -q .; then
-              echo "未找到 ReSukiSU arm64-v8a release 管理器。"
+              echo "未找到 BakaSU arm64-v8a release 管理器。"
               exit 1
             fi
             find manager-artifacts -type f -name "*.apk" -print

@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parent
 SCRIPT = ROOT / "scripts" / "build_kernel.sh"
 DATA_DIR = ROOT / "data"
 
-KSU_VARIANTS = ["SukiSU", "SukiSU(40726)", "SukiSU(40548)", "ReSukiSU", "Official", "Next"]
+KSU_VARIANTS = ["SukiSU", "SukiSU(40726)", "SukiSU(40548)", "BakaSU", "Official", "Next"]
 DROIDSPACES_CHOICES = ["不启用", "678", "123", "345"]
 ARTIFACT_MODES = ["上传全部", "仅 AnyKernel3"]
 # CLI 的 KPM 取值 → 与 Actions 下拉选项完全一致的文案，避免两边各说各话
@@ -191,8 +191,8 @@ def main():
     parser.add_argument("--sub-level", "-s", help="子版本号，如 124；省略则用最新")
     parser.add_argument("--os-patch", help="OS 补丁级别，如 2025-02")
     parser.add_argument("--revision", help="Android 12 revision（可选）")
-    parser.add_argument("--ksu-variant", default="ReSukiSU", choices=KSU_VARIANTS,
-                        metavar="变体", help="KernelSU 变体（默认 ReSukiSU）")
+    parser.add_argument("--ksu-variant", default="BakaSU", choices=KSU_VARIANTS,
+                        metavar="变体", help="KernelSU 变体（默认 BakaSU）")
     parser.add_argument("--ksu-branch-mode", default="auto", choices=["auto", "main", "builtin"],
                         metavar="{auto,main,builtin}",
                         help="SukiSU 拉取分支（仅 SukiSU 生效）：auto=跟随 SUSFS 开关自动选"

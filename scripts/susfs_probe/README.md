@@ -15,7 +15,7 @@
 
 保留 / 可选的适配（都与内核子版本无关，是否触发都记入结论）：
 
-- **KSU 侧（总是启用）**：SukiSU/ReSukiSU 尚未提供 su 会话 FD 接口时恢复旧版 exec hook。对 SukiSU 这是链接必需，`ksu_compat_applied` 对 SukiSU 会一直为 true；ReSukiSU 一般不触发。
+- **KSU 侧（总是启用）**：SukiSU/BakaSU 尚未提供 su 会话 FD 接口时恢复旧版 exec hook。对 SukiSU 这是链接必需，`ksu_compat_applied` 对 SukiSU 会一直为 true；BakaSU 一般不触发。
 - **SUSFS 侧（`susfs_side_fixes` 打开才启用，默认关）**：上游 5.10 补丁自身的两处编译缺陷（statfs.c 声明晚于使用、susfs.c 缺 `linux/security.h`）。不修的话 5.10 整条线都会是「failed 且 rej=0」，探测不出子版本边界；修了则结论字段 `susfs_side_fixes_applied` 会列出。
 
 ## 怎么跑
@@ -29,7 +29,7 @@ GitHub 只列出默认分支上存在的 `workflow_dispatch` 工作流，所以 
 | 输入 | 说明 |
 |------|------|
 | `kernel_version` | all 或某一个内核版本 |
-| `kernelsu_variant` | 默认 SukiSU（用 ShirkNeko fork 的补丁，缺分支时回退 simonpunk）；ReSukiSU / Official 用 simonpunk |
+| `kernelsu_variant` | 默认 SukiSU（用 ShirkNeko fork 的补丁，缺分支时回退 simonpunk）；BakaSU / Official 用 simonpunk |
 | `sub_level_min` / `sub_level_max` / `os_patch_levels` | 只重跑某个区间或某几个月份（不作用于 LTS，局部重跑请同时关掉 `include_lts`） |
 | `include_lts` | 是否连 `-lts` 分支一起探测 |
 | `susfs_side_fixes` | 是否保留上面说的 SUSFS 侧修复 |
