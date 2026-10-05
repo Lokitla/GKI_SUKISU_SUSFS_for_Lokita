@@ -1,12 +1,13 @@
 # =============================================================================
 # BakaSU 上游更新检测 → 自动触发内核构建
 # -----------------------------------------------------------------------------
-# 跟踪分支沿用历史名 sha-resukisu（上游更名前叫 ReSukiSU，分支名不随仓库改名）。
-# 流程：拉取 Baka-SU/BakaSU main 最新提交号 → 与 sha-resukisu 分支记录的旧值
-#       比对 → 有更新则回写 sha-resukisu 分支，并按 build_scope 触发构建。
+# 跟踪分支 sha-bakasu：记录 BakaSU 上游 main 的最新提交号。该分支由旧名
+# sha-resukisu 迁移而来（上游原名 ReSukiSU，后更名 BakaSU），基线提交号原样保留。
+# 流程：拉取 Baka-SU/BakaSU main 最新提交号 → 与 sha-bakasu 分支记录的旧值
+#       比对 → 有更新则回写 sha-bakasu 分支，并按 build_scope 触发构建。
 #
 # 与 Auto_Trigger_SukiSU.yml 是一对：两者逻辑相同，差别只在「检测哪个上游仓库、
-# 回写哪个 sha 分支、用哪个变体构建、什么时刻跑」。拆开的原因是 BakaSU 与
+# 回写哪个基线分支、用哪个变体构建、什么时刻跑」。拆开的原因是 BakaSU 与
 # SukiSU 上游是两个独立仓库、互不相关的发布节奏，合并成一个 workflow 时只能
 # 检测其中一个却构建另一个（语义错位），且两条本领跑也无法各自设日程。
 #
@@ -39,9 +40,10 @@
 #   另：BakaSU / Official / Next 变体本身就不提供 KPM，build_kernel.sh 会
 #   警告后跳过 —— 载荷里仍传 patched 是故意的，将来上游补齐时可自动生效。
 #
-# 首次启用注意：sha-resukisu 分支此前不存在，首次运行会视为「检测到新提交」
-# 并立刻触发一轮全矩阵构建。若只想建立基线、不想马上编，先手动跑一次本
-# workflow 并把 build_scope 选成「不构建」。
+# 迁移注意：sha-bakasu 分支由原 sha-resukisu 原样迁移（latest_sha.txt 基线保留），
+# 首次运行会读到旧值、不会误触发全矩阵构建。若基线分支重建（latest_sha.txt 丢失），
+# 首次运行会视为「检测到新提交」并立刻触发一轮全矩阵构建；只想建立基线的话，
+# 先手动跑一次本 workflow 并把 build_scope 选成「不构建」。
 # =============================================================================
 name: Auto Trigger on BakaSU Update
 
@@ -78,7 +80,7 @@ on:
           - Pre-Release
           - Actions
 
-# 写：回写 sha 分支；actions：调用 workflow_dispatch 接口触发构建
+# 写：回写 sha-bakasu 分支；actions：调用 workflow_dispatch 接口触发构建
 permissions:
   contents: write
   actions: write
@@ -114,10 +116,10 @@ jobs:
           echo "sha=$LATEST_SHA" >> "$GITHUB_OUTPUT"
           echo "Latest SHA: $LATEST_SHA"
 
-      - name: 读取 sha-resukisu 分支记录的旧提交号
+      - name: 读取 sha-bakasu 分支记录的旧提交号
         id: get_prev_sha
         env:
-          SHA_BRANCH: sha-resukisu
+          SHA_BRANCH: sha-bakasu
         run: |
           set -euo pipefail
           PREV_SHA=""
@@ -160,10 +162,10 @@ jobs:
             echo "无新提交"
           fi
 
-      - name: 回写最新提交号到 sha-resukisu 分支
+      - name: 回写最新提交号到 sha-bakasu 分支
         if: steps.compare.outputs.new_commit == 'true'
         env:
-          SHA_BRANCH: sha-resukisu
+          SHA_BRANCH: sha-bakasu
         run: |
           set -euo pipefail
           git checkout "$SHA_BRANCH" 2>/dev/null || git checkout --orphan "$SHA_BRANCH"
@@ -188,7 +190,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          # 上一步（回写 sha 分支）已经把工作区切到孤儿分支，那里只有
+          # 上一步（回写 sha-bakasu 分支）已经把工作区切到孤儿分支，那里只有
           # latest_sha.txt，没有 config/。锚点文件在主分支上，必须先切回来再读，
           # 否则自动触发的构建永远走零锚点。
           git checkout "$REF_NAME" 2>/dev/null || git checkout "${{ github.ref_name }}"
@@ -204,7 +206,7 @@ jobs:
 
           case "$SCOPE" in
             "不构建")
-              echo "本次只更新 sha-resukisu 分支，不触发构建"
+              echo "本次只更新 sha-bakasu 分支，不触发构建"
               exit 0
               ;;
             "全部版本")

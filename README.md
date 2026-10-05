@@ -257,7 +257,7 @@ BakaSU（上游由 ReSukiSU 更名而来）与 SukiSU 是两个互不相干的�
 
 | 工作流 | 检测的上游 | 记录的基线分支 | 构建变体 | 定时（UTC） |
 |---|---|---|---|---|
-| `.github/workflows/Auto_Trigger_BakaSU.yml` | [Baka-SU/BakaSU](https://github.com/Baka-SU/BakaSU) `main` | `sha-resukisu`（沿用旧名） | `BakaSU` | 每 3 天 00:00 |
+| `.github/workflows/Auto_Trigger_BakaSU.yml` | [Baka-SU/BakaSU](https://github.com/Baka-SU/BakaSU) `main` | `sha-bakasu` | `BakaSU` | 每 3 天 00:00 |
 | `.github/workflows/Auto_Trigger_SukiSU.yml` | [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) `main` | `sha-sukisu` | `SukiSU` | 每 3 天 12:00 |
 
 两者时刻错开 12 小时，避免同时抢占 Runner 并发、也让两版发布时间好区分。
@@ -278,8 +278,9 @@ BakaSU（上游由 ReSukiSU 更名而来）与 SukiSU 是两个互不相干的�
 > 若两路共用一套 `-rN` 序列，后发那次会算出已存在的 tag，
 > `gh release create` 失败、该次产物全部静默丢失。
 
-> **BakaSU 那条首次启用会立刻触发一轮全矩阵构建** —— `sha-resukisu` 分支（历史分支名保留）
-> 此前不存在，首次运行视为「有更新」。只想建基线不想编的话，先手动跑一次它
+> **BakaSU 那条的基线已就位** —— `sha-bakasu` 分支由旧名 `sha-resukisu` 原样迁移，
+> 首次运行能读到既有提交号、不会误触发。若基线分支重建（latest_sha.txt 丢失），
+> 首次运行会视为「有更新」并触发全矩阵构建；只想建基线不想编的话，先手动跑一次它
 > 并把 `build_scope` 选成「不构建」。
 > SukiSU 那条沿用既有的 `sha-sukisu` 分支，里面已是 SukiSU-Ultra 的提交号，不会误触发。
 
@@ -296,7 +297,7 @@ BakaSU（上游由 ReSukiSU 更名而来）与 SukiSU 是两个互不相干的�
 > 代号 marble），参数全写死，产物只留 Actions artifacts、**不发 Release**。
 >
 > 需要仓库 **Settings → Actions → Workflow permissions** 为 `Read and write`，
-> 否则回写 sha 分支会被 403 拦下。
+> 否则回写基线分支（sha-sukisu / sha-bakasu）会被 403 拦下。
 
 ---
 

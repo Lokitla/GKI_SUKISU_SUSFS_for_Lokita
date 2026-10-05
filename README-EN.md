@@ -282,7 +282,7 @@ cadences, so auto-triggering is split into **two independent workflows**:
 
 | Workflow | Upstream watched | Baseline branch | Variant built | Schedule (UTC) |
 |---|---|---|---|---|
-| `.github/workflows/Auto_Trigger_BakaSU.yml` | [Baka-SU/BakaSU](https://github.com/Baka-SU/BakaSU) `main` | `sha-resukisu` (legacy name retained) | `BakaSU` | every 3 days at 00:00 |
+| `.github/workflows/Auto_Trigger_BakaSU.yml` | [Baka-SU/BakaSU](https://github.com/Baka-SU/BakaSU) `main` | `sha-bakasu` | `BakaSU` | every 3 days at 00:00 |
 | `.github/workflows/Auto_Trigger_SukiSU.yml` | [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) `main` | `sha-sukisu` | `SukiSU` | every 3 days at 12:00 |
 
 The two are offset by 12 hours so they never contend for runner concurrency and so the two
@@ -303,8 +303,10 @@ Defaults to "all versions", expanding the **auto slim matrix of 19 kernel versio
 > Sharing a single `-rN` sequence would let the second release compute an already-existing
 > tag — `gh release create` would then fail and that run's artifacts would be silently lost.
 
-> **The BakaSU workflow fires a full matrix build the first time it runs**, because its
-> `sha-resukisu` (retained legacy branch name) baseline does not exist yet. To establish the baseline without building,
+> **The BakaSU baseline is already in place** — `sha-bakasu` was migrated verbatim from
+> the old `sha-resukisu` branch, so the first run reads an existing commit and will not misfire.
+> If the baseline branch is rebuilt (latest_sha.txt lost), the first run counts as "new commit"
+> and fires a full matrix build; to establish the baseline without building,
 > run it manually once with `build_scope` set to "no build".
 > The SukiSU workflow reuses the existing `sha-sukisu` branch, which already holds a
 > SukiSU-Ultra commit, so it will not misfire.

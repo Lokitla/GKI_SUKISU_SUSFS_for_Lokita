@@ -1,20 +1,21 @@
 # =============================================================================
 # SukiSU 上游更新检测 → 自动触发内核构建
 # -----------------------------------------------------------------------------
-# 流程：拉取 SukiSU-Ultra/SukiSU-Ultra main 最新提交号 → 与 sha 分支记录的旧值
-#       比对 → 有更新则回写 sha 分支，并按 build_scope 触发构建。
+# 流程：拉取 SukiSU-Ultra/SukiSU-Ultra main 最新提交号 → 与 sha-sukisu 分支记录的旧值
+#       比对 → 有更新则回写 sha-sukisu 分支，并按 build_scope 触发构建。
 #
 # 与 Auto_Trigger_BakaSU.yml 是一对：两者逻辑相同，差别只在「检测哪个上游仓库、
-# 回写哪个 sha 分支、用哪个变体构建、什么时刻跑」。拆开的原因是 BakaSU 与
+# 回写哪个基线分支、用哪个变体构建、什么时刻跑」。拆开的原因是 BakaSU 与
 # SukiSU 上游是两个独立仓库、互不相关的发布节奏，合并成一个 workflow 时只能
 # 检测其中一个却构建另一个（语义错位），且两条本领跑也无法各自设日程。
 #
 # 定期日程刻意与 BakaSU 那条错开 12 小时：两路同时开跑会互相抢 Actions 并发
 # 配额，也会让 Release 时间挤在一起难分辨。
 #
-# 本条沿用既有的 sha 分支（拆分前的那个单文件版用的就是它），里面记的正是
-# SukiSU-Ultra 的提交号，所以拆过来后首次运行能读到已有基线、不会误触发一次构建。
-# BakaSU 那条沿用历史分支名 sha-resukisu，首次跑会触发一轮构建（那边注释有说明）。
+# 本条沿用既有的 sha-sukisu 分支，里面记的正是 SukiSU-Ultra 的提交号，
+# 所以拆分后首次运行能读到已有基线、不会误触发一次构建。
+# BakaSU 那条用 sha-bakasu 分支，基线由旧名 sha-resukisu 原样迁移，不会误触发
+# （那边注释有说明）。
 #
 # 关于默认范围：默认跑「全部版本」，即 5.10 / 5.15 / 6.1 / 6.6 的维护矩阵。
 #
@@ -75,7 +76,7 @@ on:
           - Pre-Release
           - Actions
 
-# 写：回写 sha 分支；actions：调用 workflow_dispatch 接口触发构建
+# 写：回写 sha-sukisu 分支；actions：调用 workflow_dispatch 接口触发构建
 permissions:
   contents: write
   actions: write
@@ -111,7 +112,7 @@ jobs:
           echo "sha=$LATEST_SHA" >> "$GITHUB_OUTPUT"
           echo "Latest SHA: $LATEST_SHA"
 
-      - name: 读取 sha 分支记录的旧提交号
+      - name: 读取 sha-sukisu 分支记录的旧提交号
         id: get_prev_sha
         env:
           SHA_BRANCH: sha-sukisu
@@ -157,7 +158,7 @@ jobs:
             echo "无新提交"
           fi
 
-      - name: 回写最新提交号到 sha 分支
+      - name: 回写最新提交号到 sha-sukisu 分支
         if: steps.compare.outputs.new_commit == 'true'
         env:
           SHA_BRANCH: sha-sukisu
@@ -185,7 +186,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          # 上一步（回写 sha 分支）已经把工作区切到孤儿分支，那里只有
+          # 上一步（回写 sha-sukisu 分支）已经把工作区切到孤儿分支，那里只有
           # latest_sha.txt，没有 config/。锚点文件在主分支上，必须先切回来再读，
           # 否则自动触发的构建永远走零锚点。
           git checkout "$REF_NAME" 2>/dev/null || git checkout "${{ github.ref_name }}"
@@ -201,7 +202,7 @@ jobs:
 
           case "$SCOPE" in
             "不构建")
-              echo "本次只更新 sha 分支，不触发构建"
+              echo "本次只更新 sha-sukisu 分支，不触发构建"
               exit 0
               ;;
             "全部版本")
